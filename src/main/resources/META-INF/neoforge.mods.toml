@@ -46,7 +46,7 @@ displayName="${mod_name}" #mandatory
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Lia's Media Player — client-side companion mod for Lia's Minecraft <-> Discord bridge.
+Lia's Media Player.
 Turns image, GIF and video links shared in chat into rich in-game media: hover any [picture] or [gif] to see an instant preview, pin images as movable, resizable windows, and click a video link to play it inside Minecraft with sound. Supports direct image and video files, animated Tenor GIFs, HLS/DASH streams and YouTube (via yt-dlp), with full playback controls, a queue and background playback.
 '''
 

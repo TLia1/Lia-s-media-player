@@ -7,8 +7,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-import java.net.URI;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -110,8 +108,9 @@ final class VideoWindow extends MediaWindow {
     /** Appends a URL to this window's play queue (it plays after the current ones). */
     void enqueue(String url) {
         queue.add(url);
-        // Warm the thumbnail so the panel can show it without a click.
+        // Warm the thumbnail and title so the panel can show them without a click.
         VideoThumbnailCache.getOrLoad(url);
+        VideoTitleCache.getOrLoad(url);
     }
 
     /** Number of URLs still waiting to play after the current one. */
@@ -612,7 +611,7 @@ final class VideoWindow extends MediaWindow {
         if (!panelMini) {
             int labelX = tx + THUMB_W + 4;
             int labelMaxW = upX - 4 - labelX;
-            String label = (index + 1) + ". " + shortLabel(url);
+            String label = (index + 1) + ". " + VideoTitleCache.getOrLoad(url);
             g.drawString(font, Component.literal(fit(font, label, labelMaxW)),
                     labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
         }
@@ -696,26 +695,6 @@ final class VideoWindow extends MediaWindow {
 
     private int upBtnX() {
         return downBtnX() - BUTTON - 2;
-    }
-
-    /** A short human label for a queued URL: the YouTube tag, or the file name. */
-    private static String shortLabel(String url) {
-        if (VideoSupport.isYouTubeUrl(url)) {
-            return "YouTube";
-        }
-        try {
-            String path = URI.create(url).getPath();
-            if (path != null) {
-                int slash = path.lastIndexOf('/');
-                String name = slash >= 0 ? path.substring(slash + 1) : path;
-                if (!name.isBlank()) {
-                    return name;
-                }
-            }
-        } catch (IllegalArgumentException ignored) {
-            // fall through
-        }
-        return url;
     }
 
     /** Truncates a string with an ellipsis so it fits within {@code maxWidth} pixels. */

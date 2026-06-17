@@ -52,7 +52,7 @@ Click a video label and the mod opens a real, working video player *inside Minec
 - A **next** button when more than one video is lined up
 - **Move, resize, and zoom** the window exactly like a pinned image
 
-**A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the current player's queue. When one finishes (or you press next), the window automatically swaps to the next video in place.
+**A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the current player's queue. When one finishes (or you press next), the window automatically swaps to the next video in place. The queue panel shows each entry's thumbnail and its real video name (the actual YouTube title, or the file name), so you can tell what's coming up at a glance.
 
 **Keeps playing in the background.** Hide a player and it keeps running — audio and all — so you can listen while you play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay drawn on your HUD so a clip keeps showing during normal gameplay.
 

@@ -51,6 +51,7 @@ without ever leaving the game.
 | `VideoPlayer.java` | The decode/playback engine. Drives a pair of background `ffmpeg` processes (one video, one audio) through `FFmpegCli`, queues decoded frames, plays synced PCM audio through a `SourceDataLine`, and exposes play/pause/seek; the render thread uploads the current frame to a `DynamicTexture`. |
 | `VideoWindow.java` | The on-screen player UI (extends `MediaWindow`): the video image, a control bar (play/pause, next, queue, speaker/volume pop-up, seek bar + time) and the per-window **play queue** with a reorderable playlist panel. |
 | `VideoThumbnailCache.java` | Builds and caches a small still image for each queued video (the YouTube thumbnail, or the first decoded frame for direct files) so the queue panel can show what each entry is. |
+| `VideoTitleCache.java` | Resolves and caches a human-readable **title** for each queued video so the queue panel shows the real video name instead of a generic `[youtube]`/file label. YouTube links are resolved via YouTube's public **oEmbed** JSON endpoint (no `yt-dlp` needed); direct files use the file name from the URL. Loads on the IO pool, mutates the cache only on the main thread. |
 | `FFmpegCli.java` | Thin wrapper around the `ffmpeg`/`ffprobe` binaries. Probes stream metadata (via `ffprobe` JSON, parsed with Gson) and starts ffmpeg processes that pipe raw `rgba` video and `s16le` PCM audio to stdout. Replaces the old in-process JavaCV grabber. |
 | `MediaBinaries.java` | Locates — and, if missing, downloads — the external `yt-dlp`, `ffmpeg` and `ffprobe` tools. Shared plumbing for finding binaries, fetching the official releases, and unpacking them into the game folder. |
 | `MediaWindow.java` | Shared base for the on-screen windows. Owns the box geometry, the corner buttons (open-in-browser link, hide, close), the bottom-right resize grip, the move/resize/zoom gestures, and the global **z-order**. Subclasses supply the content and any control bar. |
@@ -315,7 +316,11 @@ current window's queue. When the current video ends (or **next** is pressed),
 same window; if nothing is queued, `MediaWindowOverlay` closes the window
 automatically. The **queue button** opens a playlist panel docked to the **right**
 of the player (the player slides left to make room when it has no fixed position)
-showing each entry's thumbnail and label. The panel matches the player's height and
+showing each entry's thumbnail and title. Each row's title comes from
+`VideoTitleCache` (the resolved YouTube video name, or the file name for direct
+links) and is ellipsis-truncated to the row width so it never spills past the panel;
+the compact "mini" panel next to a small player shows thumbnails only. The panel
+matches the player's height and
 **scrolls** when there are more entries than fit, with a scrollbar on the right
 gutter; rows can be **clicked to jump**, **reordered** (up/down arrows) or
 **removed** (×); the mouse wheel scrolls the panel.
@@ -391,7 +396,12 @@ for what the mod does in-game.
   update the patterns. `extractMediaUrl` is unit-test-friendly.
 - **Threading split (images).** All cache/texture access stays on the render/main
   thread; only downloading and decoding run on the IO pool. Keep that split when
-  modifying `ImagePreviewCache` and `VideoThumbnailCache`.
+  modifying `ImagePreviewCache`, `VideoThumbnailCache` and `VideoTitleCache`.
+- **Queue titles.** `VideoTitleCache` resolves YouTube titles through the public
+  `youtube.com/oembed` JSON endpoint. If that endpoint changes its shape, update the
+  parse in `fetchYouTubeTitle`; a failed lookup falls back to the generic label, so
+  the queue still renders. The HTTP fetch runs on the IO pool and the cache is only
+  read/written on the main thread — keep that split.
 - **Threading split (video).** Only `VideoPlayer`'s decode/audio threads touch the
   ffmpeg processes and the audio line; only the render thread touches the
   `DynamicTexture` and OpenGL. `FFmpegCli`/`VideoUrlResolver`/`MediaBinaries` calls

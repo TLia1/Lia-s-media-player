@@ -93,5 +93,6 @@ public final class VideoChatHandler {
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         VideoPlayerManager.disposeAll();
         VideoThumbnailCache.clear();
+        VideoTitleCache.clear();
     }
 }
