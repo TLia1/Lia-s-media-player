@@ -1,4 +1,4 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.gui;
 
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -100,6 +100,21 @@ abstract class MediaWindow {
 
     /** The source URL, opened in the browser by the link button. */
     protected abstract String mediaUrl();
+
+    /**
+     * Removes this window from whatever registry owns it and releases its resources.
+     * Called when the close button is clicked. Each subclass forwards to its own
+     * manager, so {@link MediaWindowOverlay} never needs to know the concrete window
+     * type to close it.
+     */
+    protected abstract void close();
+
+    /**
+     * Cascade group for the default (un-moved) placement: windows sharing a group fan
+     * out so they don't land exactly on top of each other. Images and videos use
+     * different groups so each kind cascades independently.
+     */
+    protected abstract int anchorGroup();
 
     /** Sets {@link #boxX}/{@link #boxY} for the default (un-moved) placement. */
     protected abstract void computeAnchor(int screenWidth, int screenHeight, int slot);

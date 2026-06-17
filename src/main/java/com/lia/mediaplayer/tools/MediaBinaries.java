@@ -1,4 +1,6 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.tools;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,7 +37,7 @@ import java.util.zip.ZipInputStream;
  *
  * <ul>
  *   <li><b>yt-dlp</b> — resolves a YouTube page link to a direct media URL
- *       (see {@link VideoUrlResolver}). Distributed as a single self-contained
+ *       (see {@link com.lia.mediaplayer.video.VideoUrlResolver}). Distributed as a single self-contained
  *       executable.</li>
  *   <li><b>ffmpeg</b> (and its sibling <b>ffprobe</b>) — decodes video frames and
  *       audio (see {@link FFmpegCli}). Distributed as a per-platform archive that
@@ -73,7 +75,7 @@ import java.util.zip.ZipInputStream;
  * before the first link is clicked instead of being fetched lazily mid-feature.
  * Every method here is safe to call from any thread; lookups are cached.</p>
  */
-final class MediaBinaries {
+public final class MediaBinaries {
 
     private MediaBinaries() {
     }
@@ -135,19 +137,19 @@ final class MediaBinaries {
 
     /** Ensures yt-dlp is available and returns its path, or {@code null}. */
     @Nullable
-    static String ytDlp() {
+    public static String ytDlp() {
         return locate(Tool.YT_DLP);
     }
 
     /** Ensures ffmpeg is available and returns its path, or {@code null}. */
     @Nullable
-    static String ffmpeg() {
+    public static String ffmpeg() {
         return locate(Tool.FFMPEG);
     }
 
     /** Ensures ffprobe is available and returns its path, or {@code null}. */
     @Nullable
-    static String ffprobe() {
+    public static String ffprobe() {
         return locate(Tool.FFPROBE);
     }
 
@@ -157,7 +159,7 @@ final class MediaBinaries {
      * at mod construction; failures are logged and left for a later lazy retry
      * within the same session is not attempted (see {@link #DOWNLOAD_ATTEMPTED}).
      */
-    static void installAllAsync() {
+    public static void installAllAsync() {
         Thread thread = new Thread(() -> {
             LiasMediaPlayer.LOGGER.info("Checking media tools (yt-dlp, ffmpeg) ...");
             String ytDlp = safeLocate(Tool.YT_DLP);

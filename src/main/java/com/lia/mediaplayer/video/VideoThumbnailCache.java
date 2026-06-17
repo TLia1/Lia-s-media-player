@@ -1,4 +1,9 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.video;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.YouTubeSource;
+import com.lia.mediaplayer.image.GifDecoder;
+import com.lia.mediaplayer.tools.FFmpegCli;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
@@ -38,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Loading happens on the IO pool; the {@link DynamicTexture} is created back on
  * the render/main thread. All public methods must be called from the main thread.</p>
  */
-final class VideoThumbnailCache {
+public final class VideoThumbnailCache {
     /** Thumbnails are scaled to fit this box (16:9-ish), never upscaled. */
     private static final int MAX_W = 160;
     private static final int MAX_H = 90;
@@ -60,7 +65,7 @@ final class VideoThumbnailCache {
     }
 
     /** Returns the thumbnail for a URL, starting a one-off background load the first time. */
-    static Thumb getOrLoad(String url) {
+    public static Thumb getOrLoad(String url) {
         Thumb thumb = CACHE.computeIfAbsent(url, u -> new Thumb());
         if (thumb.state == State.IDLE) {
             startLoading(url, thumb);
@@ -69,7 +74,7 @@ final class VideoThumbnailCache {
     }
 
     /** Drops every cached thumbnail (e.g. when leaving a server). */
-    static void clear() {
+    public static void clear() {
         CACHE.values().forEach(Thumb::release);
         CACHE.clear();
     }
@@ -88,7 +93,7 @@ final class VideoThumbnailCache {
 
     private static BufferedImage build(String url) {
         try {
-            BufferedImage raw = VideoSupport.isYouTubeUrl(url) ? downloadYouTubeThumb(url) : grabFirstFrame(url);
+            BufferedImage raw = YouTubeSource.isYouTube(url) ? downloadYouTubeThumb(url) : grabFirstFrame(url);
             if (raw == null) {
                 throw new IOException("no thumbnail");
             }
@@ -305,17 +310,17 @@ final class VideoThumbnailCache {
         return q >= 0 ? seg.substring(0, q) : seg;
     }
 
-    enum State {IDLE, LOADING, LOADED, FAILED}
+    public enum State {IDLE, LOADING, LOADED, FAILED}
 
     /** A single queue thumbnail. */
-    static final class Thumb {
-        State state = State.IDLE;
+    public static final class Thumb {
+        public State state = State.IDLE;
         @Nullable
-        ResourceLocation texture;
-        int width;
-        int height;
+        public ResourceLocation texture;
+        public int width;
+        public int height;
 
-        boolean isLoaded() {
+        public boolean isLoaded() {
             return state == State.LOADED && texture != null;
         }
 

@@ -1,4 +1,8 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.gui;
+
+import com.lia.mediaplayer.video.VideoPlayer;
+import com.lia.mediaplayer.video.VideoThumbnailCache;
+import com.lia.mediaplayer.video.VideoTitleCache;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -197,6 +201,16 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected String mediaUrl() {
         return player.url();
+    }
+
+    @Override
+    protected void close() {
+        VideoPlayerManager.close(this);
+    }
+
+    @Override
+    protected int anchorGroup() {
+        return 1;
     }
 
     @Override

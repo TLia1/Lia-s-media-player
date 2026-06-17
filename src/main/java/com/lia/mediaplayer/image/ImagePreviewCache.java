@@ -1,4 +1,7 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.image;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.TenorSource;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
@@ -35,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>All public methods must be called from the render/main thread. Downloads
  * happen on a background IO pool and are published back on the main thread.</p>
  */
-final class ImagePreviewCache {
+public final class ImagePreviewCache {
     /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */
     private static final int MAX_ENTRIES = 100;
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -56,7 +59,7 @@ final class ImagePreviewCache {
     }
 
     /** Registers a URL seen in chat so its preview can be loaded lazily later. */
-    static void track(String url) {
+    public static void track(String url) {
         CACHE.computeIfAbsent(url, u -> new Entry());
     }
 
@@ -65,7 +68,7 @@ final class ImagePreviewCache {
      * first time it is requested. Check {@link Entry#state} to know whether
      * the texture is ready.
      */
-    static Entry getOrLoad(String url) {
+    public static Entry getOrLoad(String url) {
         Entry entry = CACHE.computeIfAbsent(url, u -> new Entry());
         if (entry.state == State.IDLE) {
             startLoading(url, entry);
@@ -74,7 +77,7 @@ final class ImagePreviewCache {
     }
 
     /** Drops every cached preview (e.g. when leaving a server). */
-    static void clear() {
+    public static void clear() {
         CACHE.values().forEach(Entry::releaseTexture);
         CACHE.clear();
     }
@@ -93,7 +96,7 @@ final class ImagePreviewCache {
     private static GifDecoder.Result download(String url) {
         try {
             // Tenor share links are HTML pages; resolve them to the real GIF first.
-            String mediaUrl = TenorResolver.isTenorPageUrl(url) ? TenorResolver.resolve(url) : url;
+            String mediaUrl = TenorSource.isTenorPage(url) ? TenorResolver.resolve(url) : url;
             HttpURLConnection connection = (HttpURLConnection) URI.create(mediaUrl).toURL().openConnection();
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(10000);
@@ -228,22 +231,22 @@ final class ImagePreviewCache {
         }
     }
 
-    enum State {
+    public enum State {
         IDLE,
         LOADING,
         LOADED,
         FAILED
     }
 
-    static final class Entry {
-        State state = State.IDLE;
+    public static final class Entry {
+        public State state = State.IDLE;
         @Nullable
         ResourceLocation[] frames;
         int @Nullable [] frameDelaysMs;
         int totalDurationMs;
         long animationStartMs;
-        int width;
-        int height;
+        public int width;
+        public int height;
 
         /**
          * The texture to draw right now. For a static image this is always the
@@ -251,7 +254,7 @@ final class ImagePreviewCache {
          * so the animation plays at its intended speed and loops seamlessly.
          */
         @Nullable
-        ResourceLocation currentFrame() {
+        public ResourceLocation currentFrame() {
             if (frames == null || frames.length == 0) {
                 return null;
             }

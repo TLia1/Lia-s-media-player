@@ -1,4 +1,4 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.tools;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Everything here runs on background threads (never the render thread).</p>
  */
-final class FFmpegCli {
+public final class FFmpegCli {
 
     private FFmpegCli() {
     }
@@ -43,15 +43,15 @@ final class FFmpegCli {
     private static final long PROBE_TIMEOUT_SECONDS = 20;
 
     /** Stream properties needed to set up playback, gathered from ffprobe. */
-    record MediaInfo(int width, int height, double fps, long durationMicros,
+    public record MediaInfo(int width, int height, double fps, long durationMicros,
                      boolean hasAudio, int sampleRate, int channels) {
 
-        boolean hasVideo() {
+        public boolean hasVideo() {
             return width > 0 && height > 0;
         }
 
         /** Microseconds between two consecutive frames at the reported rate. */
-        long frameDurationMicros() {
+        public long frameDurationMicros() {
             double f = fps > 0 ? fps : 30.0;
             return Math.max(1L, Math.round(1_000_000.0 / f));
         }
@@ -62,7 +62,7 @@ final class FFmpegCli {
     // ------------------------------------------------------------------
 
     /** Reads stream metadata for {@code url}. Throws if ffprobe is unavailable or fails. */
-    static MediaInfo probe(String url) throws IOException {
+    public static MediaInfo probe(String url) throws IOException {
         String ffprobe = MediaBinaries.ffprobe();
         if (ffprobe == null) {
             throw new IOException(ffmpegMissingMessage());
@@ -151,17 +151,19 @@ final class FFmpegCli {
      * exactly {@code width*height*4} bytes) to its stdout, beginning at
      * {@code startSeconds}. The caller reads {@link Process#getInputStream()}.
      */
-    static Process openVideo(String url, int width, int height, double startSeconds) throws IOException {
+    public static Process openVideo(String url, int width, int height, double startSeconds) throws IOException {
         String ffmpeg = requireFfmpeg();
         List<String> command = new ArrayList<>(List.of(
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"));
         addSeek(command, startSeconds);
-        // Pace output to the native frame rate. Without this, ffmpeg decodes the
-        // whole file as fast as it can: the reader races to EOF in a few seconds,
-        // the picture freezes and seeks stop working, while the (separately paced)
-        // audio keeps playing. "-re" makes the video pipe advance in real time,
-        // which is what keeps it roughly in step with the audio master clock.
-        command.add("-re");
+        // We intentionally do NOT pass "-re" here. "-re" caps ffmpeg's output at the
+        // native frame rate, which leaves no slack to pre-buffer and — worse — stops
+        // the video catching back up after a network stall, so the picture drifts
+        // permanently behind the audio clock. Instead the decode thread applies
+        // back-pressure (see VideoPlayer#enqueue): ffmpeg reads ahead and fills the
+        // frame queue as fast as the connection allows (a jitter cushion), then blocks
+        // once the queue is full. Playback is paced on the consumer side from the audio
+        // master clock, so the picture still stays in step with the sound.
         addInputNetworkOptions(command, url);
         command.add("-i");
         command.add(url);
@@ -182,7 +184,7 @@ final class FFmpegCli {
      * {@code startSeconds}. The caller reads {@link Process#getInputStream()} and
      * forwards it to a {@code SourceDataLine}.
      */
-    static Process openAudio(String url, int sampleRate, int channels, double startSeconds) throws IOException {
+    public static Process openAudio(String url, int sampleRate, int channels, double startSeconds) throws IOException {
         String ffmpeg = requireFfmpeg();
         List<String> command = new ArrayList<>(List.of(
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"));
@@ -208,7 +210,7 @@ final class FFmpegCli {
      * raw {@code width*height*4} bytes, or {@code null} if no frame was produced.
      */
     @Nullable
-    static byte[] grabRawFrame(String url, int width, int height, double atSeconds) throws IOException {
+    public static byte[] grabRawFrame(String url, int width, int height, double atSeconds) throws IOException {
         String ffmpeg = requireFfmpeg();
         List<String> command = new ArrayList<>(List.of(
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"));

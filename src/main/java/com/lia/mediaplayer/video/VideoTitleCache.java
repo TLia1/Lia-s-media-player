@@ -1,4 +1,7 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.video;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.YouTubeSource;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -34,7 +37,7 @@ import java.util.concurrent.CompletionException;
  * {@link #getOrLoad} returns a sensible placeholder so the panel never shows a blank
  * row. All public methods must be called from the main thread.</p>
  */
-final class VideoTitleCache {
+public final class VideoTitleCache {
     private static final int MAX_ENTRIES = 128;
     /** Hard cap on the stored title length so a pathological title can't bloat memory. */
     private static final int MAX_TITLE_LEN = 200;
@@ -55,12 +58,12 @@ final class VideoTitleCache {
      * placeholder while a title is still loading, the file name for direct links, or
      * the resolved video title once available.
      */
-    static String getOrLoad(String url) {
+    public static String getOrLoad(String url) {
         Entry entry = CACHE.computeIfAbsent(url, VideoTitleCache::newEntry);
         if (entry.state == State.IDLE) {
             // Direct files already have their final title (the file name); only
             // YouTube links need a network round-trip.
-            if (VideoSupport.isYouTubeUrl(url)) {
+            if (YouTubeSource.isYouTube(url)) {
                 startLoading(url, entry);
             } else {
                 entry.state = State.LOADED;
@@ -70,7 +73,7 @@ final class VideoTitleCache {
     }
 
     /** Drops every cached title (e.g. when leaving a server). */
-    static void clear() {
+    public static void clear() {
         CACHE.clear();
     }
 
@@ -151,7 +154,7 @@ final class VideoTitleCache {
 
     /** The label shown before (or instead of) a resolved title. */
     private static String fallbackLabel(String url) {
-        if (VideoSupport.isYouTubeUrl(url)) {
+        if (YouTubeSource.isYouTube(url)) {
             return "YouTube video…";
         }
         String name = fileName(url);

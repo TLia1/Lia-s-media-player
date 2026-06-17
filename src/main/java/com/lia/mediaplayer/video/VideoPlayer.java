@@ -1,4 +1,7 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.video;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.tools.FFmpegCli;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
@@ -16,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -28,7 +32,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <h2>Decoding model</h2>
  * <p>Instead of the in-process JavaCV grabber, we shell out to the standalone
- * ffmpeg binary that {@link MediaBinaries} manages. ffmpeg writes scaled
+ * ffmpeg binary that {@link com.lia.mediaplayer.tools.MediaBinaries} manages. ffmpeg writes scaled
  * {@code rgba} frames to one pipe and {@code s16le} PCM to another; we read those
  * pipes on background threads. {@code ffprobe} gives us dimensions, frame rate,
  * duration and audio layout up front.</p>
@@ -37,8 +41,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * <ul>
  *   <li><b>Decode thread</b> — orchestrates the session: launches ffmpeg, reads
  *       video frames in order, timestamps them from the frame index and frame
- *       rate, and pushes them onto {@link #frameQueue} (dropping the oldest when
- *       full). Also handles pause and seek. Never touches OpenGL.</li>
+ *       rate, and pushes them onto {@link #frameQueue}, blocking (back-pressure)
+ *       while the queue is full so ffmpeg pre-buffers a jitter cushion ahead of the
+ *       clock. Also handles pause and seek. Never touches OpenGL.</li>
  *   <li><b>Audio thread</b> — reads PCM from the audio process and blocking-writes
  *       it to the {@link SourceDataLine} (which paces it to real time).</li>
  *   <li><b>Render/main thread</b> — {@link #prepareFrame()} selects the frame
@@ -51,12 +56,19 @@ import java.util.concurrent.locks.ReentrantLock;
  * advances while playing is used. Video frames are shown once their timestamp is
  * &le; the clock; late frames are skipped.
  */
-final class VideoPlayer {
+public final class VideoPlayer {
     /** Output frames are scaled to fit this box (never upscaled) to bound CPU/VRAM. */
     private static final int MAX_WIDTH = 854;
     private static final int MAX_HEIGHT = 480;
-    /** A couple of seconds of buffered video is plenty; keeps memory bounded. */
-    private static final int FRAME_QUEUE_CAPACITY = 48;
+    /**
+     * How many decoded frames to buffer ahead of the playback clock. This is the
+     * jitter cushion that absorbs an uneven/slow connection: the decoder keeps it
+     * full (see {@link #enqueue}) so a brief network stall drains the buffer instead
+     * of freezing the picture. Each frame costs up to {@code MAX_WIDTH*MAX_HEIGHT*4}
+     * bytes, so this also bounds memory — raise it for a deeper cushion at the cost
+     * of RAM, lower it on memory-constrained machines.
+     */
+    private static final int FRAME_QUEUE_CAPACITY = 64;
     /** Audio is never more than stereo: most lines don't accept more, and we don't need it. */
     private static final int MAX_AUDIO_CHANNELS = 2;
     /**
@@ -78,7 +90,7 @@ final class VideoPlayer {
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
-    enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
+    public enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
 
     private final String url;
 
@@ -149,47 +161,47 @@ final class VideoPlayer {
     @Nullable
     private VideoFrame currentFrame;
 
-    VideoPlayer(String url) {
+    public VideoPlayer(String url) {
         this.url = url;
     }
 
-    String url() {
+    public String url() {
         return url;
     }
 
-    State state() {
+    public State state() {
         return state;
     }
 
     @Nullable
-    String errorMessage() {
+    public String errorMessage() {
         return errorMessage;
     }
 
-    boolean isPlaying() {
+    public boolean isPlaying() {
         return state == State.PLAYING;
     }
 
-    boolean isPaused() {
+    public boolean isPaused() {
         return state == State.PAUSED;
     }
 
     /** True once an audio line was successfully opened (i.e. there is sound to control). */
-    boolean hasAudio() {
+    public boolean hasAudio() {
         return hasAudio;
     }
 
     /** Current volume in 0..1. */
-    float volume() {
+    public float volume() {
         return volume;
     }
 
-    boolean isMuted() {
+    public boolean isMuted() {
         return volume <= 0.0001f;
     }
 
     /** Sets the volume (0..1) and applies it to the audio line immediately. */
-    void setVolume(float value) {
+    public void setVolume(float value) {
         volume = Math.max(0.0f, Math.min(1.0f, value));
         SourceDataLine line = audioLine;
         if (line != null) {
@@ -197,11 +209,11 @@ final class VideoPlayer {
         }
     }
 
-    void changeVolume(float delta) {
+    public void changeVolume(float delta) {
         setVolume(volume + delta);
     }
 
-    void toggleMute() {
+    public void toggleMute() {
         if (volume > 0.0001f) {
             volumeBeforeMute = volume;
             setVolume(0.0f);
@@ -210,16 +222,16 @@ final class VideoPlayer {
         }
     }
 
-    int videoWidth() {
+    public int videoWidth() {
         return videoWidth;
     }
 
-    int videoHeight() {
+    public int videoHeight() {
         return videoHeight;
     }
 
     /** Total length in microseconds, or 0 if unknown (some live streams). */
-    long durationMicros() {
+    public long durationMicros() {
         return durationMicros;
     }
 
@@ -228,7 +240,7 @@ final class VideoPlayer {
     // ------------------------------------------------------------------
 
     /** Starts the background decode thread. Safe to call once. */
-    void start() {
+    public void start() {
         if (decodeThread != null) {
             return;
         }
@@ -239,7 +251,7 @@ final class VideoPlayer {
     }
 
     /** Stops decoding, frees the audio line and texture. Call on the main thread. */
-    void dispose() {
+    public void dispose() {
         running = false;
         // Wake the decode thread if it is parked on the pause/seek gate.
         signalGate();
@@ -258,7 +270,7 @@ final class VideoPlayer {
     // Playback control (called from the render/main thread)
     // ------------------------------------------------------------------
 
-    void togglePause() {
+    public void togglePause() {
         if (state == State.PLAYING) {
             pause();
         } else if (state == State.PAUSED) {
@@ -270,7 +282,7 @@ final class VideoPlayer {
         }
     }
 
-    void pause() {
+    public void pause() {
         if (state != State.PLAYING) {
             return;
         }
@@ -288,7 +300,7 @@ final class VideoPlayer {
         }
     }
 
-    void resume() {
+    public void resume() {
         if (state != State.PAUSED && state != State.ENDED) {
             return;
         }
@@ -326,7 +338,7 @@ final class VideoPlayer {
     }
 
     /** Seeks to {@code fraction} (0..1) of the total duration. */
-    void seekToFraction(double fraction) {
+    public void seekToFraction(double fraction) {
         if (durationMicros <= 0) {
             return;
         }
@@ -334,7 +346,7 @@ final class VideoPlayer {
         seekTo(target);
     }
 
-    void seekTo(long targetMicros) {
+    public void seekTo(long targetMicros) {
         long target = Math.max(0, targetMicros);
         // Clamp to just before the end so the user can't scrub past the actual
         // content (which would freeze the picture and bug the bar).
@@ -349,14 +361,14 @@ final class VideoPlayer {
     }
 
     /** Current playback position in microseconds. */
-    long positionMicros() {
+    public long positionMicros() {
         synchronized (clockLock) {
             return currentPositionMicrosLocked();
         }
     }
 
     /** Playback progress as a 0..1 fraction (0 when the duration is unknown). */
-    double progress() {
+    public double progress() {
         long duration = durationMicros;
         if (duration <= 0) {
             return 0.0;
@@ -395,7 +407,7 @@ final class VideoPlayer {
      * yet. Must run on the render thread.
      */
     @Nullable
-    ResourceLocation prepareFrame() {
+    public ResourceLocation prepareFrame() {
         long position = positionMicros();
 
         VideoFrame chosen = currentFrame;
@@ -619,10 +631,22 @@ final class VideoPlayer {
     }
 
     private void enqueue(VideoFrame frame) {
-        // Never block the decode thread (that would starve audio): drop the
-        // oldest queued frame to make room if the consumer has fallen behind.
-        while (!frameQueue.offer(frame)) {
-            frameQueue.poll();
+        // Back-pressure: block until the queue has room, so ffmpeg reads ahead and
+        // keeps the buffer full (the jitter cushion that absorbs a slow/uneven
+        // connection) instead of racing to the end of the stream. Blocking the decode
+        // thread is safe — audio runs on its own thread and process — but we stay
+        // responsive to pause/seek/dispose so the decode loop can act on them
+        // promptly. A frame dropped on the way out here is one the queue is about to
+        // flush on a seek anyway.
+        while (running && !seekRequested) {
+            try {
+                if (frameQueue.offer(frame, 50, TimeUnit.MILLISECONDS)) {
+                    return;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 

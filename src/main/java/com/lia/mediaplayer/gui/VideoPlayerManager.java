@@ -1,4 +1,6 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.gui;
+
+import com.lia.mediaplayer.video.VideoPlayer;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * GUI events fire), so no synchronization is needed here — each {@link VideoPlayer}
  * handles its own background decoding internally.</p>
  */
-final class VideoPlayerManager {
+public final class VideoPlayerManager {
     /**
      * Hard cap on simultaneous windows; the oldest is disposed past this.
      */
@@ -117,7 +119,7 @@ final class VideoPlayerManager {
     /**
      * Disposes every window (e.g. on disconnect).
      */
-    static void disposeAll() {
+    public static void disposeAll() {
         for (VideoWindow window : WINDOWS) {
             window.disposeAll();
         }

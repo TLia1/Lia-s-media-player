@@ -1,4 +1,4 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.image;
 
 import com.mojang.blaze3d.platform.NativeImage;
 
@@ -32,7 +32,7 @@ import org.w3c.dom.Node;
  * capped; GIFs that would exceed the budget have frames dropped evenly (their
  * delays are folded into the kept frames so the timing stays correct).</p>
  */
-final class GifDecoder {
+public final class GifDecoder {
     /** Hard cap on frames regardless of size, to bound texture handles. */
     private static final int MAX_FRAMES = 256;
     /** Total RGBA pixels kept across every frame (~96 MB of VRAM at 4 bytes). */
@@ -192,7 +192,7 @@ final class GifDecoder {
     }
 
     /** Converts an ARGB BufferedImage into Minecraft's ABGR NativeImage. */
-    static NativeImage toNativeImage(BufferedImage source) {
+    public static NativeImage toNativeImage(BufferedImage source) {
         int width = source.getWidth();
         int height = source.getHeight();
         int[] argb = source.getRGB(0, 0, width, height, null, 0, width);

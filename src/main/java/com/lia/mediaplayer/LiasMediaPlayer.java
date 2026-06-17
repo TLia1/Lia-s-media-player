@@ -1,5 +1,6 @@
 package com.lia.mediaplayer;
 
+import com.lia.mediaplayer.tools.MediaBinaries;
 import com.mojang.logging.LogUtils;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;

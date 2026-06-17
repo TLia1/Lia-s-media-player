@@ -1,4 +1,8 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.video;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.YouTubeSource;
+import com.lia.mediaplayer.tools.MediaBinaries;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -8,7 +12,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Turns a link seen in chat into a URL that {@link FFmpegCli} can open.
+ * Turns a link seen in chat into a URL that {@link com.lia.mediaplayer.tools.FFmpegCli} can open.
  *
  * <p>Direct media files and HLS/DASH manifests are already openable, so they are
  * returned untouched. YouTube links are web pages: ffmpeg cannot open them, and
@@ -37,7 +41,7 @@ final class VideoUrlResolver {
 
     /** Resolves a chat link to a directly-playable media URL. */
     static String resolve(String url) throws IOException {
-        if (VideoSupport.isYouTubeUrl(url)) {
+        if (YouTubeSource.isYouTube(url)) {
             return resolveYouTube(url);
         }
         // Direct files and HLS/DASH manifests are opened by ffmpeg as-is.

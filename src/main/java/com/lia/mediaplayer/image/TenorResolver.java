@@ -1,23 +1,23 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.image;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Resolves Tenor share links (the {@code https://tenor.com/view/...-gif-12345}
- * URLs Discord sends when a user picks a GIF from the Tenor picker) into a
- * direct, downloadable GIF URL that {@link ImagePreviewCache} can fetch.
+ * Resolves a Tenor share page into the direct, downloadable GIF behind it, so
+ * {@link ImagePreviewCache} can fetch the actual image.
  *
- * <p>A Tenor "view" link is an HTML page, not an image file, so it never matches
- * the file-extension check used for regular attachments. The page is, however,
- * server-rendered with the media URLs in its markup, for example an
+ * <p>Recognizing a Tenor link is the job of
+ * {@link com.lia.mediaplayer.source.TenorSource}; this class only handles the
+ * resolution step. A Tenor "view" link is an HTML page, not an image file, but it
+ * is server-rendered with the media URLs in its markup, for example an
  * {@code <img>} pointing at {@code https://media1.tenor.com/m/<id>/name.gif} and
  * a {@code <meta itemprop="contentUrl" content="...media.../m/<id>/name.gif">}.</p>
  *
@@ -50,28 +50,6 @@ final class TenorResolver {
             Pattern.CASE_INSENSITIVE);
 
     private TenorResolver() {
-    }
-
-    /**
-     * True for Tenor share/view pages that need resolving. Direct media links
-     * (media.tenor.com/...gif, c.tenor.com/...gif) already end in a known
-     * extension and are handled by the normal image path, so they are excluded.
-     */
-    static boolean isTenorPageUrl(String url) {
-        try {
-            URI uri = new URI(url);
-            String host = uri.getHost();
-            String path = uri.getPath();
-            if (host == null || path == null) {
-                return false;
-            }
-            host = host.toLowerCase(Locale.ROOT);
-            boolean isTenorSite = host.equals("tenor.com") || host.equals("www.tenor.com");
-            // Path may carry a locale prefix, e.g. /fr/view/... or /view/...
-            return isTenorSite && path.toLowerCase(Locale.ROOT).contains("/view/");
-        } catch (URISyntaxException e) {
-            return false;
-        }
     }
 
     /**

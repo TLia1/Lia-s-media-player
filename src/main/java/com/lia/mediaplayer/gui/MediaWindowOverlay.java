@@ -1,4 +1,9 @@
-package com.lia.mediaplayer;
+package com.lia.mediaplayer.gui;
+
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.MediaKind;
+import com.lia.mediaplayer.source.MediaSources;
+import com.lia.mediaplayer.video.VideoPlayer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -19,7 +24,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Single coordinator that renders and drives <em>all</em> media windows — the
@@ -69,14 +76,6 @@ public final class MediaWindowOverlay {
         return ImageWindowManager.isEmpty() && VideoPlayerManager.isEmpty();
     }
 
-    private static void closeWindow(MediaWindow window) {
-        if (window instanceof VideoWindow video) {
-            VideoPlayerManager.close(video);
-        } else if (window instanceof ImageWindow image) {
-            ImageWindowManager.close(image);
-        }
-    }
-
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
@@ -92,14 +91,15 @@ public final class MediaWindowOverlay {
         if (all.isEmpty()) {
             return;
         }
-        int imageSlot = 0;
-        int videoSlot = 0;
+        // Each anchor group (images vs videos) cascades independently, so same-kind
+        // windows fan out without landing on top of each other.
+        Map<Integer, Integer> slotByGroup = new HashMap<>();
         int depth = 0;
         for (MediaWindow window : all) {
             if (!window.isVisible()) {
                 continue;
             }
-            int slot = (window instanceof VideoWindow) ? videoSlot++ : imageSlot++;
+            int slot = slotByGroup.merge(window.anchorGroup(), 1, Integer::sum) - 1;
             g.pose().pushPose();
             g.pose().translate(0, 0, BASE_Z + depth * Z_STEP);
             window.layout(screenWidth, screenHeight, slot);
@@ -125,7 +125,7 @@ public final class MediaWindowOverlay {
 
         renderAll(event.getGuiGraphics(), screenWidth, screenHeight, mouseX, mouseY, true);
         renderRevealButton(event.getGuiGraphics(), mouseX, mouseY);
-        ChatImagePreviewHandler.renderHoverPreview(event.getGuiGraphics(), mouseX, mouseY,
+        ImageHoverPreview.render(event.getGuiGraphics(), mouseX, mouseY,
                 screenWidth, screenHeight);
     }
 
@@ -207,7 +207,7 @@ public final class MediaWindowOverlay {
             MediaWindow.ClickResult result =
                     window.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
             if (result == MediaWindow.ClickResult.CLOSE) {
-                closeWindow(window);
+                window.close();
                 event.setCanceled(true);
                 return;
             }
@@ -223,7 +223,8 @@ public final class MediaWindowOverlay {
             if (url == null) {
                 return;
             }
-            if (VideoSupport.isVideoUrl(url)) {
+            MediaKind kind = MediaSources.kindOf(url);
+            if (kind == MediaKind.VIDEO) {
                 // Default: queue the link into the current player. Shift-click opens a
                 // separate, independent window instead.
                 if (Screen.hasShiftDown()) {
@@ -232,7 +233,7 @@ public final class MediaWindowOverlay {
                     VideoPlayerManager.enqueue(url);
                 }
                 event.setCanceled(true);
-            } else if (ChatImagePreviewHandler.isSupportedUrl(url)) {
+            } else if (kind == MediaKind.IMAGE) {
                 ImageWindowManager.show(url).bringToFront();
                 event.setCanceled(true);
             }

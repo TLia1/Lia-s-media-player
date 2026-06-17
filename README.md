@@ -17,7 +17,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `liasmediaplayer` · **Version:** `1.0.1`
+- **Mod id:** `liasmediaplayer` · **Version:** `1.1.4`
 - **Loader:** NeoForge `21.1.230` · **Minecraft:** `1.21.1` · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
@@ -29,7 +29,7 @@ other players see, and it is **not required by anyone else** on the server.
 - **[FEATURES.md](FEATURES.md)** — a friendly, user-facing tour of everything the
   mod does in-game.
 - **[TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md)** — the technical reference:
-  architecture, source layout, threading model, and how each piece works.
+  architecture, package layout, threading model, and how each piece works.
 
 ## Installing (for players)
 
@@ -82,11 +82,10 @@ composited up front), and drawn as a hover preview or a pinned window. Videos ar
 played by shelling out to the external `ffmpeg` binary, which pipes raw frames and
 PCM audio back to the mod; YouTube links are first resolved to a direct stream with
 `yt-dlp`. All on-screen windows share one z-ordered stack so they move, resize and
-stack predictably. See [TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md) for the
-full design.
+stack predictably.
 
-## License
-
-All Rights Reserved (see `gradle.properties`). This project includes NeoForge MDK
-template scaffolding; the Minecraft mappings it builds against are covered by
-Mojang's mapping license
+The code is organized into small, single-responsibility packages under
+`com.lia.mediaplayer`: `source` (what a link is — the extension point), `chat`
+(rewriting chat into labels), `gui` (the on-screen windows and overlay), `image`
+and `video` (the two media engines), and `tools` (the external binaries). Teaching
+the mod a new kind of link is normally jus
