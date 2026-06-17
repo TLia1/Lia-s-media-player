@@ -29,6 +29,8 @@ import java.util.List;
  */
 final class VideoWindow extends MediaWindow {
     private static final int CONTROL_BAR_HEIGHT = 18;
+    /** Smallest seek bar we keep when computing the minimum window width. */
+    private static final int MIN_SEEK_W = 20;
 
     /** Pop-up volume slider geometry. */
     private static final int VOL_BAR_W = 6;
@@ -198,6 +200,30 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected int controlBarHeight() {
         return CONTROL_BAR_HEIGHT;
+    }
+
+    /**
+     * The control bar is laid out left-to-right at a fixed pixel size (buttons, then
+     * a seek bar, then the time read-out), so it has a hard minimum width. Stop the
+     * window shrinking below it — otherwise the seek bar and time spill past the right
+     * edge of the box. The figure mirrors {@link #layoutControls}: the visible buttons,
+     * a minimal seek bar, the time text, and the room reserved for the resize grip.
+     */
+    @Override
+    protected int minContentWidth() {
+        Font font = Minecraft.getInstance().font;
+        int buttons = 1;                       // play/pause is always shown
+        if (!queue.isEmpty()) {
+            buttons += 2;                      // next + queue
+        }
+        if (player.hasAudio()) {
+            buttons += 1;                      // speaker
+        }
+        int buttonsW = buttons * (BUTTON + 4);
+        int timeW = font.width(timeText());
+        // buttons + minimal seek + gap + time + grip margin (matches layoutControls).
+        int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
+        return Math.max(MIN_CONTENT, needed);
     }
 
     @Override

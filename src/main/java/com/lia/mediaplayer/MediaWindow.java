@@ -112,6 +112,16 @@ abstract class MediaWindow {
         return 0;
     }
 
+    /**
+     * Smallest the scaled content is allowed to get, in pixels of width. Defaults to
+     * {@link #MIN_CONTENT}; subclasses with a fixed-width control bar (e.g. the video
+     * player) raise this so the window can't shrink small enough for its controls to
+     * spill outside the box.
+     */
+    protected int minContentWidth() {
+        return MIN_CONTENT;
+    }
+
     /** Whether a hide ("_") button is shown next to the close button. */
     protected boolean hasHideButton() {
         return false;
@@ -189,14 +199,15 @@ abstract class MediaWindow {
         // Cap the content size so the whole box (with its control bar / padding)
         // always fits on screen — otherwise a tall image or an over-sized resize
         // pushes the bottom-right grip off-screen where it can't be grabbed again.
+        int minContentW = minContentWidth();
         int chromeH = controlBarHeight() + PADDING * 2;
-        int maxContentW = Math.max(MIN_CONTENT, screenWidth - PADDING * 2 - 2);
+        int maxContentW = Math.max(minContentW, screenWidth - PADDING * 2 - 2);
         int maxContentH = Math.max(MIN_CONTENT, screenHeight - chromeH - 2);
         // Width that keeps the (aspect-locked) height within maxContentH.
-        int widthCapFromHeight = Math.max(MIN_CONTENT, (int) Math.floor(maxContentH * (double) srcW / srcH));
+        int widthCapFromHeight = Math.max(minContentW, (int) Math.floor(maxContentH * (double) srcW / srcH));
         int widthCap = Math.min(maxContentW, widthCapFromHeight);
 
-        contentW = Mth.clamp((int) Math.round(srcW * scale), MIN_CONTENT, widthCap);
+        contentW = Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
         contentH = Math.max(1, (int) Math.round(contentW * (double) srcH / srcW));
         lastScale = contentW / (double) srcW;
 
@@ -384,7 +395,7 @@ abstract class MediaWindow {
 
     private void applyResize(double mouseX) {
         int newW = (int) Math.round(mouseX) - boxX - PADDING;
-        double minScale = MIN_CONTENT / (double) Math.max(1, sourceWidth());
+        double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());
         userScale = Mth.clamp(newW / (double) Math.max(1, sourceWidth()), minScale, MAX_SCALE);
     }
 
@@ -392,7 +403,7 @@ abstract class MediaWindow {
     protected final void zoom(double steps) {
         pinPosition();
         userSized = true;
-        double minScale = MIN_CONTENT / (double) Math.max(1, sourceWidth());
+        double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());
         userScale = Mth.clamp(lastScale * (1.0 + 0.1 * steps), minScale, MAX_SCALE);
     }
 
