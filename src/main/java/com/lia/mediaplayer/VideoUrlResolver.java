@@ -1,0 +1,120 @@
+package com.lia.mediaplayer;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Turns a link seen in chat into a URL that {@link FFmpegCli} can open.
+ *
+ * <p>Direct media files and HLS/DASH manifests are already openable, so they are
+ * returned untouched. YouTube links are web pages: ffmpeg cannot open them, and
+ * there is no reliable pure-Java extractor, so we delegate to a
+ * <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> binary.</p>
+ *
+ * <p>Locating (and, if missing, downloading) yt-dlp is handled by the shared
+ * {@link MediaBinaries} helper, which also manages ffmpeg. This class only deals
+ * with <em>using</em> yt-dlp once it has been found.</p>
+ *
+ * <p>All methods here run on a background thread (never the render thread).</p>
+ */
+final class VideoUrlResolver {
+    /** yt-dlp can be slow on first call (it sometimes self-updates / probes formats). */
+    private static final long YT_DLP_TIMEOUT_SECONDS = 25;
+
+    /**
+     * Prefer a single progressive stream that already muxes audio+video and is
+     * not too large, so we get one URL with sound instead of separate tracks.
+     */
+    private static final String YT_DLP_FORMAT =
+            "best[height<=720][acodec!=none][vcodec!=none]/best[height<=720]/best";
+
+    private VideoUrlResolver() {
+    }
+
+    /** Resolves a chat link to a directly-playable media URL. */
+    static String resolve(String url) throws IOException {
+        if (VideoSupport.isYouTubeUrl(url)) {
+            return resolveYouTube(url);
+        }
+        // Direct files and HLS/DASH manifests are opened by ffmpeg as-is.
+        return url;
+    }
+
+    private static String resolveYouTube(String url) throws IOException {
+        String executable = MediaBinaries.ytDlp();
+        if (executable == null) {
+            throw new IOException("yt-dlp is required to play YouTube links. It could not be found, "
+                    + "and the automatic download into the game folder failed (no internet access?). "
+                    + "Install it manually from https://github.com/yt-dlp/yt-dlp, then either add it to PATH "
+                    + "or launch Minecraft with -Dliasmediaplayer.ytdlp=C:\\\\path\\\\to\\\\yt-dlp.exe");
+        }
+
+        List<String> command = List.of(
+                executable,
+                "--no-playlist",
+                "--quiet",
+                "--no-warnings",
+                "-f", YT_DLP_FORMAT,
+                "-g", url);
+
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(false);
+
+        Process process;
+        try {
+            process = builder.start();
+        } catch (IOException e) {
+            throw new IOException("Failed to run yt-dlp at '" + executable + "': " + e.getMessage(), e);
+        }
+
+        String firstLine;
+        StringBuilder stderr = new StringBuilder();
+        try {
+            // Drain stderr on a side thread so a chatty yt-dlp can't deadlock us.
+            Thread errReader = new Thread(() -> drain(process, stderr), "liasmediaplayer-ytdlp-err");
+            errReader.setDaemon(true);
+            errReader.start();
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                firstLine = reader.readLine(); // -g prints one direct URL per stream; take the first
+            }
+
+            boolean finished = process.waitFor(YT_DLP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IOException("yt-dlp timed out resolving " + url);
+            }
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while resolving " + url, e);
+        }
+
+        if (firstLine == null || firstLine.isBlank()) {
+            String detail = !stderr.isEmpty() ? " — " + stderr.toString().trim() : "";
+            throw new IOException("yt-dlp returned no media URL for " + url
+                    + " (exit code " + process.exitValue() + ")" + detail);
+        }
+        LiasMediaPlayer.LOGGER.info("Resolved YouTube link {} -> direct stream via {}", url, executable);
+        return firstLine.trim();
+    }
+
+    private static void drain(Process process, StringBuilder sink) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (sink.length() < 2000) {
+                    sink.append(line).append('\n');
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort
+        }
+    }
+}
