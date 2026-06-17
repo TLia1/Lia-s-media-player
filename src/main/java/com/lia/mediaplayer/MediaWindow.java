@@ -122,6 +122,23 @@ abstract class MediaWindow {
         return MIN_CONTENT;
     }
 
+    /**
+     * Largest the scaled content is allowed to get, in pixels of width. Defaults to
+     * "as wide as the screen allows"; subclasses can shrink this — e.g. the video
+     * player reserves room for its side queue panel so the two never overlap.
+     */
+    protected int maxContentWidth(int screenWidth) {
+        return screenWidth - PADDING * 2 - 2;
+    }
+
+    /**
+     * Hook to adjust {@link #boxX}/{@link #boxY} after the default placement and the
+     * on-screen clamp, but before the content/button geometry is derived. The default
+     * does nothing.
+     */
+    protected void constrainPosition(int screenWidth, int screenHeight) {
+    }
+
     /** Whether a hide ("_") button is shown next to the close button. */
     protected boolean hasHideButton() {
         return false;
@@ -201,7 +218,7 @@ abstract class MediaWindow {
         // pushes the bottom-right grip off-screen where it can't be grabbed again.
         int minContentW = minContentWidth();
         int chromeH = controlBarHeight() + PADDING * 2;
-        int maxContentW = Math.max(minContentW, screenWidth - PADDING * 2 - 2);
+        int maxContentW = Math.max(minContentW, maxContentWidth(screenWidth));
         int maxContentH = Math.max(MIN_CONTENT, screenHeight - chromeH - 2);
         // Width that keeps the (aspect-locked) height within maxContentH.
         int widthCapFromHeight = Math.max(minContentW, (int) Math.floor(maxContentH * (double) srcW / srcH));
@@ -220,6 +237,10 @@ abstract class MediaWindow {
         } else {
             computeAnchor(screenWidth, screenHeight, slot);
         }
+
+        // Let a subclass tighten the position after placement (e.g. keep room beside
+        // the player for an attached panel so it can't be covered).
+        constrainPosition(screenWidth, screenHeight);
 
         contentX = boxX + PADDING;
         contentY = boxY + PADDING;

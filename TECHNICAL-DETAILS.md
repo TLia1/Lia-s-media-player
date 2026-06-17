@@ -313,9 +313,12 @@ top-right corner has the inherited **open-in-browser** (↗), **hide** (`_`) and
 current window's queue. When the current video ends (or **next** is pressed),
 `advance()` disposes the current `VideoPlayer` and starts the next queued URL in the
 same window; if nothing is queued, `MediaWindowOverlay` closes the window
-automatically. The **queue button** opens a floating playlist panel above the window
-showing each entry's thumbnail and label, where rows can be **clicked to jump**,
-**reordered** (up/down arrows) or **removed** (×); the mouse wheel scrolls the panel.
+automatically. The **queue button** opens a playlist panel docked to the **right**
+of the player (the player slides left to make room when it has no fixed position)
+showing each entry's thumbnail and label. The panel matches the player's height and
+**scrolls** when there are more entries than fit, with a scrollbar on the right
+gutter; rows can be **clicked to jump**, **reordered** (up/down arrows) or
+**removed** (×); the mouse wheel scrolls the panel.
 
 **Volume wheel.** With the cursor over the window (and the panel closed), the plain
 mouse wheel changes the volume in 10% steps; `Ctrl`+wheel always zooms the window.

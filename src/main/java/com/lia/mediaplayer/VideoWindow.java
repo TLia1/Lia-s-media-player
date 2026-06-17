@@ -42,10 +42,29 @@ final class VideoWindow extends MediaWindow {
     private static final int THUMB_H = 27;
     private static final int HEADER_H = 12;
     private static final int PANEL_PAD = 3;
+    /** Fixed width of the side panel and the gap between it and the player. */
+    private static final int PANEL_W = 200;
+    /** Compact panel width used next to a small player (thumbnails only, no titles). */
+    private static final int PANEL_W_MINI = 104;
+    /** A player box this wide (or narrower) gets the compact "mini" queue panel. */
+    private static final int MINI_PANEL_MAX_BOX_W = 200;
+    private static final int PANEL_GAP = 4;
+    /**
+     * Horizontal room kept to the right of the player for the open panel (panel width
+     * + gap + a 2px margin), for the full and the compact ("mini") panel respectively.
+     * Used both to cap the player's width and to clamp its position, so the docked
+     * panel always fits on the right and never overlaps it.
+     */
+    private static final int PANEL_RESERVE = PANEL_W + PANEL_GAP + 2;
+    private static final int PANEL_RESERVE_MINI = PANEL_W_MINI + PANEL_GAP + 2;
+    /** Width of the scrollbar drawn when the queue overflows. */
+    private static final int SCROLLBAR_W = 3;
     private static final int PANEL_BG = 0xF0141414;
     private static final int PANEL_HEADER_BG = 0xFF1E1E1E;
     private static final int ROW_BG = 0xFF202020;
     private static final int ROW_HOVER_BG = 0xFF2E2E38;
+    private static final int SCROLL_TRACK_BG = 0xFF333333;
+    private static final int SCROLL_THUMB_COLOR = 0xFF6A6A6A;
 
     private VideoPlayer player;
     /** URLs waiting to play in this same window, in play order. */
@@ -72,7 +91,9 @@ final class VideoWindow extends MediaWindow {
     private int queueScroll;        // first visible row index
     private int panelX, panelY, panelW, panelH;
     private int panelRowsTop;       // y of the first row
-    private int panelVisibleRows;   // rows that fit on screen
+    private int panelVisibleRows;   // rows that fit in the panel
+    private boolean panelScrollable; // true when there are more rows than fit
+    private boolean panelMini;       // compact layout (no titles) for a small player
 
     VideoWindow(VideoPlayer player) {
         this.player = player;
@@ -189,8 +210,11 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected void computeAnchor(int screenWidth, int screenHeight, int slot) {
         // Bottom-right, stacked leftwards, so it never covers the left-aligned
-        // chat text / link you are hovering.
-        int x = screenWidth - boxW - PADDING - slot * (boxW + 6);
+        // chat text / link you are hovering. When the queue panel is open we leave
+        // room for it on the right so the player slides left instead of being
+        // covered by the panel.
+        int rightReserve = (queueOpen && !queue.isEmpty()) ? panelWidthFor(boxW) + PANEL_GAP : 0;
+        int x = screenWidth - boxW - PADDING - rightReserve - slot * (boxW + 6);
         boxX = Mth.clamp(x, 2, Math.max(2, screenWidth - boxW - 2));
         // Sit above the chat input line at the bottom of the screen.
         int bottom = screenHeight - 36;
@@ -224,6 +248,58 @@ final class VideoWindow extends MediaWindow {
         // buttons + minimal seek + gap + time + grip margin (matches layoutControls).
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
         return Math.max(MIN_CONTENT, needed);
+    }
+
+    /**
+     * While the queue panel is open it is docked to the right of the player, so cap
+     * the player's width to leave room for the panel (plus the gap). This stops the
+     * player from growing wide enough to sit underneath the panel.
+     */
+    @Override
+    protected int maxContentWidth(int screenWidth) {
+        int base = screenWidth - PADDING * 2 - 2;
+        if (!queueOpen || queue.isEmpty()) {
+            return base;
+        }
+        // The panel beside the player is full-size for a large player and compact for
+        // a small one, so the room to reserve depends on which the player will use.
+        // If the screen is wide enough to fit the full panel beside a player larger
+        // than the mini threshold, allow that; otherwise keep the player within the
+        // mini range so only the compact panel needs reserving (giving it more room).
+        int largeBoxCap = base + PADDING * 2 - PANEL_RESERVE;
+        int boxCap;
+        if (largeBoxCap > MINI_PANEL_MAX_BOX_W) {
+            boxCap = largeBoxCap;
+        } else {
+            int miniBoxCap = base + PADDING * 2 - PANEL_RESERVE_MINI;
+            boxCap = Math.min(MINI_PANEL_MAX_BOX_W, miniBoxCap);
+        }
+        return Math.max(minContentWidth(), boxCap - PADDING * 2);
+    }
+
+    /**
+     * Keeps the player far enough from the right edge that the docked panel fits to
+     * its right. Without this, dragging the player into the right edge (or centering
+     * it on a narrow screen) would leave no room on either side and the panel would
+     * be drawn over the player. Reserves only the compact panel's width for a mini
+     * player. The width cap above guarantees this clamp range is non-empty, so the
+     * panel always fits on the right and never overlaps.
+     */
+    @Override
+    protected void constrainPosition(int screenWidth, int screenHeight) {
+        if (!queueOpen || queue.isEmpty()) {
+            return;
+        }
+        int reserve = boxW <= MINI_PANEL_MAX_BOX_W ? PANEL_RESERVE_MINI : PANEL_RESERVE;
+        int maxX = screenWidth - boxW - reserve;
+        if (maxX >= 2) {
+            boxX = Mth.clamp(boxX, 2, maxX);
+        }
+    }
+
+    /** The panel width that pairs with a player of the given box width. */
+    private static int panelWidthFor(int playerBoxW) {
+        return playerBoxW <= MINI_PANEL_MAX_BOX_W ? PANEL_W_MINI : PANEL_W;
     }
 
     @Override
@@ -438,22 +514,39 @@ final class VideoWindow extends MediaWindow {
 
     /** Recomputes the panel geometry (cached for input hit-testing). */
     private void computePanelLayout() {
-        int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        var window = Minecraft.getInstance().getWindow();
+        int screenW = window.getGuiScaledWidth();
+        int screenH = window.getGuiScaledHeight();
         int rows = queue.size();
 
-        panelW = Math.max(boxW, 190);
-        panelX = Mth.clamp(boxX, 2, Math.max(2, screenW - panelW - 2));
+        // A small player gets the compact panel (thumbnails only, no titles).
+        panelMini = boxW <= MINI_PANEL_MAX_BOX_W;
+        panelW = panelWidthFor(boxW);
+        // Sit to the right of the player; if there is no room there, fall back to
+        // the left of it, and as a last resort clamp onto the screen.
+        panelX = boxX + boxW + PANEL_GAP;
+        if (panelX + panelW > screenW - 2) {
+            int leftX = boxX - PANEL_GAP - panelW;
+            panelX = leftX >= 2 ? leftX : Math.max(2, screenW - panelW - 2);
+        }
 
-        int availAbove = boxY - 2 - 2; // from the top margin up to just above the window
-        int rowsRoom = Math.max(0, availAbove - HEADER_H - PANEL_PAD * 2) / ROW_H;
-        panelVisibleRows = Mth.clamp(rows, 1, Math.max(1, rowsRoom));
+        // Match the player's height; when there are more rows than fit, the extra
+        // ones scroll. The panel is never taller than the screen.
+        panelH = Mth.clamp(boxH, HEADER_H + PANEL_PAD * 2 + ROW_H, screenH - 4);
+        int rowsRoom = Math.max(1, (panelH - HEADER_H - PANEL_PAD * 2) / ROW_H);
+        panelVisibleRows = Mth.clamp(rows, 1, rowsRoom);
+        panelScrollable = rows > panelVisibleRows;
 
         int maxScroll = Math.max(0, rows - panelVisibleRows);
         queueScroll = Mth.clamp(queueScroll, 0, maxScroll);
 
-        panelH = HEADER_H + PANEL_PAD * 2 + panelVisibleRows * ROW_H;
-        panelY = Math.max(2, boxY - 2 - panelH);
+        panelY = Mth.clamp(boxY, 2, Math.max(2, screenH - panelH - 2));
         panelRowsTop = panelY + HEADER_H + PANEL_PAD;
+    }
+
+    /** Right edge available for row content (excludes the scrollbar gutter). */
+    private int panelContentRight() {
+        return panelX + panelW - (panelScrollable ? SCROLLBAR_W + 2 : 0);
     }
 
     private void renderQueuePanel(GuiGraphics g, Font font, int mouseX, int mouseY) {
@@ -463,8 +556,8 @@ final class VideoWindow extends MediaWindow {
         g.fill(panelX, panelY, panelX + panelW, panelY + panelH, PANEL_BG);
         g.fill(panelX, panelY, panelX + panelW, panelY + HEADER_H, PANEL_HEADER_BG);
 
-        String header = "Queue (" + rows + ")";
-        if (rows > panelVisibleRows) {
+        String header = panelMini ? ("(" + rows + ")") : ("Queue (" + rows + ")");
+        if (!panelMini && rows > panelVisibleRows) {
             header += "  " + (queueScroll + 1) + "-" + (queueScroll + panelVisibleRows);
         }
         g.drawString(font, Component.literal(header), panelX + 4, panelY + 2, TEXT_COLOR);
@@ -476,13 +569,31 @@ final class VideoWindow extends MediaWindow {
             }
             renderRow(g, font, index, rowTop(i), mouseX, mouseY);
         }
+
+        if (panelScrollable) {
+            renderScrollbar(g, rows);
+        }
+    }
+
+    /** A thin scrollbar on the right gutter showing the scroll position. */
+    private void renderScrollbar(GuiGraphics g, int rows) {
+        int sbX = panelX + panelW - SCROLLBAR_W - 1;
+        int trackTop = panelRowsTop;
+        int trackBot = panelY + panelH - PANEL_PAD;
+        int trackH = Math.max(1, trackBot - trackTop);
+        g.fill(sbX, trackTop, sbX + SCROLLBAR_W, trackBot, SCROLL_TRACK_BG);
+
+        int thumbH = Math.max(8, trackH * panelVisibleRows / rows);
+        int maxScroll = Math.max(1, rows - panelVisibleRows);
+        int thumbY = trackTop + (trackH - thumbH) * queueScroll / maxScroll;
+        g.fill(sbX, thumbY, sbX + SCROLLBAR_W, thumbY + thumbH, SCROLL_THUMB_COLOR);
     }
 
     private void renderRow(GuiGraphics g, Font font, int index, int rowY, int mouseX, int mouseY) {
         int rows = queue.size();
         String url = queue.get(index);
         int rowX = panelX + PANEL_PAD;
-        int rowW = panelW - PANEL_PAD * 2;
+        int rowW = panelContentRight() - PANEL_PAD - rowX;
 
         int upX = upBtnX();
         int btnY = rowY + (ROW_H - BUTTON) / 2;
@@ -496,12 +607,15 @@ final class VideoWindow extends MediaWindow {
         int ty = rowY + (ROW_H - THUMB_H) / 2;
         drawThumbnail(g, font, url, tx, ty);
 
-        // Position number + label.
-        int labelX = tx + THUMB_W + 4;
-        int labelMaxW = upX - 4 - labelX;
-        String label = (index + 1) + ". " + shortLabel(url);
-        g.drawString(font, Component.literal(fit(font, label, labelMaxW)),
-                labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
+        // Position number + label. The compact panel shows neither (the thumbnail
+        // and play order are enough), leaving room for a narrower panel.
+        if (!panelMini) {
+            int labelX = tx + THUMB_W + 4;
+            int labelMaxW = upX - 4 - labelX;
+            String label = (index + 1) + ". " + shortLabel(url);
+            g.drawString(font, Component.literal(fit(font, label, labelMaxW)),
+                    labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
+        }
 
         // Reorder + remove buttons.
         boolean canUp = index > 0;
@@ -573,7 +687,7 @@ final class VideoWindow extends MediaWindow {
     }
 
     private int removeBtnX() {
-        return panelX + panelW - PANEL_PAD - BUTTON;
+        return panelContentRight() - PANEL_PAD - BUTTON;
     }
 
     private int downBtnX() {
