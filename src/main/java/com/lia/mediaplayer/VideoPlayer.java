@@ -66,6 +66,16 @@ final class VideoPlayer {
      * before the reported end so there is always something left to play.
      */
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
+    /**
+     * Past this much wall-clock time paused, we assume the current ffmpeg session
+     * may have gone stale — for network inputs (YouTube/Discord/…) the server can
+     * drop an idle connection, and our paused ffmpeg processes are blocked on a
+     * full output pipe so they aren't reading the socket. Resuming such a session
+     * freezes the picture on a dead pipe (or a dead audio process stalls the audio
+     * clock). When the pause exceeds this, we relaunch the session at the current
+     * position on resume (the proven seek path) instead of un-pausing in place.
+     */
+    private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
     enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
@@ -127,6 +137,7 @@ final class VideoPlayer {
     private long lineBaseMicros;      // audio line position captured at the last (re)baseline
     private long wallAccumMicros;     // accumulated time while paused (no-audio clock)
     private long wallResumeNanos;     // nanoTime when playback last (re)started (no-audio clock)
+    private volatile long pausedAtNanos; // nanoTime when the player was last paused (0 if not paused)
 
     // --- Render side (main thread only) -------------------------------------
     @Nullable
@@ -267,6 +278,7 @@ final class VideoPlayer {
             // Freeze the no-audio wall clock at the current position.
             wallAccumMicros = currentPositionMicrosLocked();
         }
+        pausedAtNanos = System.nanoTime();
         state = State.PAUSED;
         SourceDataLine line = audioLine;
         if (line != null) {
@@ -280,7 +292,20 @@ final class VideoPlayer {
         if (state != State.PAUSED && state != State.ENDED) {
             return;
         }
+        // If we were paused long enough that the ffmpeg session may be stale, don't
+        // try to un-pause the (possibly dead) processes in place — that's what makes
+        // the picture freeze until the user scrubs the seek bar. Instead relaunch a
+        // fresh session at the current position via the seek path, which is known to
+        // recover cleanly.
+        long pausedAt = pausedAtNanos;
+        boolean stale = state == State.PAUSED
+                && pausedAt != 0
+                && (System.nanoTime() - pausedAt) > STALE_PAUSE_NANOS;
+        pausedAtNanos = 0;
+
+        long resumePos;
         synchronized (clockLock) {
+            resumePos = currentPositionMicrosLocked();
             wallResumeNanos = System.nanoTime();
             SourceDataLine line = audioLine;
             if (line != null) {
@@ -290,7 +315,14 @@ final class VideoPlayer {
             }
         }
         state = State.PLAYING;
-        signalGate();
+        if (stale) {
+            // Relaunch the ffmpeg processes (video + audio) from where we paused.
+            // performSeek (on the decode thread) flushes the queue/line and re-baselines
+            // the clock, so playback continues seamlessly from the paused position.
+            seekTo(resumePos);
+        } else {
+            signalGate();
+        }
     }
 
     /** Seeks to {@code fraction} (0..1) of the total duration. */
