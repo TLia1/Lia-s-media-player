@@ -82,7 +82,7 @@ composited up front), and drawn as a hover preview or a pinned window. Videos ar
 played by shelling out to the external `ffmpeg` binary, which pipes raw frames and
 PCM audio back to the mod; YouTube links are first resolved to a direct stream with
 `yt-dlp`. All on-screen windows share one z-ordered stack so they move, resize and
-stack predictably. See [minecraft-mod-client.md](TECHNICAL-DETAILS.md) for the
+stack predictably. See [TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md) for the
 full design.
 
 ## License
