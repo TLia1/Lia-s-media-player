@@ -89,4 +89,4 @@ full design.
 
 All Rights Reserved (see `gradle.properties`). This project includes NeoForge MDK
 template scaffolding; the Minecraft mappings it builds against are covered by
-Mojang's mapping license — see <https://github.com/NeoForged/NeoForm/blob/main/Mojang.md>.
+Mojang's mapping license
