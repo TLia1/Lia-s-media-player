@@ -186,3 +186,57 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// ---------------------------------------------------------------------------
+// Documentation sync — keeps markdown files in sync with gradle.properties
+// ---------------------------------------------------------------------------
+// Run: ./gradlew updateDocs
+// Markers in markdown files look like: <!-- key -->value<!-- /key -->
+// The task replaces the value between the markers with the matching property.
+tasks.register('updateDocs') {
+    group = 'documentation'
+    description = 'Updates version numbers and mod properties in markdown documentation files.'
+
+    // Capture properties at configuration time so they are available in doLast.
+    var capturedProps = [
+        'mod_version'      : project.property('mod_version'),
+        'mod_id'           : project.property('mod_id'),
+        'mod_name'         : project.property('mod_name'),
+        'mod_group_id'     : project.property('mod_group_id'),
+        'mod_license'      : project.property('mod_license'),
+        'neo_version'      : project.property('neo_version'),
+        'minecraft_version': project.property('minecraft_version'),
+    ]
+
+    doLast {
+        var docFiles = ['README.md', 'TECHNICAL-DETAILS.md', 'FEATURES.md']
+
+        docFiles.each { fileName ->
+            var f = project.file(fileName)
+            if (!f.exists()) {
+                logger.warn("updateDocs: ${fileName} not found, skipping.")
+                return
+            }
+            var content = f.text
+            var changed = false
+
+            capturedProps.each { key, value ->
+                // Pattern: <!-- key -->old_value<!-- /key -->
+                var pattern = ~/(?s)(<!--\s*${key}\s*-->)(.*?)(<!--\s*\/${key}\s*-->)/
+                var newContent = content.replaceAll(pattern, "\$1${java.util.regex.Matcher.quoteReplacement(value)}\$3")
+                if (newContent != content) {
+                    changed = true
+                    content = newContent
+                }
+            }
+
+            if (changed) {
+                f.text = content
+                logger.lifecycle("updateDocs: updated ${fileName}")
+            } else {
+                logger.lifecycle("updateDocs: ${fileName} is already up to date")
+            }
+        }
+    }
+}
+

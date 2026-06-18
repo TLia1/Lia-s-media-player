@@ -1,0 +1,41 @@
+name: Docs Sync Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check:
+    name: Docs Sync Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate docs
+        run: ./gradlew updateDocs
+
+      - name: Check docs are up to date
+        run: git diff --exit-code -- '*.md'
+
+      - name: Docs out of sync
+        if: failure()
+        run: |
+          echo "::error::Documentation is out of sync with project configuration."
+          echo "::error::Please run './gradlew updateDocs' locally and commit the updated markdown files."
+          exit 1

@@ -1,6 +1,6 @@
 # Lia's Media player
 
-**For Minecraft 1.21.1 · NeoForge · Client-side only**
+**For Minecraft <!-- minecraft_version -->1.21.1<!-- /minecraft_version --> · NeoForge · Client-side only**
 
 Lia's Media player is a companion mod that links into things you can actually *see and watch* — right inside Minecraft, without ever leaving the game.
 

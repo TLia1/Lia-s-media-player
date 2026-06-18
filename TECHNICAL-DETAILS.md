@@ -1,6 +1,6 @@
-# Lia's Media Player — `liasmediaplayer`
+# <!-- mod_name -->Lia's Media Player<!-- /mod_name --> — `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->`
 
-A **client-side** NeoForge mod for Minecraft **1.21.1**. It improves how image, GIF,
+A **client-side** NeoForge mod for Minecraft **<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->**. It improves how image, GIF,
 **video** and **audio** links that appear in the in-game chat are displayed: every
 supported URL is rewritten into a compact, clickable label. Hovering an image/GIF
 label renders a live preview of the picture (animated GIFs included) above the chat;
@@ -11,8 +11,8 @@ queue); clicking an audio label opens a compact **audio bar** with its own queue
 audio/YouTube links and play them in order or shuffled, and a set of **configurable
 keybinds** drives the active audio player.
 
-- **Mod id:** `liasmediaplayer` · **Group:** `com.lia.mediaplayer` · **Version:** `1.2.0`
-- **Loader:** NeoForge `21.1.230` · **Minecraft:** `1.21.1` · **Java:** 21
+- **Mod id:** `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->` · **Group:** `<!-- mod_group_id -->com.lia.mediaplayer<!-- /mod_group_id -->` · **Version:** `<!-- mod_version -->1.2.1<!-- /mod_version -->`
+- **Loader:** NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` · **Minecraft:** `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->` · **Java:** 21
 - **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a
   server and is not required by anyone else on the server.
 - **Dependencies:** NeoForge + Minecraft only. There are **no bundled native

@@ -21,8 +21,8 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `liasmediaplayer` · **Version:** `1.2.1`
-- **Loader:** NeoForge `21.1.230` · **Minecraft:** `1.21.1` · **Java:** 21
+- **Mod id:** `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->` · **Version:** `<!-- mod_version -->1.2.1<!-- /mod_version -->`
+- **Loader:** NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` · **Minecraft:** `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->` · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
   playback uses external `ffmpeg`/`ffprobe` and `yt-dlp` tools that the mod
@@ -37,7 +37,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## Installing (for players)
 
-1. Install NeoForge `21.1.230` for Minecraft `1.21.1`.
+1. Install NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` for Minecraft `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->`.
 2. Drop the mod jar (from `build/libs/`, or a release) into your client's `mods/`
    folder. Do **not** put it on a server — it is client-only and does nothing there.
 3. Launch the game. The first time you play a video, the mod quietly downloads
@@ -77,6 +77,46 @@ Useful project settings live in `gradle.properties` (`mod_id`, `mod_version`,
 If you ever hit dependency issues in your IDE, `./gradlew --refresh-dependencies`
 refreshes the local cache, and `./gradlew clean` resets build outputs (without
 touching your code).
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. **Fork** the repository and create a feature branch from `main`.
+2. Make your changes — keep commits focused and well-described.
+3. Run `./gradlew build` to make sure everything compiles.
+4. Run `./gradlew updateDocs` if you changed any property in `gradle.properties`
+   (version, mod id, etc.) — the CI will reject out-of-sync docs.
+5. Open a **pull request** against `main`.
+
+### Code guidelines
+
+- **Java 21** — use modern Java features where they help readability.
+- **Single responsibility** — each package has one job; keep it that way.
+- **No new dependencies** — the mod ships with NeoForge + Minecraft only, no
+  extra libraries.
+- **Client-only** — everything runs on `Dist.CLIENT`. Don't add server-side code.
+- Preserve existing comments and docstrings unless they are directly related to
+  your changes.
+
+### Adding a new media source
+
+This is the most common way to extend the mod. Write a new `MediaSource` in the
+`source` package (implement `matches` / `kind` / `label`), add it to the
+`MediaSources.REGISTERED` list, and you're done — the chat handlers, overlay
+and labels all flow through the registry automatically. See
+[TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md) for the full architecture.
+
+### Keeping docs in sync
+
+Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md` and
+`FEATURES.md` are managed by invisible HTML markers (e.g.
+`<!-- mod_version -->1.2.1<!-- /mod_version -->`). **Never edit these values by
+hand** — update `gradle.properties` and run:
+
+```
+./gradlew updateDocs
+```
 
 ## How it works (short version)
 
