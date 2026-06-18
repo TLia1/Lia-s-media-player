@@ -32,12 +32,17 @@ final class AudioWindow extends MediaWindow {
     /** How many played tracks to remember for the "previous" control. */
     private static final int MAX_HISTORY = 64;
 
+    /** Pop-up volume slider geometry (mirrors VideoWindow). */
+    private static final int VOL_BAR_W = 6;
+    private static final int VOL_BAR_H = 40;
+
     private AudioPlayer player;
     private final PlayQueue queue = new PlayQueue();
     /** Previously-played URLs, most recent last (backs the "previous" button). */
     private final List<String> history = new ArrayList<>();
 
     private boolean draggingSeek;
+    private boolean draggingVolume;
     private double scrubFraction;
 
     // Control-bar hit regions cached from the last layout.
@@ -45,6 +50,8 @@ final class AudioWindow extends MediaWindow {
     private int prevBtnX, prevBtnY;
     private int nextBtnX, nextBtnY;
     private int volBtnX, volBtnY;
+    private boolean showVolumePopup;
+    private int volBarX, volBarY;
     private int seekX, seekY, seekW, seekH;
     private int timeTextX;
 
@@ -193,6 +200,11 @@ final class AudioWindow extends MediaWindow {
     }
 
     @Override
+    protected boolean alwaysShowControls() {
+        return true; // the audio bar's controls should stay visible on the HUD
+    }
+
+    @Override
     protected void layoutControls(Font font) {
         int barTop = contentY + contentH;
         playBtnY = barTop + (CONTROL_BAR_HEIGHT - BUTTON) / 2;
@@ -204,6 +216,10 @@ final class AudioWindow extends MediaWindow {
         prevBtnX = playBtnX + BUTTON + 4;
         nextBtnX = prevBtnX + BUTTON + 4;
         volBtnX = nextBtnX + BUTTON + 4;
+
+        // The slider pops up vertically above the speaker button.
+        volBarX = volBtnX + (BUTTON - VOL_BAR_W) / 2;
+        volBarY = volBtnY - 4 - VOL_BAR_H;
 
         seekX = volBtnX + BUTTON + 4;
         seekH = 4;
@@ -257,6 +273,10 @@ final class AudioWindow extends MediaWindow {
 
         boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
         Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
+        showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
+        if (showVolumePopup) {
+            drawVolumePopup(g);
+        }
 
         // Seek bar.
         double fraction = draggingSeek ? scrubFraction : player.progress();
@@ -294,6 +314,11 @@ final class AudioWindow extends MediaWindow {
             player.toggleMute();
             return ClickResult.HANDLED;
         }
+        if (showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6)) {
+            draggingVolume = true;
+            player.setVolume((float) volumeFractionAt(mouseY));
+            return ClickResult.HANDLED;
+        }
         if (player.durationMicros() > 0 && inRect(mouseX, mouseY, seekX, seekY - 3, seekW, seekH + 6)) {
             draggingSeek = true;
             scrubFraction = fractionAt(mouseX);
@@ -304,6 +329,10 @@ final class AudioWindow extends MediaWindow {
 
     @Override
     protected boolean onControlDrag(double mouseX, double mouseY) {
+        if (draggingVolume) {
+            player.setVolume((float) volumeFractionAt(mouseY));
+            return true;
+        }
         if (draggingSeek) {
             scrubFraction = fractionAt(mouseX);
             return true;
@@ -313,12 +342,22 @@ final class AudioWindow extends MediaWindow {
 
     @Override
     protected boolean onControlRelease() {
+        if (draggingVolume) {
+            draggingVolume = false;
+            return true;
+        }
         if (draggingSeek) {
             draggingSeek = false;
             player.seekToFraction(scrubFraction);
             return true;
         }
         return false;
+    }
+
+    @Override
+    protected boolean overPopup(double mouseX, double mouseY) {
+        return showVolumePopup
+                && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6);
     }
 
     /** Plain mouse wheel over the bar changes the volume in 10% steps. */
@@ -333,6 +372,21 @@ final class AudioWindow extends MediaWindow {
             return 0;
         }
         return Mth.clamp((mouseX - seekX) / seekW, 0.0, 1.0);
+    }
+
+    /** Vertical slider: bottom is 0%, top is 100%. */
+    private double volumeFractionAt(double mouseY) {
+        return Mth.clamp((volBarY + VOL_BAR_H - mouseY) / (double) VOL_BAR_H, 0.0, 1.0);
+    }
+
+    private void drawVolumePopup(GuiGraphics g) {
+        g.fill(volBarX - 3, volBarY - 3, volBarX + VOL_BAR_W + 3, volBarY + VOL_BAR_H + 3, 0xE0101010);
+        g.fill(volBarX, volBarY, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, TRACK_COLOR);
+        float v = player.volume();
+        int fillH = Math.round(VOL_BAR_H * v);
+        g.fill(volBarX, volBarY + VOL_BAR_H - fillH, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, FILL_COLOR);
+        int knobY = volBarY + VOL_BAR_H - Mth.clamp(fillH, 0, VOL_BAR_H);
+        g.fill(volBarX - 2, knobY - 1, volBarX + VOL_BAR_W + 2, knobY + 1, KNOB_COLOR);
     }
 
     private String timeText() {

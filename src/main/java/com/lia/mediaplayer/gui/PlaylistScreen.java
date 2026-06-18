@@ -85,7 +85,7 @@ public final class PlaylistScreen extends Screen {
     }
 
     private int entriesTop() {
-        return 64;
+        return 76;
     }
 
     private int entriesBottom() {

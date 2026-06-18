@@ -21,7 +21,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `liasmediaplayer` · **Version:** `1.2.0`
+- **Mod id:** `liasmediaplayer` · **Version:** `1.2.1`
 - **Loader:** NeoForge `21.1.230` · **Minecraft:** `1.21.1` · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
@@ -99,4 +99,4 @@ The code is organized into small, single-responsibility packages under
 screen), `image`, `video` and `audio` (the media engines), `media` (their shared volume,
 URL resolver and title cache), `playlist` (saved playlists), `input` (keybinds), and
 `tools` (the external binaries). Teaching the mod a new kind of link is normally just
-one new `MediaSource` class plus one line in the registry.
+one new `MediaSource` class plus one line in the registry.

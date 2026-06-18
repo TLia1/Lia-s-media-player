@@ -187,6 +187,15 @@ abstract class MediaWindow {
         return false;
     }
 
+    /**
+     * Whether this window's controls should be drawn even on the HUD (when no chat
+     * screen is open). Audio bars override this so their seek bar and transport buttons
+     * stay visible while playing.
+     */
+    protected boolean alwaysShowControls() {
+        return false;
+    }
+
     /** Extra hover area outside the box that still counts as "ours" (e.g. a popup). */
     protected boolean overPopup(double mouseX, double mouseY) {
         return false;
@@ -290,7 +299,7 @@ abstract class MediaWindow {
         g.fill(boxX, boxY, boxX + boxW, boxY + boxH, BG_COLOR);
         drawContent(g, font);
 
-        if (!withControls) {
+        if (!withControls && !alwaysShowControls()) {
             return; // HUD overlay shows just the picture.
         }
 
