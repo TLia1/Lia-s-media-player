@@ -1,8 +1,8 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.video.VideoPlayer;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
-import com.lia.mediaplayer.video.VideoTitleCache;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -70,7 +69,7 @@ final class VideoWindow extends MediaWindow {
 
     private VideoPlayer player;
     /** URLs waiting to play in this same window, in play order. */
-    private final List<String> queue = new ArrayList<>();
+    private final PlayQueue queue = new PlayQueue();
     private boolean draggingSeek;
     private boolean draggingVolume;
     private double scrubFraction;
@@ -114,7 +113,7 @@ final class VideoWindow extends MediaWindow {
         queue.add(url);
         // Warm the thumbnail and title so the panel can show them without a click.
         VideoThumbnailCache.getOrLoad(url);
-        VideoTitleCache.getOrLoad(url);
+        MediaTitleCache.getOrLoad(url);
     }
 
     /** Number of URLs still waiting to play after the current one. */
@@ -124,7 +123,7 @@ final class VideoWindow extends MediaWindow {
 
     /** A snapshot of the queued URLs, in play order, for rendering. */
     List<String> queuedUrls() {
-        return new ArrayList<>(queue);
+        return queue.snapshot();
     }
 
     /**
@@ -157,16 +156,12 @@ final class VideoWindow extends MediaWindow {
 
     /** Moves a queued entry one place earlier in the queue. */
     void moveUp(int index) {
-        if (index > 0 && index < queue.size()) {
-            queue.add(index - 1, queue.remove(index));
-        }
+        queue.moveUp(index);
     }
 
     /** Moves a queued entry one place later in the queue. */
     void moveDown(int index) {
-        if (index >= 0 && index < queue.size() - 1) {
-            queue.add(index + 1, queue.remove(index));
-        }
+        queue.moveDown(index);
     }
 
     /** Swaps in a new player for the given URL, disposing the current one. */
@@ -625,7 +620,7 @@ final class VideoWindow extends MediaWindow {
         if (!panelMini) {
             int labelX = tx + THUMB_W + 4;
             int labelMaxW = upX - 4 - labelX;
-            String label = (index + 1) + ". " + VideoTitleCache.getOrLoad(url);
+            String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
             g.drawString(font, Component.literal(fit(font, label, labelMaxW)),
                     labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
         }

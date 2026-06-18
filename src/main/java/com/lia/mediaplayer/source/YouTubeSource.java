@@ -34,7 +34,7 @@ public final class YouTubeSource implements MediaSource {
 
     /**
      * Whether {@code url} is a recognized YouTube link. Exposed statically because the
-     * playback engine ({@code VideoUrlResolver}, the thumbnail and title caches) also
+     * playback engine ({@code MediaUrlResolver}, the thumbnail and title caches) also
      * needs to single out YouTube links for their dedicated resolution paths.
      */
     public static boolean isYouTube(String url) {

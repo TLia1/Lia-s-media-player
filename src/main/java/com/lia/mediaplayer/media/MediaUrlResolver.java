@@ -1,4 +1,4 @@
-package com.lia.mediaplayer.video;
+package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.source.YouTubeSource;
@@ -12,20 +12,23 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Turns a link seen in chat into a URL that {@link com.lia.mediaplayer.tools.FFmpegCli} can open.
+ * Turns a link seen in chat into a URL that {@link com.lia.mediaplayer.tools.FFmpegCli}
+ * can open. Shared by both media engines — the video player and the audio player — so
+ * the (non-trivial) YouTube resolution lives in exactly one place.
  *
  * <p>Direct media files and HLS/DASH manifests are already openable, so they are
- * returned untouched. YouTube links are web pages: ffmpeg cannot open them, and
- * there is no reliable pure-Java extractor, so we delegate to a
- * <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> binary.</p>
+ * returned untouched. YouTube links are web pages: ffmpeg cannot open them, and there
+ * is no reliable pure-Java extractor, so we delegate to a
+ * <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> binary. (The audio player opens
+ * the resolved stream with {@code -vn}, so a YouTube link plays as sound only.)</p>
  *
  * <p>Locating (and, if missing, downloading) yt-dlp is handled by the shared
- * {@link MediaBinaries} helper, which also manages ffmpeg. This class only deals
- * with <em>using</em> yt-dlp once it has been found.</p>
+ * {@link MediaBinaries} helper, which also manages ffmpeg. This class only deals with
+ * <em>using</em> yt-dlp once it has been found.</p>
  *
  * <p>All methods here run on a background thread (never the render thread).</p>
  */
-final class VideoUrlResolver {
+public final class MediaUrlResolver {
     /** yt-dlp can be slow on first call (it sometimes self-updates / probes formats). */
     private static final long YT_DLP_TIMEOUT_SECONDS = 25;
 
@@ -36,11 +39,11 @@ final class VideoUrlResolver {
     private static final String YT_DLP_FORMAT =
             "best[height<=720][acodec!=none][vcodec!=none]/best[height<=720]/best";
 
-    private VideoUrlResolver() {
+    private MediaUrlResolver() {
     }
 
     /** Resolves a chat link to a directly-playable media URL. */
-    static String resolve(String url) throws IOException {
+    public static String resolve(String url) throws IOException {
         if (YouTubeSource.isYouTube(url)) {
             return resolveYouTube(url);
         }

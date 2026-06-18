@@ -13,6 +13,7 @@ When a link to an image or video appears in chat, the mod quietly replaces the r
 - A gold **[picture]** for images
 - A gold **[gif]** for Tenor GIFs
 - An aqua, underlined **video label** for videos and YouTube links
+- A green, underlined **[audio]** label for audio files
 
 ---
 
@@ -57,6 +58,50 @@ Click a video label and the mod opens a real, working video player *inside Minec
 **Keeps playing in the background.** Hide a player and it keeps running — audio and all — so you can listen while you play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay drawn on your HUD so a clip keeps showing during normal gameplay.
 
 **Everything just works.** Video playback relies on two small helper tools: `ffmpeg` (to decode video and sound) and `yt-dlp` (to play YouTube links). If you don't already have them, the mod quietly downloads the official copies into its own folder when the game starts — so you don't have to set anything up. If you *do* have them installed, the mod finds them automatically in the usual places.
+
+---
+
+## Audio
+
+Click an **[audio]** label and the mod opens a small **audio bar** — just the track name and a row of controls — so you can listen without a big window in the way.
+
+**What it can play:**
+
+- **Direct audio files** shared in chat: MP3, WAV, OGG/OGA, FLAC, M4A, AAC, OPUS, WEBA, WMA and AIFF
+
+**The bar gives you:**
+
+- **Play / pause**, **previous** and **next**
+- A **seek bar** with elapsed and total time
+- A **speaker toggle**, plus scroll the mouse wheel over the bar to change the volume
+
+**A built-in queue, just like videos.** Click more audio links and they line up behind the current one; the bar plays them one after another and the time read-out shows how many are waiting (a little `+N`). The volume is shared with the video player, so one setting controls everything.
+
+**Keeps playing in the background.** Hide the bar and the music keeps going; while no menu is open it stays on your HUD showing the track name. The same top-left button that brings hidden videos back works for hidden audio bars too.
+
+---
+
+## Playlists
+
+Open the **Playlists** button in the top-left of your chat (or bind a key for it — see below) to manage saved playlists.
+
+- **Create** a playlist and give it a name.
+- **Add** tracks by pasting a link — a direct audio file *or* a YouTube video (only the sound is played).
+- **Rename**, **remove tracks**, or **delete** a playlist.
+- **Play** it in order, or **Shuffle** it for a random order.
+
+Your playlists are **saved to disk**, so they're still there next time you play.
+
+---
+
+## Keybinds
+
+The mod adds keys you can set in **Options → Controls → "Lia's Media Player"** to drive the audio player without opening chat:
+
+- **Play / Pause**, **Next track** and **Previous track** (they act on your active audio bar)
+- **Open playlists**
+
+They're **unbound by default** so they never clash with your existing keys — just assign whatever you like.
 
 ---
 

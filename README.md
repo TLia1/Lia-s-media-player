@@ -1,15 +1,19 @@
 # Lia's Media Player
 
-A **client-side** NeoForge mod for **Minecraft 1.21.1** that turns image, GIF and
-video links shared in the in-game chat into rich, watchable media — without ever
-leaving the game.
+A **client-side** NeoForge mod for **Minecraft 1.21.1** that turns image, GIF, video
+and audio links shared in the in-game chat into rich, watchable (and listenable) media
+— without ever leaving the game.
 
 - Hover any **[picture]** or **[gif]** label to see an instant preview (animated
   GIFs play); click to pin it as a movable, resizable window.
 - Click a **[video]** / **[youtube]** label to play it inside Minecraft, with sound,
   a seek bar, a play queue and background playback.
-- Supports direct image and video files, animated Tenor GIFs, HLS/DASH streams and
-  YouTube — with zero manual setup for most things.
+- Click an **[audio]** label to open a compact audio bar with its own queue, or build
+  named **playlists** of audio/YouTube links and play them in order or shuffled.
+- Drive the audio player with **configurable keybinds** (play/pause, next, previous,
+  open playlists).
+- Supports direct image, video and audio files, animated Tenor GIFs, HLS/DASH streams
+  and YouTube — with zero manual setup for most things.
 
 It is purely cosmetic / quality-of-life: it only changes how your own client
 displays links it receives in chat. It does not touch gameplay, the world, or what
@@ -17,7 +21,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `liasmediaplayer` · **Version:** `1.1.4`
+- **Mod id:** `liasmediaplayer` · **Version:** `1.2.0`
 - **Loader:** NeoForge `21.1.230` · **Minecraft:** `1.21.1` · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
@@ -84,8 +88,15 @@ PCM audio back to the mod; YouTube links are first resolved to a direct stream w
 `yt-dlp`. All on-screen windows share one z-ordered stack so they move, resize and
 stack predictably.
 
+Audio links open a compact bar backed by an audio-only engine that reuses the same
+ffmpeg tooling (YouTube playlist entries play as sound only). Saved playlists persist to
+a JSON file in the game folder, and a few configurable keybinds drive the active audio
+player.
+
 The code is organized into small, single-responsibility packages under
 `com.lia.mediaplayer`: `source` (what a link is — the extension point), `chat`
-(rewriting chat into labels), `gui` (the on-screen windows and overlay), `image`
-and `video` (the two media engines), and `tools` (the external binaries). Teaching
-the mod a new kind of link is normally jus
+(rewriting chat into labels), `gui` (the on-screen windows, overlay and playlist
+screen), `image`, `video` and `audio` (the media engines), `media` (their shared volume,
+URL resolver and title cache), `playlist` (saved playlists), `input` (keybinds), and
+`tools` (the external binaries). Teaching the mod a new kind of link is normally just
+one new `MediaSource` class plus one line in the registry.

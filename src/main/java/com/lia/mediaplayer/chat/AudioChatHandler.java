@@ -1,10 +1,8 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.gui.VideoPlayerManager;
-import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.gui.AudioPlayerManager;
 import com.lia.mediaplayer.source.MediaSources;
-import com.lia.mediaplayer.video.VideoThumbnailCache;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
@@ -17,23 +15,24 @@ import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 /**
- * Rewrites incoming chat so video, stream and YouTube links become an aqua,
- * underlined {@code [video]} / {@code [youtube]} label. Clicking the label is handled
- * by {@link com.lia.mediaplayer.gui.MediaWindowOverlay}, which spawns or queues the
- * in-game player; this class only does the chat rewrite and the disconnect cleanup.
+ * Rewrites incoming chat so direct audio links become a green, underlined
+ * {@code [audio]} label. Clicking the label is handled by
+ * {@link com.lia.mediaplayer.gui.MediaWindowOverlay}, which queues / opens the in-game
+ * audio bar; this class only does the chat rewrite and the disconnect cleanup.
  *
  * <p>The component-walking is delegated to {@link ChatLinkRewriter}; this class only
- * supplies the video-specific rule (which links to claim and the aqua underlined
- * style).</p>
+ * supplies the audio-specific rule (which links to claim and the green underlined
+ * style). Audio and video sources are disjoint, so this composes on the same message as
+ * {@link VideoChatHandler} and {@link ImageChatHandler} without fighting over a link.</p>
  */
 @EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
-public final class VideoChatHandler {
+public final class AudioChatHandler {
 
-    /** Video/stream/YouTube links → aqua underlined {@code [video]}/{@code [youtube]} label. */
-    private static final ChatLinkRewriter.LinkRewrite VIDEO_LINKS = new ChatLinkRewriter.LinkRewrite() {
+    /** Direct audio links → green underlined {@code [audio]} label. */
+    private static final ChatLinkRewriter.LinkRewrite AUDIO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            return MediaSources.isVideo(url);
+            return MediaSources.isAudio(url);
         }
 
         @Override
@@ -44,29 +43,27 @@ public final class VideoChatHandler {
         @Override
         public Style style(Style inherited, String url) {
             return inherited
-                    .withColor(ChatFormatting.AQUA)
+                    .withColor(ChatFormatting.GREEN)
                     .withUnderlined(true)
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url));
         }
     };
 
-    private VideoChatHandler() {
+    private AudioChatHandler() {
     }
 
     @SubscribeEvent
     public static void onSystemChatReceived(ClientChatReceivedEvent.System event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), VIDEO_LINKS));
+        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), AUDIO_LINKS));
     }
 
     @SubscribeEvent
     public static void onPlayerChatReceived(ClientChatReceivedEvent.Player event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), VIDEO_LINKS));
+        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), AUDIO_LINKS));
     }
 
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-        VideoPlayerManager.disposeAll();
-        VideoThumbnailCache.clear();
-        MediaTitleCache.clear();
+        AudioPlayerManager.disposeAll();
     }
 }

@@ -30,7 +30,8 @@ public final class MediaSources {
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
             new YouTubeSource(),     // a youtube.com / youtu.be link
             new StreamSource(),      // an .m3u8 / .mpd manifest
-            new DirectVideoSource()  // a direct .mp4/.webm/... file
+            new DirectVideoSource(), // a direct .mp4/.webm/... file
+            new AudioFileSource()    // a direct .mp3/.ogg/.wav/... file
     );
 
     private MediaSources() {
@@ -60,6 +61,11 @@ public final class MediaSources {
     /** Whether {@code url} is a recognized video/stream/YouTube link. */
     public static boolean isVideo(String url) {
         return kindOf(url) == MediaKind.VIDEO;
+    }
+
+    /** Whether {@code url} is a recognized direct audio file. */
+    public static boolean isAudio(String url) {
+        return kindOf(url) == MediaKind.AUDIO;
     }
 
     /** Whether any source recognizes {@code url}. */

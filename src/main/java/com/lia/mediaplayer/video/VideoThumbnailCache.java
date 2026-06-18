@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.source.YouTubeSource;
 import com.lia.mediaplayer.image.GifDecoder;
 import com.lia.mediaplayer.tools.FFmpegCli;
@@ -152,7 +153,7 @@ public final class VideoThumbnailCache {
 
     @Nullable
     private static BufferedImage grabFirstFrame(String url) throws IOException {
-        String mediaUrl = VideoUrlResolver.resolve(url);
+        String mediaUrl = MediaUrlResolver.resolve(url);
         FFmpegCli.MediaInfo info = FFmpegCli.probe(mediaUrl);
         if (!info.hasVideo()) {
             return null;

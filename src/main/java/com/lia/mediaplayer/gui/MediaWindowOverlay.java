@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.source.MediaKind;
 import com.lia.mediaplayer.source.MediaSources;
 import com.lia.mediaplayer.video.VideoPlayer;
@@ -56,6 +57,9 @@ public final class MediaWindowOverlay {
     private static boolean revealVisible;
     private static int revealX, revealY, revealW, revealH;
 
+    /** Last-laid-out geometry of the always-on "Playlists" chat button (for hit-testing). */
+    private static int plBtnX, plBtnY, plBtnW, plBtnH;
+
     private MediaWindowOverlay() {
     }
 
@@ -68,12 +72,13 @@ public final class MediaWindowOverlay {
         List<MediaWindow> all = new ArrayList<>();
         all.addAll(ImageWindowManager.windows());
         all.addAll(VideoPlayerManager.windows());
+        all.addAll(AudioPlayerManager.windows());
         all.sort(Comparator.comparingLong(MediaWindow::zOrder));
         return all;
     }
 
     private static boolean noWindows() {
-        return ImageWindowManager.isEmpty() && VideoPlayerManager.isEmpty();
+        return ImageWindowManager.isEmpty() && VideoPlayerManager.isEmpty() && AudioPlayerManager.isEmpty();
     }
 
     // ------------------------------------------------------------------
@@ -124,9 +129,31 @@ public final class MediaWindowOverlay {
         int screenHeight = event.getScreen().height;
 
         renderAll(event.getGuiGraphics(), screenWidth, screenHeight, mouseX, mouseY, true);
+        renderPlaylistsButton(event.getGuiGraphics(), mouseX, mouseY);
         renderRevealButton(event.getGuiGraphics(), mouseX, mouseY);
         ImageHoverPreview.render(event.getGuiGraphics(), mouseX, mouseY,
                 screenWidth, screenHeight);
+    }
+
+    /** A small always-present chat button (top-left) that opens the playlist manager. */
+    private static void renderPlaylistsButton(GuiGraphics g, int mouseX, int mouseY) {
+        Font font = Minecraft.getInstance().font;
+        Component label = Component.literal("Playlists");
+        int noteW = 11;
+        plBtnW = noteW + font.width(label) + 8;
+        plBtnH = 14;
+        plBtnX = 4;
+        plBtnY = 4;
+
+        boolean over = inside(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
+        int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
+        g.pose().pushPose();
+        g.pose().translate(0, 0, 500); // above the windows and their batched text
+        g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? 0xF0303030 : 0xD0181818);
+        Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
+        g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
+        g.pose().popPose();
+        g.flush();
     }
 
     /**
@@ -135,18 +162,18 @@ public final class MediaWindowOverlay {
      * least one video is hidden.
      */
     private static void renderRevealButton(GuiGraphics g, int mouseX, int mouseY) {
-        int hidden = VideoPlayerManager.hiddenCount();
+        int hidden = VideoPlayerManager.hiddenCount() + AudioPlayerManager.hiddenCount();
         revealVisible = hidden > 0;
         if (!revealVisible) {
             return;
         }
         Font font = Minecraft.getInstance().font;
-        Component label = Component.literal(hidden + (hidden > 1 ? " videos" : " video"));
+        Component label = Component.literal(hidden + (hidden > 1 ? " players" : " player"));
         int triW = 8; // room for the little play triangle on the left
         revealW = triW + font.width(label) + 10;
         revealH = 14;
         revealX = 4;
-        revealY = 4;
+        revealY = 22; // sit just below the always-present "Playlists" button
 
         boolean over = inside(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
@@ -190,10 +217,18 @@ public final class MediaWindowOverlay {
         if (!(event.getScreen() instanceof ChatScreen)) {
             return;
         }
-        // The "reveal hidden videos" button takes priority over everything else.
+        // The always-present "Playlists" button opens the playlist manager.
+        if (event.getButton() == 0
+                && inside(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
+            Minecraft.getInstance().setScreen(new PlaylistScreen());
+            event.setCanceled(true);
+            return;
+        }
+        // The "reveal hidden players" button takes priority over the windows.
         if (event.getButton() == 0 && revealVisible
                 && inside(event.getMouseX(), event.getMouseY(), revealX, revealY, revealW, revealH)) {
             VideoPlayerManager.revealAll();
+            AudioPlayerManager.revealAll();
             event.setCanceled(true);
             return;
         }
@@ -231,6 +266,14 @@ public final class MediaWindowOverlay {
                     VideoPlayerManager.open(url).bringToFront();
                 } else {
                     VideoPlayerManager.enqueue(url);
+                }
+                event.setCanceled(true);
+            } else if (kind == MediaKind.AUDIO) {
+                // Default: queue into the current bar. Shift-click opens a separate bar.
+                if (Screen.hasShiftDown()) {
+                    AudioPlayerManager.open(url).bringToFront();
+                } else {
+                    AudioPlayerManager.enqueue(url);
                 }
                 event.setCanceled(true);
             } else if (kind == MediaKind.IMAGE) {
@@ -291,12 +334,18 @@ public final class MediaWindowOverlay {
      */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
-        if (VideoPlayerManager.isEmpty()) {
-            return;
+        if (!VideoPlayerManager.isEmpty()) {
+            for (VideoWindow window : VideoPlayerManager.windows()) {
+                if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {
+                    VideoPlayerManager.close(window);
+                }
+            }
         }
-        for (VideoWindow window : VideoPlayerManager.windows()) {
-            if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {
-                VideoPlayerManager.close(window);
+        if (!AudioPlayerManager.isEmpty()) {
+            for (AudioWindow window : AudioPlayerManager.windows()) {
+                if (window.player().state() == AudioPlayer.State.ENDED && !window.advance()) {
+                    AudioPlayerManager.close(window);
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-package com.lia.mediaplayer.video;
+package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.source.YouTubeSource;
@@ -21,23 +21,24 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Resolves and caches a human-readable <em>title</em> for each queued video, so the
- * queue panel can show what an entry actually is instead of a generic
+ * Resolves and caches a human-readable <em>title</em> for each queued media URL, so a
+ * queue panel (video or audio) can show what an entry actually is instead of a generic
  * {@code "YouTube"} / file-name label:
  *
  * <ul>
  *   <li><b>YouTube links</b> are resolved to the real video title via YouTube's
  *       public oEmbed endpoint (a small JSON request — no {@code yt-dlp} needed).</li>
- *   <li><b>Direct video files / streams</b> use the file name from the URL, which is
- *       already available without any network call.</li>
+ *   <li><b>Direct files / streams</b> use the file name from the URL, which is already
+ *       available without any network call.</li>
  * </ul>
  *
- * <p>Resolution runs on the IO pool; the cache is only mutated on the render/main
- * thread (mirroring {@link VideoThumbnailCache}). While a YouTube title is loading,
+ * <p>This lives in the shared {@link com.lia.mediaplayer.media} layer so both the video
+ * and audio players reuse one cache. Resolution runs on the IO pool; the cache is only
+ * mutated on the render/main thread. While a YouTube title is loading,
  * {@link #getOrLoad} returns a sensible placeholder so the panel never shows a blank
  * row. All public methods must be called from the main thread.</p>
  */
-public final class VideoTitleCache {
+public final class MediaTitleCache {
     private static final int MAX_ENTRIES = 128;
     /** Hard cap on the stored title length so a pathological title can't bloat memory. */
     private static final int MAX_TITLE_LEN = 200;
@@ -49,7 +50,7 @@ public final class VideoTitleCache {
         }
     };
 
-    private VideoTitleCache() {
+    private MediaTitleCache() {
     }
 
     /**
@@ -59,7 +60,7 @@ public final class VideoTitleCache {
      * the resolved video title once available.
      */
     public static String getOrLoad(String url) {
-        Entry entry = CACHE.computeIfAbsent(url, VideoTitleCache::newEntry);
+        Entry entry = CACHE.computeIfAbsent(url, MediaTitleCache::newEntry);
         if (entry.state == State.IDLE) {
             // Direct files already have their final title (the file name); only
             // YouTube links need a network round-trip.
@@ -155,7 +156,7 @@ public final class VideoTitleCache {
     /** The label shown before (or instead of) a resolved title. */
     private static String fallbackLabel(String url) {
         if (YouTubeSource.isYouTube(url)) {
-            return "YouTube video…";
+            return "YouTube link…";
         }
         String name = fileName(url);
         return name != null ? name : url;

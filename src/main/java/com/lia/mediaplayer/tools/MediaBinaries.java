@@ -37,7 +37,7 @@ import java.util.zip.ZipInputStream;
  *
  * <ul>
  *   <li><b>yt-dlp</b> — resolves a YouTube page link to a direct media URL
- *       (see {@link com.lia.mediaplayer.video.VideoUrlResolver}). Distributed as a single self-contained
+ *       (see {@link com.lia.mediaplayer.media.MediaUrlResolver}). Distributed as a single self-contained
  *       executable.</li>
  *   <li><b>ffmpeg</b> (and its sibling <b>ffprobe</b>) — decodes video frames and
  *       audio (see {@link FFmpegCli}). Distributed as a per-platform archive that

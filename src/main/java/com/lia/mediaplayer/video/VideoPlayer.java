@@ -1,6 +1,8 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.media.MediaUrlResolver;
+import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.tools.FFmpegCli;
 
 import com.mojang.blaze3d.platform.NativeImage;
@@ -13,7 +15,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
-import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.SourceDataLine;
 import java.io.IOException;
 import java.io.InputStream;
@@ -140,10 +141,8 @@ public final class VideoPlayer {
     private final Object clockLock = new Object();
     @Nullable
     private volatile SourceDataLine audioLine;
-    // Volume is shared by every player so the level stays in sync and carries over
-    // when switching to another video (no need to re-set the sound each time).
-    private static volatile float volume = 1.0f;       // 0..1, user-controlled (shared)
-    private static volatile float volumeBeforeMute = 1.0f;
+    // Volume is shared by every player (see com.lia.mediaplayer.media.Volume) so the
+    // level stays in sync and carries over when switching to another video/track.
     private volatile float lastAppliedGain = -1f; // last effective 0..1 pushed to the line
     private long clockOffsetMicros;   // playback time represented by lineBase / wall baseline
     private long lineBaseMicros;      // audio line position captured at the last (re)baseline
@@ -191,18 +190,18 @@ public final class VideoPlayer {
         return hasAudio;
     }
 
-    /** Current volume in 0..1. */
+    /** Current volume in 0..1 (the shared level). */
     public float volume() {
-        return volume;
+        return Volume.level();
     }
 
     public boolean isMuted() {
-        return volume <= 0.0001f;
+        return Volume.isMuted();
     }
 
-    /** Sets the volume (0..1) and applies it to the audio line immediately. */
+    /** Sets the (shared) volume (0..1) and applies it to the audio line immediately. */
     public void setVolume(float value) {
-        volume = Math.max(0.0f, Math.min(1.0f, value));
+        Volume.set(value);
         SourceDataLine line = audioLine;
         if (line != null) {
             applyGain(line);
@@ -210,15 +209,14 @@ public final class VideoPlayer {
     }
 
     public void changeVolume(float delta) {
-        setVolume(volume + delta);
+        setVolume(Volume.level() + delta);
     }
 
     public void toggleMute() {
-        if (volume > 0.0001f) {
-            volumeBeforeMute = volume;
-            setVolume(0.0f);
-        } else {
-            setVolume(volumeBeforeMute > 0.0001f ? volumeBeforeMute : 1.0f);
+        Volume.toggleMute();
+        SourceDataLine line = audioLine;
+        if (line != null) {
+            applyGain(line);
         }
     }
 
@@ -473,7 +471,7 @@ public final class VideoPlayer {
 
     private void decodeLoop() {
         try {
-            mediaUrl = VideoUrlResolver.resolve(url);
+            mediaUrl = MediaUrlResolver.resolve(url);
             FFmpegCli.MediaInfo info = FFmpegCli.probe(mediaUrl);
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
@@ -764,48 +762,13 @@ public final class VideoPlayer {
         }
     }
 
-    /** The current Minecraft master-volume slider value (0..1), read live. */
-    private static float masterVolume() {
-        try {
-            return Minecraft.getInstance().options.getSoundSourceVolume(
-                    net.minecraft.sounds.SoundSource.MASTER);
-        } catch (Exception e) {
-            return 1.0f;
-        }
-    }
-
-    /** The volume actually sent to the line: the per-video setting scaled by the master. */
-    private float effectiveVolume() {
-        return Math.max(0.0f, Math.min(1.0f, volume * masterVolume()));
-    }
-
     /**
-     * Applies {@link #effectiveVolume()} to the line, preferring dB gain and falling
-     * back to a linear control. Cheap to call often: it skips the hardware control
-     * write when the level has not meaningfully changed, so the audio thread can
-     * re-apply it every buffer to follow live master-volume changes.
+     * Pushes the shared volume onto the line (dB gain, master-scaled). Delegates to
+     * {@link Volume#apply}, which skips redundant hardware writes so the audio thread
+     * can re-apply it every buffer to follow live master-volume changes.
      */
     private void applyGain(SourceDataLine line) {
-        try {
-            float v = effectiveVolume();
-            if (Math.abs(v - lastAppliedGain) < 0.001f) {
-                return; // no audible change since the last write
-            }
-            lastAppliedGain = v;
-            if (line.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
-                FloatControl gain = (FloatControl) line.getControl(FloatControl.Type.MASTER_GAIN);
-                float value = v <= 0.0001f
-                        ? gain.getMinimum()
-                        : (float) (20.0 * Math.log10(v)); // linear volume -> dB
-                gain.setValue(Math.max(gain.getMinimum(), Math.min(gain.getMaximum(), value)));
-            } else if (line.isControlSupported(FloatControl.Type.VOLUME)) {
-                FloatControl vol = (FloatControl) line.getControl(FloatControl.Type.VOLUME);
-                float value = vol.getMinimum() + v * (vol.getMaximum() - vol.getMinimum());
-                vol.setValue(Math.max(vol.getMinimum(), Math.min(vol.getMaximum(), value)));
-            }
-        } catch (Exception ignored) {
-            // Volume control is best-effort.
-        }
+        lastAppliedGain = Volume.apply(line, lastAppliedGain);
     }
 
     private void closeAudioLine() {
