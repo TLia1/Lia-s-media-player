@@ -343,7 +343,8 @@ public final class MediaWindowOverlay {
         }
         if (!AudioPlayerManager.isEmpty()) {
             for (AudioWindow window : AudioPlayerManager.windows()) {
-                if (window.player().state() == AudioPlayer.State.ENDED && !window.advance()) {
+                AudioPlayer ap = window.player();
+                if (ap.state() == AudioPlayer.State.ENDED && !ap.isPaused() && !window.advance()) {
                     AudioPlayerManager.close(window);
                 }
             }

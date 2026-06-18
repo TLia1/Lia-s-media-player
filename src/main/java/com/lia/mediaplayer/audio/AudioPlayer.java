@@ -86,6 +86,10 @@ public final class AudioPlayer {
     private volatile long seekTargetMicros;
     private volatile long pausedAtNanos;
 
+    // --- Pump pause gate (pump thread waits here while paused) ---------------
+    private final ReentrantLock pauseLock = new ReentrantLock();
+    private final Condition pauseCondition = pauseLock.newCondition();
+
     // --- Clock / line -------------------------------------------------------
     private final Object clockLock = new Object();
     @Nullable
@@ -175,6 +179,7 @@ public final class AudioPlayer {
     public void dispose() {
         running = false;
         signalGate();
+        signalPause();     // unblock a pump thread waiting on the pause gate
         closeAudioLine();  // unblock a paused pump stuck in line.write
         killSession();
         Thread thread = controlThread;
@@ -205,9 +210,9 @@ public final class AudioPlayer {
         state = State.PAUSED;
         SourceDataLine line = audioLine;
         if (line != null) {
-            // Stopping the line stalls the pump thread inside line.write, which freezes
-            // playback cleanly and also freezes the master clock (a stopped line's
-            // position stops advancing).
+            // Stopping the line freezes the master clock (a stopped line's position
+            // stops advancing).  The pump thread is gated by the pauseLock so it
+            // won't drain the ffmpeg stream while paused.
             line.stop();
         }
     }
@@ -225,6 +230,8 @@ public final class AudioPlayer {
         boolean stale = pausedAt != 0 && (System.nanoTime() - pausedAt) > STALE_PAUSE_NANOS;
         long resumePos = positionMicros();
         state = State.PLAYING;
+        // Wake the pump thread so it can continue writing PCM to the line.
+        signalPause();
         if (stale) {
             // The session may have gone stale while paused (an idle network stream can be
             // dropped). Relaunch from the paused position via the seek path, which is
@@ -280,6 +287,16 @@ public final class AudioPlayer {
             gateSignal.signalAll();
         } finally {
             gate.unlock();
+        }
+    }
+
+    /** Wake the pump thread if it is waiting on the pause gate. */
+    private void signalPause() {
+        pauseLock.lock();
+        try {
+            pauseCondition.signalAll();
+        } finally {
+            pauseLock.unlock();
         }
     }
 
@@ -414,8 +431,13 @@ public final class AudioPlayer {
     /**
      * Pumps PCM from one audio ffmpeg process into the line. Exits when the player
      * stops, the session is superseded (a seek launched a newer one), or the stream
-     * ends — signalling the control thread in the last case. Blocking writes pace
-     * playback; a stopped line back-pressures into a pause.
+     * ends — signalling the control thread in the last case.
+     *
+     * <p>While the player is paused the pump waits on {@link #pauseCondition} instead
+     * of continuing to read/write. Without this gate, {@code line.write()} could
+     * succeed without blocking (the stopped line still accepts data into its internal
+     * buffer), draining the entire ffmpeg stream and reaching EOF — which the control
+     * thread would interpret as "track finished" and auto-advance/close the window.</p>
      */
     private void pumpLoop(int gen, InputStream in, SourceDataLine line) {
         byte[] buffer = new byte[8192];
@@ -423,6 +445,12 @@ public final class AudioPlayer {
             int read;
             while (running && gen == sessionGen && (read = in.read(buffer)) >= 0) {
                 if (gen != sessionGen) {
+                    return;
+                }
+                // Wait here while paused, so we don't drain the ffmpeg stream into the
+                // line buffer and accidentally reach EOF.
+                waitWhilePaused(gen);
+                if (!running || gen != sessionGen) {
                     return;
                 }
                 lastAppliedGain = Volume.apply(line, lastAppliedGain);
@@ -441,6 +469,24 @@ public final class AudioPlayer {
             } catch (IOException ignored) {
                 // nothing useful to do
             }
+        }
+    }
+
+    /**
+     * Blocks the pump thread while the player is paused and this session is still
+     * current. Returns immediately if the player is not paused, or if the player
+     * has been disposed or a new session has started.
+     */
+    private void waitWhilePaused(int gen) {
+        pauseLock.lock();
+        try {
+            while (state == State.PAUSED && running && gen == sessionGen) {
+                pauseCondition.await();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            pauseLock.unlock();
         }
     }
 

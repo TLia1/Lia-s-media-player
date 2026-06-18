@@ -21,7 +21,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->` · **Version:** `<!-- mod_version -->1.2.1<!-- /mod_version -->`
+- **Mod id:** `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->` · **Version:** `<!-- mod_version -->1.2.2<!-- /mod_version -->`
 - **Loader:** NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` · **Minecraft:** `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->` · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
@@ -111,7 +111,7 @@ and labels all flow through the registry automatically. See
 
 Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
-`<!-- mod_version -->1.2.1<!-- /mod_version -->`). **Never edit these values by
+`<!-- mod_version -->1.2.2<!-- /mod_version -->`). **Never edit these values by
 hand** — update `gradle.properties` and run:
 
 ```
