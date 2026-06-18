@@ -207,12 +207,12 @@ tasks.register('updateDocs') {
         'neo_version'      : project.property('neo_version'),
         'minecraft_version': project.property('minecraft_version'),
     ]
+    var capturedDocFiles = ['README.md', 'TECHNICAL-DETAILS.md', 'FEATURES.md']
+        .collect { fileName -> layout.projectDirectory.file(fileName).asFile }
 
     doLast {
-        var docFiles = ['README.md', 'TECHNICAL-DETAILS.md', 'FEATURES.md']
-
-        docFiles.each { fileName ->
-            var f = project.file(fileName)
+        capturedDocFiles.each { f ->
+            var fileName = f.name
             if (!f.exists()) {
                 logger.warn("updateDocs: ${fileName} not found, skipping.")
                 return
@@ -239,4 +239,3 @@ tasks.register('updateDocs') {
         }
     }
 }
-
