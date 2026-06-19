@@ -222,7 +222,8 @@ tasks.register('updateDocs') {
 
             capturedProps.each { key, value ->
                 // Pattern: <!-- key -->old_value<!-- /key -->
-                var pattern = ~/(?s)(<!--\s*${key}\s*-->)(.*?)(<!--\s*\/${key}\s*-->)/
+                // Preserves any formatting (*, _, ~, `) and spaces immediately surrounding the value
+                var pattern = ~/(?s)(<!--\s*${key}\s*-->\s*[*_~`]*\s*)(.*?)(\s*[*_~`]*\s*<!--\s*\/${key}\s*-->)/
                 var newContent = content.replaceAll(pattern, "\$1${java.util.regex.Matcher.quoteReplacement(value)}\$3")
                 if (newContent != content) {
                     changed = true

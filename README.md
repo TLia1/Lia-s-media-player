@@ -21,9 +21,10 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->` · **Version:** `<!-- mod_version -->1.2.2<!-- /mod_version -->`
-- **Loader:** NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` · **Minecraft:** `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->` · **Java:** 21
+- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->`1.2.3`<!-- /mod_version -->
+- **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
+- **API mod id:** `liasmediaplayerapi` — ships in the same JAR. The API is licensed under the **MIT License**; other mods can freely depend on the API to register custom media sources, control playback, and receive events.
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
   playback uses external `ffmpeg`/`ffprobe` and `yt-dlp` tools that the mod
   downloads automatically into the game folder on first launch.
@@ -32,6 +33,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 - **[FEATURES.md](FEATURES.md)** — a friendly, user-facing tour of everything the
   mod does in-game.
+- **[API-DOCUMENTATION.md](API-DOCUMENTATION.md)** — reference for mod developers: how to depend on the API, register custom sources, control playback, and listen to events.
 - **[TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md)** — the technical reference:
   architecture, package layout, threading model, and how each piece works.
 
@@ -101,17 +103,18 @@ Contributions are welcome! Here's how to get started:
 
 ### Adding a new media source
 
-This is the most common way to extend the mod. Write a new `MediaSource` in the
-`source` package (implement `matches` / `kind` / `label`), add it to the
-`MediaSources.REGISTERED` list, and you're done — the chat handlers, overlay
-and labels all flow through the registry automatically. See
-[TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md) for the full architecture.
+This is the most common way to extend the mod. **From within this mod**, write
+a new `MediaSource` in the `source` package (implement `matches` / `kind` /
+`label`) and register it in `MediaSources`. **From another mod**, depend on the
+API (`liasmediaplayerapi`) and either call `MediaPlayerAPI.registerSource()` or
+listen for `MediaSourceRegistrationEvent`. See
+[API-DOCUMENTATION.md](API-DOCUMENTATION.md) for the full developer guide.
 
 ### Keeping docs in sync
 
-Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md` and
+Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md`, `API-DOCUMENTATION.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
-`<!-- mod_version -->1.2.2<!-- /mod_version -->`). **Never edit these values by
+`<!-- mod_version -->1.2.3<!-- /mod_version -->`). **Never edit these values by
 hand** — update `gradle.properties` and run:
 
 ```
@@ -139,4 +142,4 @@ The code is organized into small, single-responsibility packages under
 screen), `image`, `video` and `audio` (the media engines), `media` (their shared volume,
 URL resolver and title cache), `playlist` (saved playlists), `input` (keybinds), and
 `tools` (the external binaries). Teaching the mod a new kind of link is normally just
-one new `MediaSource` class plus one line in the registry.
+one new `MediaSource` class plus one line in the registry. Other mods can integrate through the public API (`com.lia.mediaplayer.api`), which exposes source registration, playback control, volume, playlists, and playback events.
