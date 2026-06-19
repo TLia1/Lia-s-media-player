@@ -48,7 +48,7 @@ public final class PlaylistScreen extends Screen {
     private EditBox addBox;
 
     public PlaylistScreen() {
-        super(Component.literal("Lia's Playlists"));
+        super(Component.translatable("gui.liasmediaplayer.playlists.title"));
     }
 
     @Override
@@ -114,44 +114,44 @@ public final class PlaylistScreen extends Screen {
         clearWidgets();
 
         // Left: create a new playlist.
-        newNameBox = new EditBox(font, leftX(), height - 58, leftW() - 24, 18, Component.literal("new playlist"));
+        newNameBox = new EditBox(font, leftX(), height - 58, leftW() - 24, 18, Component.translatable("gui.liasmediaplayer.playlists.new"));
         newNameBox.setMaxLength(64);
-        newNameBox.setHint(Component.literal("New name"));
+        newNameBox.setHint(Component.translatable("gui.liasmediaplayer.playlists.new_name"));
         addRenderableWidget(newNameBox);
         addRenderableWidget(Button.builder(Component.literal("+"), b -> createPlaylist())
                 .bounds(leftX() + leftW() - 20, height - 58, 20, 18).build());
 
         // Bottom: close.
-        addRenderableWidget(Button.builder(Component.literal("Done"), b -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"), b -> onClose())
                 .bounds(width / 2 - 40, height - 26, 80, 20).build());
 
         if (selected != null) {
             int rx = rightX();
             int rw = rightW();
 
-            nameBox = new EditBox(font, rx, 40, rw - 60, 18, Component.literal("name"));
+            nameBox = new EditBox(font, rx, 40, rw - 60, 18, Component.translatable("gui.liasmediaplayer.playlists.name"));
             nameBox.setMaxLength(64);
             nameBox.setValue(selected.name());
             addRenderableWidget(nameBox);
-            addRenderableWidget(Button.builder(Component.literal("Rename"), b -> rename())
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.rename"), b -> rename())
                     .bounds(rx + rw - 56, 40, 56, 18).build());
 
-            addBox = new EditBox(font, rx, height - 82, rw - 60, 18, Component.literal("add"));
+            addBox = new EditBox(font, rx, height - 82, rw - 60, 18, Component.translatable("gui.liasmediaplayer.playlists.add"));
             addBox.setMaxLength(1024);
-            addBox.setHint(Component.literal("Paste an audio or YouTube link"));
+            addBox.setHint(Component.translatable("gui.liasmediaplayer.playlists.paste_link"));
             addRenderableWidget(addBox);
-            addRenderableWidget(Button.builder(Component.literal("Add"), b -> addEntry())
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.add"), b -> addEntry())
                     .bounds(rx + rw - 56, height - 82, 56, 18).build());
 
             int bw = (rw - 8) / 3;
             int by = height - 58;
-            addRenderableWidget(Button.builder(Component.literal("▶ Play"),
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.play"),
                             b -> play(false))
                     .bounds(rx, by, bw, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("⤨ Shuffle"),
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.shuffle"),
                             b -> play(true))
                     .bounds(rx + bw + 4, by, bw, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("Delete"),
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.delete"),
                             b -> deleteSelected())
                     .bounds(rx + (bw + 4) * 2, by, rw - (bw + 4) * 2, 20).build());
         } else {
@@ -223,11 +223,11 @@ public final class PlaylistScreen extends Screen {
         renderPlaylistList(g, mouseX, mouseY);
 
         if (selected != null) {
-            g.drawString(font, Component.literal("Entries (" + selected.size() + ")"),
+            g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.entries", selected.size()),
                     rightX(), entriesTop() - 12, SUBTLE);
             renderEntries(g, mouseX, mouseY);
         } else {
-            g.drawCenteredString(font, Component.literal("Select a playlist, or create one below"),
+            g.drawCenteredString(font, Component.translatable("gui.liasmediaplayer.playlists.select"),
                     rightX() + rightW() / 2, height / 2, SUBTLE);
         }
     }
@@ -237,7 +237,7 @@ public final class PlaylistScreen extends Screen {
         int x = leftX();
         int w = leftW();
         int top = listTop();
-        g.drawString(font, Component.literal("Playlists (" + playlists.size() + ")"), x, top - 12, SUBTLE);
+        g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.count", playlists.size()), x, top - 12, SUBTLE);
         g.fill(x, top, x + w, listBottom(), PANEL_BG);
 
         int rows = visiblePlaylistRows();

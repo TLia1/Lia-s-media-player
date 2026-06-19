@@ -138,7 +138,7 @@ public final class MediaWindowOverlay {
     /** A small always-present chat button (top-left) that opens the playlist manager. */
     private static void renderPlaylistsButton(GuiGraphics g, int mouseX, int mouseY) {
         Font font = Minecraft.getInstance().font;
-        Component label = Component.literal("Playlists");
+        Component label = Component.translatable("gui.liasmediaplayer.playlists");
         int noteW = 11;
         plBtnW = noteW + font.width(label) + 8;
         plBtnH = 14;
@@ -168,7 +168,7 @@ public final class MediaWindowOverlay {
             return;
         }
         Font font = Minecraft.getInstance().font;
-        Component label = Component.literal(hidden + (hidden > 1 ? " players" : " player"));
+        Component label = Component.translatable(hidden > 1 ? "gui.liasmediaplayer.hidden_players.plural" : "gui.liasmediaplayer.hidden_players.singular", hidden);
         int triW = 8; // room for the little play triangle on the left
         revealW = triW + font.width(label) + 10;
         revealH = 14;

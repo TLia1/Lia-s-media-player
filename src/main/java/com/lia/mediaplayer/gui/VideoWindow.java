@@ -371,9 +371,9 @@ final class VideoWindow extends MediaWindow {
         } else {
             g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);
             Component status = switch (player.state()) {
-                case FAILED -> Component.literal("Playback failed");
-                case LOADING -> Component.literal("Loading video...");
-                default -> Component.literal("Buffering...");
+                case FAILED -> Component.translatable("gui.liasmediaplayer.video.playback_failed");
+                case LOADING -> Component.translatable("gui.liasmediaplayer.video.loading");
+                default -> Component.translatable("gui.liasmediaplayer.video.buffering");
             };
             int tx = contentX + (contentW - font.width(status)) / 2;
             int ty = contentY + (contentH - font.lineHeight) / 2;

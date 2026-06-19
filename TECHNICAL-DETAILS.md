@@ -11,7 +11,7 @@ queue); clicking an audio label opens a compact **audio bar** with its own queue
 audio/YouTube links and play them in order or shuffled, and a set of **configurable
 keybinds** drives the active audio player.
 
-- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->`com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.2.3`<!-- /mod_version -->
+- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->`com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.2.4`<!-- /mod_version -->
 - **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a
   server and is not required by anyone else on the server.
@@ -632,6 +632,7 @@ for what the mod does in-game.
   it in `onRegister`, handling it in `KeybindHandler`, and adding its name to the lang
   files. New bindings should stay unbound by default (`InputConstants.UNKNOWN`) to avoid
   clashes.
+- **GUI & Internationalization.** Any new UI text elements must be internationalized using `Component.translatable()` and added to all supported language files (e.g., `assets/liasmediaplayer/lang/en_us.json` and `fr_fr.json`). Do not use hardcoded `Component.literal()` strings for UI text.
 - **Tenor scraping.** Recognizing a Tenor link lives in `TenorSource`; turning it
   into a GIF lives in `image/TenorResolver`. If Tenor changes its markup, update the
   patterns in `TenorResolver`; `extractMediaUrl` is unit-test-friendly.

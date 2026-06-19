@@ -65,9 +65,9 @@ final class ImageHoverPreview {
                 }
             }
             case FAILED -> renderStatus(guiGraphics, mc,
-                    Component.literal("Couldn't load image"), mouseX, mouseY);
+                    Component.translatable("gui.liasmediaplayer.image.load_failed"), mouseX, mouseY);
             default -> renderStatus(guiGraphics, mc,
-                    Component.literal("Loading image..."), mouseX, mouseY);
+                    Component.translatable("gui.liasmediaplayer.image.loading"), mouseX, mouseY);
         }
     }
 

@@ -83,8 +83,8 @@ final class ImageWindow extends MediaWindow {
         }
         g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);
         Component status = switch (e.state) {
-            case FAILED -> Component.literal("Couldn't load image");
-            default -> Component.literal("Loading image...");
+            case FAILED -> Component.translatable("gui.liasmediaplayer.image.load_failed");
+            default -> Component.translatable("gui.liasmediaplayer.image.loading");
         };
         int tx = contentX + (contentW - font.width(status)) / 2;
         int ty = contentY + (contentH - font.lineHeight) / 2;
