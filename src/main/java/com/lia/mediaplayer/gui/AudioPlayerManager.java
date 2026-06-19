@@ -161,4 +161,21 @@ public final class AudioPlayerManager {
             eldest.disposeAll();
         }
     }
+
+    // ------------------------------------------------------------------
+    // Public API entry points (called by MediaPlayerAPI)
+    // ------------------------------------------------------------------
+
+    /** Public entry point for the API: enqueue an audio URL. */
+    public static void enqueuePublic(String url) {
+        enqueue(url);
+    }
+
+    /** Seeks the front-most audio player to a fraction (API). */
+    public static void seekFrontMost(double fraction) {
+        AudioWindow window = frontMost();
+        if (window != null) {
+            window.player().seekToFraction(fraction);
+        }
+    }
 }

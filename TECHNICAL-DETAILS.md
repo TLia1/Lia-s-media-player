@@ -45,6 +45,7 @@ concern:
 
 | Package | Responsibility | Depends on |
 |---|---|---|
+| `api` | **Public API for other mods.** Interfaces, enums, the `MediaPlayerAPI` facade, and events. This package is the only thing external mods should import. | (NeoForge only) |
 | `source` | **What is this link?** URL classification and chat labels. The extension point. | (Minecraft only) |
 | `image` | Image/GIF download, decode and texture cache. | `source` |
 | `media` | Cross-cutting playback helpers shared by the two engines: the single shared **volume**, the **URL resolver** (incl. yt-dlp) and the **title cache**. | `source`, `tools` |
@@ -55,7 +56,7 @@ concern:
 | `gui` | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the hover preview and the playlist screen. | `source`, `image`, `video`, `audio`, `media`, `playlist` |
 | `input` | The configurable keybinds and the handler that drives the active audio player. | `gui` |
 | `chat` | Hooking the chat events and rewriting links into labels. | `source`, `image`, `video`, `audio`, `gui` |
-| *(root)* | The `@Mod` entry point. | `tools` |
+| *(root)* | The `@Mod` entry points (main mod + API). Fires `MediaSourceRegistrationEvent` during client setup. | `tools`, `api` |
 
 The two playback engines (`video`, `audio`) are siblings that share their common
 machinery through the lower `media` layer rather than depending on each other, so the
@@ -85,19 +86,33 @@ URL — does it `matches(...)`, what `kind()` is it (`IMAGE` or `VIDEO`), and wh
 `MediaSources` is the registry: it holds the ordered list of sources and exposes
 the lookups everyone else uses — `find`, `kindOf`, `isImage`, `isVideo`, `isAudio`,
 `isSupported` and `labelFor`. Because every caller (the chat handlers, the overlay's
-click routing, the labels) goes through these lookups, teaching the mod a new source
-is **one new class plus one line in the registry** — nothing in the chat, GUI or
+click routing, the labels) goes through these lookups, teaching the mod is one new class plus one line in the registry** — nothing in the chat, GUI or
 playback code changes. The image, video and audio kinds are kept **disjoint** across
 all sources, so a single link is only ever claimed by one feature (a `.gif` is an
 image; a `.mp4` is a video; a `.mp3` is audio — and audio-only siblings like `.weba`/
 `.oga`/`.m4a` stay audio while `.webm`/`.ogv`/`.m4v` stay video). `Urls` is a small
 package-private helper for the shared path/host parsing.
 
+External mods can also register sources through the public API: either by calling
+`MediaPlayerAPI.registerSource()` at any time, or by listening for
+`MediaSourceRegistrationEvent` on the mod event bus during initialization. Both
+paths append to the same `REGISTERED` list. The `MediaSources.REGISTERED` list is
+now a mutable `ArrayList` (was `List.of`), and `MediaSources.register()` is the
+public entry point.
+
 ## Source layout
 
 | File | Role |
 |---|---|
-| `LiasMediaPlayer.java` | `@Mod(dist = Dist.CLIENT)` entry point. Holds the mod id (`liasmediaplayer`) and the shared logger, and kicks off the background download of the external tools (`MediaBinaries.installAllAsync()`) from its constructor. Event handlers are discovered separately via `@EventBusSubscriber`. |
+| `LiasMediaPlayer.java` | `@Mod(dist = Dist.CLIENT)` entry point. Holds the mod id (`liasmediaplayer`) and the shared logger, kicks off the background tool download, and fires `MediaSourceRegistrationEvent` during `FMLClientSetupEvent` so addons can register custom sources. Event handlers are discovered separately via `@EventBusSubscriber`. |
+| **`api/`** | |
+| `LiasMediaPlayerApi.java` | `@Mod("liasmediaplayerapi", dist = Dist.CLIENT)` — the API mod entry point, shown as a separate entry in the Mods menu. No logic of its own. |
+| `MediaPlayerAPI.java` | The public façade. Static methods for source registration, playback control, volume, media queries, and playlist access. Delegates to internal classes. |
+| `MediaSource.java` | The public extension interface: `matches` / `kind` / `label`. Other mods implement this to teach the player about new link formats. |
+| `MediaKind.java` | Public enum: `IMAGE`, `VIDEO`, `AUDIO`. |
+| `PlaybackState.java` | Public enum: `LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`. |
+| `event/MediaSourceRegistrationEvent.java` | Mod-bus event fired during `FMLClientSetupEvent`. Addons listen to register custom `MediaSource`s. |
+| `event/PlaybackEvent.java` | Game-bus event fired on playback state changes (STARTED, PAUSED, RESUMED, SEEKED, ENDED, FAILED, STOPPED). Enables sync addons. |
 | **`source/`** | |
 | `MediaKind.java` | The three disjoint media kinds: `IMAGE`, `VIDEO` and `AUDIO`. |
 | `MediaSource.java` | The extension interface: `matches` / `kind` / `label` for one recognizable link shape. |
@@ -149,7 +164,8 @@ package-private helper for the shared path/host parsing.
 
 Resources:
 
-- `src/main/resources/META-INF/neoforge.mods.toml` — mod metadata. Declares only
+- `src/main/resources/META-INF/neoforge.mods.toml` — mod metadata. Declares two
+  `[[mods]]` entries (`liasmediaplayer` and `liasmediaplayerapi`) and only
   `neoforge` and `minecraft` as required dependencies. The `mod_id`, `mod_name`,
   `mod_version`, etc. are expanded from `gradle.properties` at build time.
   `@EventBusSubscriber` handlers are discovered by annotation scanning regardless of
@@ -596,6 +612,9 @@ for what the mod does in-game.
   change. Keep the `IMAGE`, `VIDEO` and `AUDIO` sources **disjoint** so they compose on
   the same message. If an engine needs to single out the new source (as both engines do
   for YouTube), expose a small `static` predicate on it.
+  External mods add sources through the API: `MediaPlayerAPI.registerSource()` or
+  the `MediaSourceRegistrationEvent`. See `API-DOCUMENTATION.md` for the developer
+  guide.
 - **Shared volume.** There is one level for everything in `media.Volume`. Both
   `VideoPlayer` and `AudioPlayer` read/write it and apply it via `Volume.apply`; don't
   reintroduce a per-engine volume field.
