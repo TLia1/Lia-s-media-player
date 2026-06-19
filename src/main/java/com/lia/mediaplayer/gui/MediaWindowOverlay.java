@@ -2,7 +2,7 @@ package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.audio.AudioPlayer;
-import com.lia.mediaplayer.source.MediaKind;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.source.MediaSources;
 import com.lia.mediaplayer.video.VideoPlayer;
 

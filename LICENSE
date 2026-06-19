@@ -1,0 +1,10 @@
+Copyright (c) 2026 T_Lia
+
+All Rights Reserved.
+
+This software and associated documentation files (the "Software") are protected by copyright law. 
+No permission is granted to copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
+of the Software, except as explicitly permitted in writing by the copyright holder.
+
+NOTE: The public API components of this project (located in the `com.lia.mediaplayer.api` package) 
+are licensed separately under the MIT License. Please refer to the `LICENSE-API` file for details.
