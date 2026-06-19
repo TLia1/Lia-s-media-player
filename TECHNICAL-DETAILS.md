@@ -1,4 +1,4 @@
-# <!-- mod_name -->Lia's Media Player<!-- /mod_name --> — `<!-- mod_id -->liasmediaplayer<!-- /mod_id -->`
+# <!-- mod_name -->Lia's Media Player<!-- /mod_name --> — <!-- mod_id -->`liasmediaplayer`<!-- /mod_id -->
 
 A **client-side** NeoForge mod for Minecraft **<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->**. It improves how image, GIF,
 **video** and **audio** links that appear in the in-game chat are displayed: every

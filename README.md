@@ -39,7 +39,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## Installing (for players)
 
-1. Install NeoForge `<!-- neo_version -->21.1.230<!-- /neo_version -->` for Minecraft `<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->`.
+1. Install NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version -->.
 2. Drop the mod jar (from `build/libs/`, or a release) into your client's `mods/`
    folder. Do **not** put it on a server — it is client-only and does nothing there.
 3. Launch the game. The first time you play a video, the mod quietly downloads
