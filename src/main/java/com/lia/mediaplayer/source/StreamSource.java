@@ -16,8 +16,8 @@ public final class StreamSource implements MediaSource {
     }
 
     @Override
-    public MediaKind kind() {
-        return MediaKind.VIDEO;
+    public com.lia.mediaplayer.api.MediaKind kind() {
+        return com.lia.mediaplayer.api.MediaKind.VIDEO;
     }
 
     @Override

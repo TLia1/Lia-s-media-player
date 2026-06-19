@@ -132,4 +132,43 @@ public final class VideoPlayerManager {
             eldest.disposeAll();
         }
     }
+
+    // ------------------------------------------------------------------
+    // Public API entry points (called by MediaPlayerAPI)
+    // ------------------------------------------------------------------
+
+    /** Public entry point for the API: enqueue a video URL. */
+    public static void enqueuePublic(String url) {
+        enqueue(url);
+    }
+
+    /** Public entry point for the API: open a new independent window. */
+    public static void openPublic(String url) {
+        open(url);
+    }
+
+    /** Toggles pause on the front-most video player (API + keybind). */
+    public static void togglePauseFrontMost() {
+        VideoWindow window = frontMost();
+        if (window != null) {
+            window.player().togglePause();
+        }
+    }
+
+    /** Skips to the next queued video in the front-most window (API). */
+    public static void nextFrontMost() {
+        VideoWindow window = frontMost();
+        if (window != null) {
+            window.advance();
+        }
+    }
+
+    /** Seeks the front-most video player to a fraction (API). */
+    public static void seekFrontMost(double fraction) {
+        VideoWindow window = frontMost();
+        if (window != null) {
+            window.player().seekToFraction(fraction);
+        }
+    }
 }
+

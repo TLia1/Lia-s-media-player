@@ -61,6 +61,11 @@ public final class ImageWindowManager {
         WINDOWS.clear();
     }
 
+    /** Public entry point for the API: show/pin an image URL. */
+    public static void showPublic(String url) {
+        show(url);
+    }
+
     private static void evictIfFull() {
         while (WINDOWS.size() >= MAX_WINDOWS) {
             Iterator<Map.Entry<String, ImageWindow>> it = WINDOWS.entrySet().iterator();

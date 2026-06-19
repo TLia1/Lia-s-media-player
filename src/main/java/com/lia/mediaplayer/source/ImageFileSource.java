@@ -17,8 +17,8 @@ public final class ImageFileSource implements MediaSource {
     }
 
     @Override
-    public MediaKind kind() {
-        return MediaKind.IMAGE;
+    public com.lia.mediaplayer.api.MediaKind kind() {
+        return com.lia.mediaplayer.api.MediaKind.IMAGE;
     }
 
     @Override

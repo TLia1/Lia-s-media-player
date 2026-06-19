@@ -1,20 +1,24 @@
 package com.lia.mediaplayer.source;
 
 /**
- * The kind of media a {@link MediaSource} produces. The kind decides how a link is
- * presented in chat (label colour) and which feature picks it up afterwards (the
- * image preview/pin path, or the in-game video player).
+ * Re-export of {@link com.lia.mediaplayer.api.MediaKind} for backward compatibility.
  *
- * <p>The kinds are intentionally <em>disjoint</em> across all registered sources, so
- * a single link is only ever claimed by one feature (a {@code .gif} is an image; a
- * {@code .mp4} is a video; a {@code .mp3} is audio) and they never fight over the same
- * URL.</p>
+ * <p>The enum values {@code IMAGE}, {@code VIDEO} and {@code AUDIO} are the same
+ * constants from the public API. Existing code that references
+ * {@code MediaKind.IMAGE} etc. continues to compile because these constants are of
+ * type {@code com.lia.mediaplayer.api.MediaKind}, which is also the return type of
+ * {@link com.lia.mediaplayer.api.MediaSource#kind()}.</p>
+ *
+ * @deprecated Import {@link com.lia.mediaplayer.api.MediaKind} directly instead.
  */
-public enum MediaKind {
-    /** A still picture or animated GIF, shown as a hover preview / pinned window. */
-    IMAGE,
-    /** A video, stream or YouTube link, played by the in-game video player. */
-    VIDEO,
-    /** A sound-only file, played by the in-game audio player (a compact bar + queue). */
-    AUDIO
+@Deprecated
+public final class MediaKind {
+    private MediaKind() {}
+
+    /** @see com.lia.mediaplayer.api.MediaKind#IMAGE */
+    public static final com.lia.mediaplayer.api.MediaKind IMAGE = com.lia.mediaplayer.api.MediaKind.IMAGE;
+    /** @see com.lia.mediaplayer.api.MediaKind#VIDEO */
+    public static final com.lia.mediaplayer.api.MediaKind VIDEO = com.lia.mediaplayer.api.MediaKind.VIDEO;
+    /** @see com.lia.mediaplayer.api.MediaKind#AUDIO */
+    public static final com.lia.mediaplayer.api.MediaKind AUDIO = com.lia.mediaplayer.api.MediaKind.AUDIO;
 }

@@ -23,8 +23,8 @@ public final class AudioFileSource implements MediaSource {
     }
 
     @Override
-    public MediaKind kind() {
-        return MediaKind.AUDIO;
+    public com.lia.mediaplayer.api.MediaKind kind() {
+        return com.lia.mediaplayer.api.MediaKind.AUDIO;
     }
 
     @Override
