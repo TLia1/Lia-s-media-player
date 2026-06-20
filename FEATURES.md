@@ -2,7 +2,7 @@
 
 **For Minecraft <!-- minecraft_version -->1.21.1<!-- /minecraft_version --> · NeoForge · Client-side only**
 
-Lia's Media player is a companion mod that links into things you can actually *see and watch* — right inside Minecraft, without ever leaving the game.
+Lia's Media player is a companion mod that can display medias that you can *interact* — right inside Minecraft, without ever leaving the game.
 
 ---
 
