@@ -11,7 +11,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
 
 /**
- * Replaces image links coming from the chat bridge with a hoverable
+ * Replaces image links with a hoverable
  * [picture] entry that renders an image preview over the chat, and turns
  * video/YouTube links into an in-game player.
  *
