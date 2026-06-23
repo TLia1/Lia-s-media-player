@@ -30,7 +30,7 @@ jobs:
       - name: Build with Gradle
         run: |
           chmod +x gradlew
-          ./gradlew build
+          ./gradlew build test
 
       - name: Upload build artifacts
         if: github.event_name == 'push'

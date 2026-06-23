@@ -69,6 +69,7 @@ is no shading and no bundled natives, so the jar stays small. From the project r
 
 ```
 ./gradlew build       # builds the mod jar into build/libs/
+./gradlew test        # runs the unit tests
 ./gradlew runClient   # launches a dev client with the mod loaded
 ```
 
@@ -86,7 +87,7 @@ Contributions are welcome! Here's how to get started:
 
 1. **Fork** the repository and create a feature branch from `main`.
 2. Make your changes — keep commits focused and well-described.
-3. Run `./gradlew build` to make sure everything compiles.
+3. Run `./gradlew build test` to make sure everything compiles and all unit tests pass.
 4. Run `./gradlew updateDocs` if you changed any property in `gradle.properties`
    (version, mod id, etc.) — the CI will reject out-of-sync docs.
 5. Open a **pull request** against `main`.
@@ -101,6 +102,7 @@ Contributions are welcome! Here's how to get started:
 - **Internationalization (i18n)** — any new UI elements containing text must be internationalized in all supported languages (e.g., `en_us.json` and `fr_fr.json`) using `Component.translatable()`.
 - Preserve existing comments and docstrings unless they are directly related to
   your changes.
+- Make unit tests when possible to ensure code is working
 
 ### Adding a new media source
 
