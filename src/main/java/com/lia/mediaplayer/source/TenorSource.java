@@ -13,7 +13,7 @@ import net.minecraft.network.chat.Component;
  * already end in a known extension and are handled by {@link ImageFileSource}, so
  * they are deliberately excluded here.</p>
  */
-public final class TenorSource implements MediaSource {
+public final class TenorSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[gif]");
 

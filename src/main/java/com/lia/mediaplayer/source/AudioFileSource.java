@@ -13,7 +13,7 @@ import net.minecraft.network.chat.Component;
  * while their audio-only siblings {@code .weba}/{@code .oga}/{@code .m4a} are audio.
  * That keeps every link claimed by exactly one feature.</p>
  */
-public final class AudioFileSource implements MediaSource {
+public final class AudioFileSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[audio]");
 

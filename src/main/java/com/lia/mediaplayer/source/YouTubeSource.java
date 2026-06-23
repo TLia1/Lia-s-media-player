@@ -13,7 +13,7 @@ import java.util.Locale;
  * to a direct stream separately (via {@code yt-dlp}); this source only recognizes and
  * labels them. Shown as a {@code [youtube]} label.
  */
-public final class YouTubeSource implements MediaSource {
+public final class YouTubeSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[youtube]");
 

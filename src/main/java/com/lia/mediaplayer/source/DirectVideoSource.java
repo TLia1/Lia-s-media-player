@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
  * open straight away (a Discord {@code .mp4}/{@code .webm}/{@code .mov} attachment
  * and friends). Shown as a {@code [video]} label.
  */
-public final class DirectVideoSource implements MediaSource {
+public final class DirectVideoSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[video]");
 

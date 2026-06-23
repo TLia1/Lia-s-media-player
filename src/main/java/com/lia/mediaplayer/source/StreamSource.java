@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
  * An adaptive-streaming manifest ffmpeg can open directly: HLS ({@code .m3u8}) or
  * DASH ({@code .mpd}). Shown as a {@code [video]} label, like a direct file.
  */
-public final class StreamSource implements MediaSource {
+public final class StreamSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[video]");
 

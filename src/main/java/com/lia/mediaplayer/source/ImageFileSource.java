@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
  * the preview can decode ({@code .png}, {@code .jpg}, {@code .jpeg}, {@code .gif}
  * or {@code .bmp}). Shown as a {@code [picture]} label.
  */
-public final class ImageFileSource implements MediaSource {
+public final class ImageFileSource implements com.lia.mediaplayer.api.MediaSource {
 
     private static final Component LABEL = Component.literal("[picture]");
 

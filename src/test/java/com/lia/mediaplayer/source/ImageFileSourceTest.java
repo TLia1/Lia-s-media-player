@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
