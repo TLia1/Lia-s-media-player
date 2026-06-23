@@ -11,7 +11,6 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
 
 /**
- * Client-side companion mod for Lia's Minecraft <-> Discord bridge.
  * Replaces image links coming from the chat bridge with a hoverable
  * [picture] entry that renders an image preview over the chat, and turns
  * video/YouTube links into an in-game player.
