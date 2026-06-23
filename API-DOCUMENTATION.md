@@ -164,11 +164,11 @@ MediaPlayerAPI.addToPlaylist("Server Radio", "https://youtube.com/...");
 
 ## Class Reference
 
-| Class | Description |
-|---|---|
-| `MediaPlayerAPI` | The main static facade for controlling playback, volume, playlists, and registering sources. |
-| `MediaSource` | Interface to implement to define a new recognized link format. |
-| `MediaKind` | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`. |
-| `PlaybackState` | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state. |
+| Class                          | Description                                                                                       |
+|--------------------------------|---------------------------------------------------------------------------------------------------|
+| `MediaPlayerAPI`               | The main static facade for controlling playback, volume, playlists, and registering sources.      |
+| `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
+| `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
+| `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |
 | `MediaSourceRegistrationEvent` | Mod bus event fired during `FMLClientSetupEvent` to collect custom `MediaSource` implementations. |
-| `PlaybackEvent` | Game bus event fired on transport changes (started, paused, seeked, ended, etc.). |
+| `PlaybackEvent`                | Game bus event fired on transport changes (started, paused, seeked, ended, etc.).                 |

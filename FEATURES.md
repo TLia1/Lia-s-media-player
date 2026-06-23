@@ -55,7 +55,7 @@ Click a video label and the mod opens a real, working video player *inside Minec
 
 **A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the current player's queue. When one finishes (or you press next), the window automatically swaps to the next video in place. The queue panel shows each entry's thumbnail and its real video name (the actual YouTube title, or the file name), so you can tell what's coming up at a glance.
 
-**Keeps playing in the background.** Hide a player and it keeps running — audio and all — so you can listen while you play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay drawn on your HUD so a clip keeps showing during normal gameplay.
+**Keeps playing in the background.** Hide a player, and it keeps running — audio and all — so you can listen while you play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay drawn on your HUD so a clip keeps showing during normal gameplay.
 
 **Everything just works.** Video playback relies on two small helper tools: `ffmpeg` (to decode video and sound) and `yt-dlp` (to play YouTube links). If you don't already have them, the mod quietly downloads the official copies into its own folder when the game starts — so you don't have to set anything up. If you *do* have them installed, the mod finds them automatically in the usual places.
 
@@ -75,7 +75,7 @@ Click an **[audio]** label and the mod opens a small **audio bar** — just the 
 - A **seek bar** with elapsed and total time
 - A **speaker toggle**, plus scroll the mouse wheel over the bar to change the volume
 
-**A built-in queue, just like videos.** Click more audio links and they line up behind the current one; the bar plays them one after another and the time read-out shows how many are waiting (a little `+N`). The volume is shared with the video player, so one setting controls everything.
+**A built-in queue, just like videos.** Click more audio links, and they line up behind the current one; the bar plays them one after another and the time read-out shows how many are waiting (a little `+N`). The volume is shared with the video player, so one setting controls everything.
 
 **Keeps playing in the background.** Hide the bar and the music keeps going; while no menu is open it stays on your HUD showing the track name. The same top-left button that brings hidden videos back works for hidden audio bars too.
 
@@ -108,7 +108,7 @@ They're **unbound by default** so they never clash with your existing keys — j
 ## Why you'll like it
 
 - **No alt-tabbing.** Images and videos play where the conversation is happening.
-- **Zero setup for most things.** Hover an image and it just appears; click a video and it just plays.
+- **Zero setup for most things.** Hover an image, and it just appears; click a video, and it just plays.
 - **Stays out of your way.** Nothing shows up until media is actually shared, labels are compact, and everything is downloaded in the background so the game never stutters waiting on a link.
 - **You're in control.** Drag, resize, pin, hide, queue, mute — arrange your media however you like, then close it all when you're done.
 
