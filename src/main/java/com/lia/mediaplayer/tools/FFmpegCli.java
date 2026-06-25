@@ -40,6 +40,20 @@ public final class FFmpegCli {
     private FFmpegCli() {
     }
 
+    /** Scales width x height to fit within the max box, keeping even dimensions. */
+    public static int[] fitWithin(int width, int height, int maxWidth, int maxHeight) {
+        double scale = Math.min(1.0, Math.min(maxWidth / (double) width, maxHeight / (double) height));
+        int w = Math.max(2, (int) Math.round(width * scale));
+        int h = Math.max(2, (int) Math.round(height * scale));
+        if ((w & 1) == 1) {
+            w++;
+        }
+        if ((h & 1) == 1) {
+            h++;
+        }
+        return new int[]{w, h};
+    }
+
     private static final long PROBE_TIMEOUT_SECONDS = 20;
 
     /** Stream properties needed to set up playback, gathered from ffprobe. */

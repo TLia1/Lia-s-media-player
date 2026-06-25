@@ -159,7 +159,7 @@ public final class VideoThumbnailCache {
             return null;
         }
         // Decode at a small size that fits the thumbnail box (saves work over a full frame).
-        int[] target = fitWithin(info.width(), info.height(), MAX_W, MAX_H);
+        int[] target = FFmpegCli.fitWithin(info.width(), info.height(), MAX_W, MAX_H);
         int w = target[0];
         int h = target[1];
 
@@ -196,19 +196,7 @@ public final class VideoThumbnailCache {
         return image;
     }
 
-    /** Scales {@code width}x{@code height} to fit within the box, keeping even dimensions. */
-    private static int[] fitWithin(int width, int height, int maxWidth, int maxHeight) {
-        double scale = Math.min(1.0, Math.min(maxWidth / (double) width, maxHeight / (double) height));
-        int w = Math.max(2, (int) Math.round(width * scale));
-        int h = Math.max(2, (int) Math.round(height * scale));
-        if ((w & 1) == 1) {
-            w++;
-        }
-        if ((h & 1) == 1) {
-            h++;
-        }
-        return new int[]{w, h};
-    }
+
 
     /** Scales the source to fit the thumbnail box and forces TYPE_INT_ARGB. */
     private static BufferedImage scaleToArgb(BufferedImage source) {

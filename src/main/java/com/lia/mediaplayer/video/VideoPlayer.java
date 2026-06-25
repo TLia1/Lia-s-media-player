@@ -477,7 +477,7 @@ public final class VideoPlayer {
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
-            int[] target = fitWithin(info.width(), info.height(), MAX_WIDTH, MAX_HEIGHT);
+            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), MAX_WIDTH, MAX_HEIGHT);
             videoWidth = target[0];
             videoHeight = target[1];
             durationMicros = Math.max(0, info.durationMicros());
@@ -787,19 +787,7 @@ public final class VideoPlayer {
         }
     }
 
-    private static int[] fitWithin(int width, int height, int maxWidth, int maxHeight) {
-        double scale = Math.min(1.0, Math.min(maxWidth / (double) width, maxHeight / (double) height));
-        int w = Math.max(2, (int) Math.round(width * scale));
-        int h = Math.max(2, (int) Math.round(height * scale));
-        // Even dimensions keep the scaler/codecs happy.
-        if ((w & 1) == 1) {
-            w++;
-        }
-        if ((h & 1) == 1) {
-            h++;
-        }
-        return new int[]{w, h};
-    }
+
 
     /** A single decoded, display-ready frame in {@code abgr} layout. */
     private record VideoFrame(long tsMicros, int width, int height, int[] abgr) {

@@ -89,13 +89,6 @@ final class Glyphs {
         }
         String ellipsis = "…";
         int limit = Math.max(0, maxWidth - font.width(ellipsis));
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            if (font.width(sb.toString() + text.charAt(i)) > limit) {
-                break;
-            }
-            sb.append(text.charAt(i));
-        }
-        return sb + ellipsis;
+        return font.plainSubstrByWidth(text, limit) + ellipsis;
     }
 }

@@ -249,7 +249,7 @@ public final class PlaylistScreen extends Screen {
             int rowY = top + i * ROW_PL;
             Playlist playlist = playlists.get(index);
             boolean isSel = playlist == selected;
-            boolean over = inRect(mouseX, mouseY, x, rowY, w, ROW_PL - 1);
+            boolean over = MediaWindow.inRect(mouseX, mouseY, x, rowY, w, ROW_PL - 1);
             int bg = isSel ? ROW_SELECTED_BG : (over ? ROW_HOVER_BG : ROW_BG);
             g.fill(x + 1, rowY, x + w - 1, rowY + ROW_PL - 1, bg);
             String label = playlist.name() + "  (" + playlist.size() + ")";
@@ -276,8 +276,8 @@ public final class PlaylistScreen extends Screen {
             int rowY = top + i * ROW_EN;
             String url = urls.get(index);
             int removeX = x + w - ROW_EN;
-            boolean overRemove = inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1);
-            boolean overRow = inRect(mouseX, mouseY, x, rowY, w, ROW_EN - 1);
+            boolean overRemove = MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1);
+            boolean overRow = MediaWindow.inRect(mouseX, mouseY, x, rowY, w, ROW_EN - 1);
             g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1, (overRow && !overRemove) ? ROW_HOVER_BG : ROW_BG);
 
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
@@ -309,7 +309,7 @@ public final class PlaylistScreen extends Screen {
                 break;
             }
             int rowY = listTop() + i * ROW_PL;
-            if (inRect(mouseX, mouseY, leftX(), rowY, leftW(), ROW_PL - 1)) {
+            if (MediaWindow.inRect(mouseX, mouseY, leftX(), rowY, leftW(), ROW_PL - 1)) {
                 selected = playlists.get(index);
                 entryScroll = 0;
                 rebuild();
@@ -328,7 +328,7 @@ public final class PlaylistScreen extends Screen {
                 }
                 int rowY = entriesTop() + i * ROW_EN;
                 int removeX = rightX() + rightW() - ROW_EN;
-                if (inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1)) {
+                if (MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1)) {
                     selected.removeAt(index);
                     PlaylistStore.save();
                     rebuild();
@@ -343,13 +343,13 @@ public final class PlaylistScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int dir = (int) -Math.signum(scrollY);
         if (dir != 0) {
-            if (inRect(mouseX, mouseY, leftX(), listTop(), leftW(), listBottom() - listTop())) {
+            if (MediaWindow.inRect(mouseX, mouseY, leftX(), listTop(), leftW(), listBottom() - listTop())) {
                 playlistScroll = Math.max(0, playlistScroll + dir);
                 clampScroll();
                 return true;
             }
             if (selected != null
-                    && inRect(mouseX, mouseY, rightX(), entriesTop(), rightW(), entriesBottom() - entriesTop())) {
+                    && MediaWindow.inRect(mouseX, mouseY, rightX(), entriesTop(), rightW(), entriesBottom() - entriesTop())) {
                 entryScroll = Math.max(0, entryScroll + dir);
                 clampScroll();
                 return true;
@@ -365,7 +365,4 @@ public final class PlaylistScreen extends Screen {
         entryScroll = Mth.clamp(entryScroll, 0, Math.max(0, entries - visibleEntryRows()));
     }
 
-    private static boolean inRect(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
 }

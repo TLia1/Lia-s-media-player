@@ -469,7 +469,7 @@ abstract class MediaWindow {
         }
     }
 
-    protected static boolean inRect(double mx, double my, int x, int y, int w, int h) {
+    static boolean inRect(double mx, double my, int x, int y, int w, int h) {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 }

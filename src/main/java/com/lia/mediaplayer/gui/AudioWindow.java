@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import static com.lia.mediaplayer.gui.MediaControls.timeText;
+
 /**
  * The on-screen window for a single {@link AudioPlayer}: a compact bar showing the
  * track name plus a control row (play/pause, previous, next, a speaker toggle and a
@@ -189,7 +191,7 @@ final class AudioWindow extends MediaWindow {
         Font font = Minecraft.getInstance().font;
         int buttons = 4; // play, prev, next, speaker
         int buttonsW = buttons * (BUTTON + 4);
-        int timeW = font.width(timeText());
+        int timeW = font.width(timeText(player.positionMicros(), player.durationMicros(), queueSize()));
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
         return Math.max(MIN_CONTENT, needed);
     }
@@ -225,7 +227,7 @@ final class AudioWindow extends MediaWindow {
         seekH = 4;
         seekY = barTop + (CONTROL_BAR_HEIGHT - seekH) / 2;
 
-        int timeWidth = font.width(timeText());
+        int timeWidth = font.width(timeText(player.positionMicros(), player.durationMicros(), queueSize()));
         int rightLimit = contentX + contentW - GRIP - 2;
         seekW = Math.max(10, rightLimit - timeWidth - 6 - seekX);
         timeTextX = seekX + seekW + 4;
@@ -275,7 +277,7 @@ final class AudioWindow extends MediaWindow {
         Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
         showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
         if (showVolumePopup) {
-            drawVolumePopup(g);
+            MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), TRACK_COLOR, FILL_COLOR, KNOB_COLOR);
         }
 
         // Seek bar.
@@ -288,7 +290,7 @@ final class AudioWindow extends MediaWindow {
             g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, KNOB_COLOR);
         }
 
-        g.drawString(font, Component.literal(timeText()),
+        g.drawString(font, Component.literal(timeText(player.positionMicros(), player.durationMicros(), queue.size())),
                 timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, TEXT_COLOR);
     }
 
@@ -316,12 +318,12 @@ final class AudioWindow extends MediaWindow {
         }
         if (showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6)) {
             draggingVolume = true;
-            player.setVolume((float) volumeFractionAt(mouseY));
+            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
         }
         if (player.durationMicros() > 0 && inRect(mouseX, mouseY, seekX, seekY - 3, seekW, seekH + 6)) {
             draggingSeek = true;
-            scrubFraction = fractionAt(mouseX);
+            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return ClickResult.HANDLED;
         }
         return ClickResult.NONE;
@@ -330,11 +332,11 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected boolean onControlDrag(double mouseX, double mouseY) {
         if (draggingVolume) {
-            player.setVolume((float) volumeFractionAt(mouseY));
+            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return true;
         }
         if (draggingSeek) {
-            scrubFraction = fractionAt(mouseX);
+            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return true;
         }
         return false;
@@ -367,40 +369,4 @@ final class AudioWindow extends MediaWindow {
         return true;
     }
 
-    private double fractionAt(double mouseX) {
-        if (seekW <= 0) {
-            return 0;
-        }
-        return Mth.clamp((mouseX - seekX) / seekW, 0.0, 1.0);
-    }
-
-    /** Vertical slider: bottom is 0%, top is 100%. */
-    private double volumeFractionAt(double mouseY) {
-        return Mth.clamp((volBarY + VOL_BAR_H - mouseY) / (double) VOL_BAR_H, 0.0, 1.0);
-    }
-
-    private void drawVolumePopup(GuiGraphics g) {
-        g.fill(volBarX - 3, volBarY - 3, volBarX + VOL_BAR_W + 3, volBarY + VOL_BAR_H + 3, 0xE0101010);
-        g.fill(volBarX, volBarY, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, TRACK_COLOR);
-        float v = player.volume();
-        int fillH = Math.round(VOL_BAR_H * v);
-        g.fill(volBarX, volBarY + VOL_BAR_H - fillH, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, FILL_COLOR);
-        int knobY = volBarY + VOL_BAR_H - Mth.clamp(fillH, 0, VOL_BAR_H);
-        g.fill(volBarX - 2, knobY - 1, volBarX + VOL_BAR_W + 2, knobY + 1, KNOB_COLOR);
-    }
-
-    private String timeText() {
-        int queued = queue.size();
-        String suffix = queued > 0 ? "  +" + queued : "";
-        long duration = player.durationMicros();
-        if (duration <= 0) {
-            return "LIVE" + suffix;
-        }
-        return format(player.positionMicros()) + " / " + format(duration) + suffix;
-    }
-
-    private static String format(long micros) {
-        long totalSeconds = Math.max(0, micros / 1_000_000L);
-        return String.format("%d:%02d", totalSeconds / 60, totalSeconds % 60);
-    }
 }

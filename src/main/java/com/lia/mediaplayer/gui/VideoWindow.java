@@ -395,12 +395,12 @@ final class VideoWindow extends MediaWindow {
 
         // Play / pause button.
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
-        drawPlayPause(g, overPlay ? BTN_HOVER : BTN_COLOR);
+        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? BTN_HOVER : BTN_COLOR);
 
         // "Next" (skip to the next queued video) button.
         if (showNext) {
             boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
-            drawNext(g, overNext ? BTN_HOVER : BTN_COLOR);
+            Glyphs.next(g, nextBtnX, nextBtnY, overNext ? BTN_HOVER : BTN_COLOR);
         }
 
         // "Queue" (show/hide the playlist panel) button.
@@ -412,10 +412,10 @@ final class VideoWindow extends MediaWindow {
         // Volume: a speaker/mute button with a pop-up vertical slider on hover.
         if (showVolume) {
             boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
-            drawSpeaker(g, overVol ? BTN_HOVER : BTN_COLOR);
+            Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
             showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
             if (showVolumePopup) {
-                drawVolumePopup(g);
+                MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), TRACK_COLOR, FILL_COLOR, KNOB_COLOR);
             }
         } else {
             showVolumePopup = false;
@@ -432,7 +432,7 @@ final class VideoWindow extends MediaWindow {
         }
 
         // Time read-out.
-        g.drawString(font, Component.literal(timeText()),
+        g.drawString(font, Component.literal(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size())),
                 timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, TEXT_COLOR);
 
         // The playlist panel floats above the window when open.
@@ -441,69 +441,7 @@ final class VideoWindow extends MediaWindow {
         }
     }
 
-    private void drawVolumePopup(GuiGraphics g) {
-        g.fill(volBarX - 3, volBarY - 3, volBarX + VOL_BAR_W + 3, volBarY + VOL_BAR_H + 3, 0xE0101010);
-        g.fill(volBarX, volBarY, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, TRACK_COLOR);
-        float v = player.volume();
-        int fillH = Math.round(VOL_BAR_H * v);
-        g.fill(volBarX, volBarY + VOL_BAR_H - fillH, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, FILL_COLOR);
-        int knobY = volBarY + VOL_BAR_H - Mth.clamp(fillH, 0, VOL_BAR_H);
-        g.fill(volBarX - 2, knobY - 1, volBarX + VOL_BAR_W + 2, knobY + 1, KNOB_COLOR);
-    }
 
-    private void drawPlayPause(GuiGraphics g, int color) {
-        int cx = playBtnX;
-        int cy = playBtnY;
-        if (player.isPlaying()) {
-            // Two vertical bars.
-            g.fill(cx + 1, cy, cx + 4, cy + BUTTON, color);
-            g.fill(cx + 7, cy, cx + 10, cy + BUTTON, color);
-        } else {
-            // A right-pointing triangle approximated with stacked rows.
-            for (int i = 0; i < BUTTON; i++) {
-                int half = Math.min(i, BUTTON - 1 - i);
-                int len = 2 + half;
-                g.fill(cx + 2, cy + i, cx + 2 + len, cy + i + 1, color);
-            }
-        }
-    }
-
-    /** A "skip to next" glyph: a right-pointing triangle followed by a vertical bar. */
-    private void drawNext(GuiGraphics g, int color) {
-        int cx = nextBtnX;
-        int cy = nextBtnY;
-        for (int i = 0; i < BUTTON; i++) {
-            int half = Math.min(i, BUTTON - 1 - i);
-            int len = 1 + half;
-            g.fill(cx + 1, cy + i, cx + 1 + len, cy + i + 1, color);
-        }
-        g.fill(cx + BUTTON - 3, cy, cx + BUTTON - 1, cy + BUTTON, color);
-    }
-
-    /** A tiny speaker glyph; crossed out when muted. */
-    private void drawSpeaker(GuiGraphics g, int color) {
-        int x = volBtnX;
-        int y = volBtnY;
-        int midY = y + BUTTON / 2;
-        // Speaker box.
-        g.fill(x + 1, midY - 2, x + 3, midY + 2, color);
-        // Cone (widening towards the right).
-        for (int i = 0; i < 3; i++) {
-            g.fill(x + 3, midY - 1 - i, x + 4 + i, midY + 1 + i, color);
-        }
-        if (player.isMuted()) {
-            // A small red "x" past the cone.
-            g.fill(x + 7, y + 2, x + 8, y + 3, 0xFFFF5555);
-            g.fill(x + 9, y + 2, x + 10, y + 3, 0xFFFF5555);
-            g.fill(x + 8, midY, x + 9, midY + 1, 0xFFFF5555);
-            g.fill(x + 7, y + BUTTON - 3, x + 8, y + BUTTON - 2, 0xFFFF5555);
-            g.fill(x + 9, y + BUTTON - 3, x + 10, y + BUTTON - 2, 0xFFFF5555);
-        } else {
-            // Two sound "waves".
-            g.fill(x + 7, midY - 2, x + 8, midY + 2, color);
-            g.fill(x + 9, midY - 3, x + 10, midY + 3, color);
-        }
-    }
 
     /** A "playlist" glyph: three stacked lines with a small bar on the left of each. */
     private void drawQueueIcon(GuiGraphics g, int color) {
@@ -621,7 +559,7 @@ final class VideoWindow extends MediaWindow {
             int labelX = tx + THUMB_W + 4;
             int labelMaxW = upX - 4 - labelX;
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
-            g.drawString(font, Component.literal(fit(font, label, labelMaxW)),
+            g.drawString(font, Component.literal(Glyphs.fit(font, label, labelMaxW)),
                     labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
         }
 
@@ -706,22 +644,7 @@ final class VideoWindow extends MediaWindow {
         return downBtnX() - BUTTON - 2;
     }
 
-    /** Truncates a string with an ellipsis so it fits within {@code maxWidth} pixels. */
-    private static String fit(Font font, String text, int maxWidth) {
-        if (maxWidth <= 0 || font.width(text) <= maxWidth) {
-            return text;
-        }
-        String ellipsis = "…";
-        int limit = Math.max(0, maxWidth - font.width(ellipsis));
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            if (font.width(sb.toString() + text.charAt(i)) > limit) {
-                break;
-            }
-            sb.append(text.charAt(i));
-        }
-        return sb + ellipsis;
-    }
+
 
     // ------------------------------------------------------------------
     // Control input
@@ -750,14 +673,14 @@ final class VideoWindow extends MediaWindow {
             player.toggleMute();
             return ClickResult.HANDLED;
         }
-        if (showVolume && showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6)) {
+        if (showVolume && showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6)) {
             draggingVolume = true;
-            player.setVolume((float) volumeFractionAt(mouseY));
+            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
         }
         if (player.durationMicros() > 0 && inRect(mouseX, mouseY, seekX, seekY - 3, seekW, seekH + 6)) {
             draggingSeek = true;
-            scrubFraction = fractionAt(mouseX);
+            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return ClickResult.HANDLED;
         }
         return ClickResult.NONE;
@@ -766,11 +689,11 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected boolean onControlDrag(double mouseX, double mouseY) {
         if (draggingVolume) {
-            player.setVolume((float) volumeFractionAt(mouseY));
+            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return true;
         }
         if (draggingSeek) {
-            scrubFraction = fractionAt(mouseX);
+            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return true;
         }
         return false;
@@ -811,24 +734,12 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected boolean overPopup(double mouseX, double mouseY) {
         return showVolume && showVolumePopup
-                && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6);
+                && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6);
     }
 
     @Override
     protected boolean overExtraRegion(double mouseX, double mouseY) {
         return queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH);
-    }
-
-    private double fractionAt(double mouseX) {
-        if (seekW <= 0) {
-            return 0;
-        }
-        return Mth.clamp((mouseX - seekX) / seekW, 0.0, 1.0);
-    }
-
-    /** Vertical slider: bottom is 0%, top is 100%. */
-    private double volumeFractionAt(double mouseY) {
-        return Mth.clamp((volBarY + VOL_BAR_H - mouseY) / (double) VOL_BAR_H, 0.0, 1.0);
     }
 
     private String timeText() {

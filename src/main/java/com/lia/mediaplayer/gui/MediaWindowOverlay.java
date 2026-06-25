@@ -145,7 +145,7 @@ public final class MediaWindowOverlay {
         plBtnX = 4;
         plBtnY = 4;
 
-        boolean over = inside(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
+        boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
         g.pose().translate(0, 0, 500); // above the windows and their batched text
@@ -175,7 +175,7 @@ public final class MediaWindowOverlay {
         revealX = 4;
         revealY = 22; // sit just below the always-present "Playlists" button
 
-        boolean over = inside(mouseX, mouseY, revealX, revealY, revealW, revealH);
+        boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
         g.pose().translate(0, 0, 500); // above the windows and their batched text
@@ -192,9 +192,7 @@ public final class MediaWindowOverlay {
         g.flush();
     }
 
-    private static boolean inside(double mx, double my, int x, int y, int w, int h) {
-        return mx >= x && mx <= x + w && my >= y && my <= y + h;
-    }
+
 
     /** While no screen is open, keep the windows on the HUD (picture only, no controls). */
     @SubscribeEvent
@@ -219,14 +217,14 @@ public final class MediaWindowOverlay {
         }
         // The always-present "Playlists" button opens the playlist manager.
         if (event.getButton() == 0
-                && inside(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
+                && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
             Minecraft.getInstance().setScreen(new PlaylistScreen());
             event.setCanceled(true);
             return;
         }
         // The "reveal hidden players" button takes priority over the windows.
         if (event.getButton() == 0 && revealVisible
-                && inside(event.getMouseX(), event.getMouseY(), revealX, revealY, revealW, revealH)) {
+                && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), revealX, revealY, revealW, revealH)) {
             VideoPlayerManager.revealAll();
             AudioPlayerManager.revealAll();
             event.setCanceled(true);
