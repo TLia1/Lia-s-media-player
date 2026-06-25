@@ -261,7 +261,8 @@ public final class VideoPlayer {
             thread.interrupt();
         }
         releaseTexture();
-        frameQueue.clear();
+        java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
+        frameQueue.drainTo(drained);
     }
 
     // ------------------------------------------------------------------
@@ -583,7 +584,8 @@ public final class VideoPlayer {
         if (line != null) {
             line.flush();
         }
-        frameQueue.clear();
+        java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
+        frameQueue.drainTo(drained);
 
         // Relaunch both processes from the new position. A failure here just leaves
         // us with no video pipe, which the read loop treats as end-of-stream.

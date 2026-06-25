@@ -238,7 +238,7 @@ public final class VideoThumbnailCache {
             return;
         }
         // The entry may have been evicted while the load was in flight.
-        if (CACHE.get(url) != thumb) {
+        if (thumb.disposed || CACHE.get(url) != thumb) {
             return;
         }
         try {
@@ -316,6 +316,7 @@ public final class VideoThumbnailCache {
     /** A single queue thumbnail. */
     public static final class Thumb {
         public State state = State.IDLE;
+        public boolean disposed = false;
         @Nullable
         public ResourceLocation texture;
         public int width;
@@ -326,6 +327,7 @@ public final class VideoThumbnailCache {
         }
 
         void release() {
+            disposed = true;
             if (texture != null) {
                 Minecraft.getInstance().getTextureManager().release(texture);
                 texture = null;

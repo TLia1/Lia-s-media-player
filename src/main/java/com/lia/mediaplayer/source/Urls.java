@@ -19,7 +19,7 @@ final class Urls {
         try {
             String path = URI.create(url).getPath();
             return path == null ? null : path.toLowerCase(Locale.ROOT);
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             return null;
         }
     }
@@ -33,7 +33,7 @@ final class Urls {
             }
             host = host.toLowerCase(Locale.ROOT);
             return host.startsWith("www.") ? host.substring(4) : host;
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             return null;
         }
     }

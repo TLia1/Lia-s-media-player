@@ -86,15 +86,24 @@ public final class MediaUrlResolver {
             errReader.setDaemon(true);
             errReader.start();
 
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                firstLine = reader.readLine(); // -g prints one direct URL per stream; take the first
-            }
+            java.util.concurrent.Future<String> lineFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    return reader.readLine();
+                } catch (IOException e) {
+                    return null;
+                }
+            });
 
             boolean finished = process.waitFor(YT_DLP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 throw new IOException("yt-dlp timed out resolving " + url);
+            }
+            try {
+                firstLine = lineFuture.get(1, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                firstLine = null;
             }
         } catch (InterruptedException e) {
             process.destroyForcibly();

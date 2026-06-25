@@ -110,7 +110,9 @@ public final class GifDecoder {
                         // getSubimage shares the buffer, so copy it before we overwrite.
                         BufferedImage copy = new BufferedImage(
                                 frame.getWidth(), frame.getHeight(), BufferedImage.TYPE_INT_ARGB);
-                        copy.createGraphics().drawImage(restorePoint, 0, 0, null);
+                        Graphics2D copyG = copy.createGraphics();
+                        copyG.drawImage(restorePoint, 0, 0, null);
+                        copyG.dispose();
                         restorePoint = copy;
                     } else {
                         restorePoint = null;
@@ -120,7 +122,9 @@ public final class GifDecoder {
 
                     BufferedImage snapshot = new BufferedImage(
                             canvasWidth, canvasHeight, BufferedImage.TYPE_INT_ARGB);
-                    snapshot.createGraphics().drawImage(canvas, 0, 0, null);
+                    Graphics2D snapG = snapshot.createGraphics();
+                    snapG.drawImage(canvas, 0, 0, null);
+                    snapG.dispose();
                     composited.add(snapshot);
                     delays.add(normalizeDelay(meta.delayMs));
 

@@ -82,7 +82,7 @@ public final class ChatLinkRewriter {
             }
             return Optional.empty();
         };
-        message.visit(consumer, Style.EMPTY);
+        message.visit(consumer, message.getStyle());
 
         return changed[0] ? rebuilt : message;
     }

@@ -25,6 +25,8 @@ import javax.sound.sampled.SourceDataLine;
  */
 public final class Volume {
 
+    private static final float MUTE_THRESHOLD = 0.0001f;
+
     /** User-controlled level in 0..1, shared by audio and video. */
     private static volatile float level = 1.0f;
     /** The level to restore when un-muting. */
@@ -39,7 +41,7 @@ public final class Volume {
     }
 
     public static boolean isMuted() {
-        return level <= 0.0001f;
+        return level <= MUTE_THRESHOLD;
     }
 
     /** Sets the level, clamped to 0..1. */
@@ -51,12 +53,12 @@ public final class Volume {
         set(level + delta);
     }
 
-    public static void toggleMute() {
-        if (level > 0.0001f) {
+    public static synchronized void toggleMute() {
+        if (level > MUTE_THRESHOLD) {
             beforeMute = level;
             set(0.0f);
         } else {
-            set(beforeMute > 0.0001f ? beforeMute : 1.0f);
+            set(beforeMute > MUTE_THRESHOLD ? beforeMute : 1.0f);
         }
     }
 

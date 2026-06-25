@@ -231,17 +231,28 @@ public final class FFmpegCli {
 
         Process process = start(command);
         int needed = width * height * 4;
-        try (InputStream in = process.getInputStream()) {
-            byte[] data = in.readNBytes(needed);
-            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+        java.util.concurrent.Future<byte[]> readFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try (InputStream in = process.getInputStream()) {
+                return in.readNBytes(needed);
+            } catch (IOException e) {
+                return null;
+            }
+        });
+
+        try {
+            boolean finished = process.waitFor(15, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
             }
-            return data.length == needed ? data : null;
+            byte[] data = readFuture.get(1, TimeUnit.SECONDS);
+            return data != null && data.length == needed ? data : null;
         } catch (InterruptedException e) {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while grabbing frame from " + url, e);
+        } catch (Exception e) {
+            process.destroyForcibly();
+            throw new IOException("Failed to read frame", e);
         }
     }
 
@@ -249,13 +260,24 @@ public final class FFmpegCli {
     // Command building helpers
     // ------------------------------------------------------------------
 
+    private static final java.util.Set<Process> ACTIVE_PROCESSES = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            ACTIVE_PROCESSES.forEach(Process::destroyForcibly);
+        }, "FFmpeg-ShutdownHook"));
+    }
+
     private static Process start(List<String> command) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command);
         // We never read stderr from the streaming processes, so discard it to
         // avoid a full-pipe stall; real failures surface as an early stdout EOF
         // (and ffprobe has already validated the URL up front).
         builder.redirectError(ProcessBuilder.Redirect.DISCARD);
-        return builder.start();
+        Process p = builder.start();
+        ACTIVE_PROCESSES.add(p);
+        p.onExit().thenAccept(process -> ACTIVE_PROCESSES.remove(process));
+        return p;
     }
 
     private static String requireFfmpeg() throws IOException {

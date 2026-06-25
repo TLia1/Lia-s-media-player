@@ -288,7 +288,9 @@ public final class MediaWindowOverlay {
         if (!(event.getScreen() instanceof ChatScreen) || noWindows()) {
             return;
         }
-        for (MediaWindow window : orderedWindows()) {
+        List<MediaWindow> ordered = orderedWindows();
+        for (int i = ordered.size() - 1; i >= 0; i--) {
+            MediaWindow window = ordered.get(i);
             if (window.isVisible() && window.mouseDragged(event.getMouseX(), event.getMouseY())) {
                 event.setCanceled(true);
                 return;
@@ -301,7 +303,9 @@ public final class MediaWindowOverlay {
         if (!(event.getScreen() instanceof ChatScreen) || noWindows()) {
             return;
         }
-        for (MediaWindow window : orderedWindows()) {
+        List<MediaWindow> ordered = orderedWindows();
+        for (int i = ordered.size() - 1; i >= 0; i--) {
+            MediaWindow window = ordered.get(i);
             if (window.isVisible() && window.mouseReleased()) {
                 event.setCanceled(true);
                 return;

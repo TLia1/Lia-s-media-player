@@ -68,9 +68,11 @@ public final class PlaylistStore {
         }
         try {
             Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            Path tmp = path.resolveSibling("playlists.json.tmp");
+            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
                 GSON.toJson(PLAYLISTS, LIST_TYPE, writer);
             }
+            Files.move(tmp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | RuntimeException e) {
             LiasMediaPlayer.LOGGER.warn("Could not save playlists to {}: {}", path, e.toString());
         }

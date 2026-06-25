@@ -60,7 +60,7 @@ public final class ImagePreviewCache {
 
     /** Registers a URL seen in chat so its preview can be loaded lazily later. */
     public static void track(String url) {
-        CACHE.computeIfAbsent(url, u -> new Entry());
+        Minecraft.getInstance().execute(() -> CACHE.computeIfAbsent(url, u -> new Entry()));
     }
 
     /**

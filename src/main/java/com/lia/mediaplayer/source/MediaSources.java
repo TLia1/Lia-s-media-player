@@ -26,7 +26,7 @@ import java.util.Optional;
 public final class MediaSources {
 
     /** The registered sources, in match order. Mutable so addons can append. */
-    private static final List<com.lia.mediaplayer.api.MediaSource> REGISTERED = new ArrayList<>(List.of(
+    private static final List<com.lia.mediaplayer.api.MediaSource> REGISTERED = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
             new YouTubeSource(),     // a youtube.com / youtu.be link
@@ -43,7 +43,7 @@ public final class MediaSources {
      * {@link com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent}.
      * Sources are appended after the built-in ones.
      */
-    public static synchronized void register(com.lia.mediaplayer.api.MediaSource source) {
+    public static void register(com.lia.mediaplayer.api.MediaSource source) {
         if (source != null) {
             REGISTERED.add(source);
         }
@@ -51,9 +51,7 @@ public final class MediaSources {
 
     /** The first source that recognizes {@code url}, if any. */
     public static Optional<com.lia.mediaplayer.api.MediaSource> find(String url) {
-        // Snapshot the list for thread safety (new entries are only appended).
-        List<com.lia.mediaplayer.api.MediaSource> snapshot = new ArrayList<>(REGISTERED);
-        for (com.lia.mediaplayer.api.MediaSource source : snapshot) {
+        for (com.lia.mediaplayer.api.MediaSource source : REGISTERED) {
             if (source.matches(url)) {
                 return Optional.of(source);
             }

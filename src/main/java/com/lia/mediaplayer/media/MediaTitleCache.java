@@ -173,7 +173,7 @@ public final class MediaTitleCache {
                     return clamp(name);
                 }
             }
-        } catch (IllegalArgumentException ignored) {
+        } catch (Exception ignored) {
             // fall through
         }
         return null;
