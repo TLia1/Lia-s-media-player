@@ -21,7 +21,7 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->`1.2.6`<!-- /mod_version -->
+- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->`1.3.0`<!-- /mod_version -->
 - **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
 - **API mod id:** `liasmediaplayerapi` — ships in the same JAR. The API is licensed under the **MIT License**; other mods can freely depend on the API to register custom media sources, control playback, and receive events.
@@ -118,7 +118,7 @@ listen for `MediaSourceRegistrationEvent`. See
 
 Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md`, `API-DOCUMENTATION.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
-`<!-- mod_version -->1.2.6<!-- /mod_version -->`). **Never edit these values by
+`<!-- mod_version -->1.3.0<!-- /mod_version -->`). **Never edit these values by
 hand** — update `gradle.properties` and run:
 
 ```

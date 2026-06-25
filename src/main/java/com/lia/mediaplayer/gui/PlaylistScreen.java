@@ -114,12 +114,16 @@ public final class PlaylistScreen extends Screen {
         clearWidgets();
 
         // Left: create a new playlist.
-        newNameBox = new EditBox(font, leftX(), height - 58, leftW() - 24, 18, Component.translatable("gui.liasmediaplayer.playlists.new"));
+        newNameBox = new EditBox(font, leftX(), height - 58, leftW() - 50, 18, Component.translatable("gui.liasmediaplayer.playlists.new"));
         newNameBox.setMaxLength(64);
         newNameBox.setHint(Component.translatable("gui.liasmediaplayer.playlists.new_name"));
         addRenderableWidget(newNameBox);
         addRenderableWidget(Button.builder(Component.literal("+"), b -> createPlaylist())
-                .bounds(leftX() + leftW() - 20, height - 58, 20, 18).build());
+                .bounds(leftX() + leftW() - 46, height - 58, 20, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.import"), b -> importClipboard())
+                .bounds(leftX() + leftW() - 22, height - 58, 22, 18)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.import")))
+                .build());
 
         // Bottom: close.
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"), b -> onClose())
@@ -143,7 +147,7 @@ public final class PlaylistScreen extends Screen {
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.add"), b -> addEntry())
                     .bounds(rx + rw - 56, height - 82, 56, 18).build());
 
-            int bw = (rw - 8) / 3;
+            int bw = (rw - 12) / 4;
             int by = height - 58;
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.play"),
                             b -> play(false))
@@ -151,9 +155,14 @@ public final class PlaylistScreen extends Screen {
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.shuffle"),
                             b -> play(true))
                     .bounds(rx + bw + 4, by, bw, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.export"),
+                            b -> exportClipboard())
+                    .bounds(rx + (bw + 4) * 2, by, bw, 20)
+                    .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.export")))
+                    .build());
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.delete"),
                             b -> deleteSelected())
-                    .bounds(rx + (bw + 4) * 2, by, rw - (bw + 4) * 2, 20).build());
+                    .bounds(rx + (bw + 4) * 3, by, rw - (bw + 4) * 3, 20).build());
         } else {
             nameBox = null;
             addBox = null;
@@ -207,6 +216,33 @@ public final class PlaylistScreen extends Screen {
             PlaylistStore.delete(selected);
             selected = null;
             rebuild();
+        }
+    }
+
+    private void exportClipboard() {
+        if (selected != null && !selected.isEmpty()) {
+            String out = String.join("\n", selected.urls());
+            minecraft.keyboardHandler.setClipboard(out);
+        }
+    }
+
+    private void importClipboard() {
+        String in = minecraft.keyboardHandler.getClipboard();
+        if (in != null && !in.isBlank()) {
+            Playlist pl = PlaylistStore.create(Component.translatable("gui.liasmediaplayer.playlists.imported").getString());
+            for (String line : in.split("\n")) {
+                String url = line.strip();
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    pl.add(url);
+                }
+            }
+            if (pl.isEmpty()) {
+                PlaylistStore.delete(pl);
+            } else {
+                PlaylistStore.save();
+                selected = pl;
+                rebuild();
+            }
         }
     }
 
@@ -276,13 +312,23 @@ public final class PlaylistScreen extends Screen {
             int rowY = top + i * ROW_EN;
             String url = urls.get(index);
             int removeX = x + w - ROW_EN;
+            int downX = removeX - 16;
+            int upX = downX - 16;
+
+            boolean overUp = MediaWindow.inRect(mouseX, mouseY, upX, rowY, ROW_EN, ROW_EN - 1);
+            boolean overDown = MediaWindow.inRect(mouseX, mouseY, downX, rowY, ROW_EN, ROW_EN - 1);
             boolean overRemove = MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1);
             boolean overRow = MediaWindow.inRect(mouseX, mouseY, x, rowY, w, ROW_EN - 1);
-            g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1, (overRow && !overRemove) ? ROW_HOVER_BG : ROW_BG);
+            g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1, (overRow && !overRemove && !overDown && !overUp) ? ROW_HOVER_BG : ROW_BG);
 
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
-            g.drawString(font, Component.literal(Glyphs.fit(font, label, w - ROW_EN - 8)),
+            g.drawString(font, Component.literal(Glyphs.fit(font, label, w - (ROW_EN * 3) - 8)),
                     x + 4, rowY + 4, TEXT);
+            
+            boolean canUp = index > 0;
+            boolean canDown = index < urls.size() - 1;
+            Glyphs.arrow(g, upX + 2, rowY + 2, true, canUp ? (overUp ? TEXT : SUBTLE) : 0xFF555555);
+            Glyphs.arrow(g, downX + 2, rowY + 2, false, canDown ? (overDown ? TEXT : SUBTLE) : 0xFF555555);
             g.drawString(font, Component.literal("x"), removeX + 5, rowY + 4, overRemove ? 0xFFFF6B6B : SUBTLE);
         }
     }
@@ -328,11 +374,28 @@ public final class PlaylistScreen extends Screen {
                 }
                 int rowY = entriesTop() + i * ROW_EN;
                 int removeX = rightX() + rightW() - ROW_EN;
+                int downX = removeX - 16;
+                int upX = downX - 16;
+
                 if (MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1)) {
                     selected.removeAt(index);
                     PlaylistStore.save();
                     rebuild();
                     return true;
+                } else if (MediaWindow.inRect(mouseX, mouseY, downX, rowY, ROW_EN, ROW_EN - 1)) {
+                    if (index < urls.size() - 1) {
+                        selected.swap(index, index + 1);
+                        PlaylistStore.save();
+                        rebuild();
+                        return true;
+                    }
+                } else if (MediaWindow.inRect(mouseX, mouseY, upX, rowY, ROW_EN, ROW_EN - 1)) {
+                    if (index > 0) {
+                        selected.swap(index, index - 1);
+                        PlaylistStore.save();
+                        rebuild();
+                        return true;
+                    }
                 }
             }
         }

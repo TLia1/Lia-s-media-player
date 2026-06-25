@@ -32,13 +32,25 @@ public final class KeybindHandler {
             }
         }
         while (ModKeybinds.PLAY_PAUSE.consumeClick()) {
-            AudioPlayerManager.togglePauseFrontMost();
+            if (AudioPlayerManager.hasFrontMost()) {
+                AudioPlayerManager.togglePauseFrontMost();
+            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
+                com.lia.mediaplayer.gui.VideoPlayerManager.togglePauseFrontMost();
+            }
         }
         while (ModKeybinds.NEXT.consumeClick()) {
-            AudioPlayerManager.nextFrontMost();
+            if (AudioPlayerManager.hasFrontMost()) {
+                AudioPlayerManager.nextFrontMost();
+            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
+                com.lia.mediaplayer.gui.VideoPlayerManager.nextFrontMost();
+            }
         }
         while (ModKeybinds.PREVIOUS.consumeClick()) {
-            AudioPlayerManager.previousFrontMost();
+            if (AudioPlayerManager.hasFrontMost()) {
+                AudioPlayerManager.previousFrontMost();
+            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
+                com.lia.mediaplayer.gui.VideoPlayerManager.previousFrontMost();
+            }
         }
     }
 }

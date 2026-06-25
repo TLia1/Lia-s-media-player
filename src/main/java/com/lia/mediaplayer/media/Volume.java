@@ -5,6 +5,10 @@ import net.minecraft.sounds.SoundSource;
 
 import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.SourceDataLine;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * The single, shared playback volume used by <em>every</em> media player — the
@@ -47,6 +51,7 @@ public final class Volume {
     /** Sets the level, clamped to 0..1. */
     public static void set(float value) {
         level = Math.max(0.0f, Math.min(1.0f, value));
+        save();
     }
 
     public static void change(float delta) {
@@ -104,6 +109,32 @@ public final class Volume {
         } catch (Exception ignored) {
             // Volume control is best-effort.
             return lastApplied;
+        }
+    }
+
+    private static Path getConfigPath() {
+        return Paths.get(Minecraft.getInstance().gameDirectory.getAbsolutePath(), "config", "liasmediaplayer_volume.txt");
+    }
+
+    public static void load() {
+        try {
+            Path path = getConfigPath();
+            if (Files.exists(path)) {
+                String str = Files.readString(path).strip();
+                level = Math.max(0.0f, Math.min(1.0f, Float.parseFloat(str)));
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    private static void save() {
+        try {
+            Path path = getConfigPath();
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, String.valueOf(level));
+        } catch (Exception e) {
+            // ignore
         }
     }
 }

@@ -26,5 +26,14 @@
   "gui.liasmediaplayer.playlists.count": "Playlists (%s)",
   "gui.liasmediaplayer.video.playback_failed": "Échec de la lecture",
   "gui.liasmediaplayer.video.loading": "Chargement de la vidéo...",
-  "gui.liasmediaplayer.video.buffering": "Mise en mémoire tampon..."
+  "gui.liasmediaplayer.video.buffering": "Mise en mémoire tampon...",
+  "gui.liasmediaplayer.tooltip.video": "Cliquez pour ouvrir la vidéo ou l'ajouter a la queue\nAlt-Cliquez pour lire l'audio uniquement\nShift-Cliquez pour ouvrir la video dans une nouvelle fenêtre sans l'ajouter a la queue",
+  "gui.liasmediaplayer.tooltip.audio": "Cliquez pour lire l'audio\nShift-Cliquez pour ouvrir l'audio dans une nouvelle fenêtre sans l'ajouter a la queue",
+  "gui.liasmediaplayer.playlists.button.import": "In",
+  "gui.liasmediaplayer.playlists.tooltip.import": "Importer depuis le presse-papiers",
+  "gui.liasmediaplayer.playlists.button.export": "Out",
+  "gui.liasmediaplayer.playlists.tooltip.export": "Exporter vers le presse-papiers",
+  "gui.liasmediaplayer.playlists.imported": "Playlist importée",
+  "gui.liasmediaplayer.toast.title": "Lia's Media Player",
+  "gui.liasmediaplayer.toast.downloaded": "Outils médias téléchargés !"
 }

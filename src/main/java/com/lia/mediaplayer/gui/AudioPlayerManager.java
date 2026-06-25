@@ -84,6 +84,10 @@ public final class AudioPlayerManager {
         return WINDOWS.stream().max(Comparator.comparingLong(AudioWindow::zOrder)).orElse(null);
     }
 
+    public static boolean hasFrontMost() {
+        return frontMost() != null;
+    }
+
     static List<AudioWindow> windows() {
         return new ArrayList<>(WINDOWS);
     }

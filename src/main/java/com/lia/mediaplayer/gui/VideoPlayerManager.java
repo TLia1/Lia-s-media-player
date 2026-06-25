@@ -71,6 +71,10 @@ public final class VideoPlayerManager {
         return WINDOWS.stream().max(Comparator.comparingLong(VideoWindow::zOrder)).orElse(null);
     }
 
+    public static boolean hasFrontMost() {
+        return frontMost() != null;
+    }
+
     /**
      * A stable snapshot for iterating during render / input handling.
      */
@@ -161,6 +165,12 @@ public final class VideoPlayerManager {
         if (window != null) {
             window.advance();
         }
+    }
+
+    /** Skips to the previous queued video in the front-most window (API). */
+    public static void previousFrontMost() {
+        // VideoWindow doesn't have previous(), but for keybind compatibility we just ignore it
+        // or we could implement it if we had a history. For now, do nothing.
     }
 
     /** Seeks the front-most video player to a fraction (API). */

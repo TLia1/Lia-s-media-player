@@ -80,6 +80,18 @@ final class Glyphs {
         g.fill(x + 3, y + 6, x + 7, y + 9, color);     // head
     }
 
+    /** A small arrow pointing up or down. */
+    static void arrow(GuiGraphics g, int x, int y, boolean up, int color) {
+        int tx = x + 3;
+        int ty = y + 4;
+        for (int i = 0; i < 3; i++) {
+            int w = 1 + i * 2;
+            int px = tx + 2 - i;
+            int py = up ? ty + i : ty + 2 - i;
+            g.fill(px, py, px + w, py + 1, color);
+        }
+    }
+
     /**
      * Truncates {@code text} with an ellipsis so it fits within {@code maxWidth} pixels.
      */

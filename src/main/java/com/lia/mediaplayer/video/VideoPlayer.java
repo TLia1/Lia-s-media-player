@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
@@ -18,6 +19,7 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.SourceDataLine;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +91,23 @@ public final class VideoPlayer {
      * position on resume (the proven seek path) instead of un-pausing in place.
      */
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
-    private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
+    private static final Logger LOGGER = com.lia.mediaplayer.LiasMediaPlayer.LOGGER;
+    private static final AtomicInteger TEXTURE_ID = new AtomicInteger(0);
+    private static final long NATIVE_IMAGE_PIXELS_OFFSET;
+    private static final sun.misc.Unsafe UNSAFE;
+
+    static {
+        try {
+            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            UNSAFE = (sun.misc.Unsafe) f.get(null);
+            NATIVE_IMAGE_PIXELS_OFFSET = UNSAFE.objectFieldOffset(
+                NativeImage.class.getDeclaredField("pixels")
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize Unsafe for VideoPlayer", e);
+        }
+    }
 
     public enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
 
@@ -438,15 +456,14 @@ public final class VideoPlayer {
             mc.getTextureManager().register(textureLocation, texture);
         }
 
-        int[] abgr = frame.abgr();
-        int width = frame.width();
-        int height = frame.height();
-        for (int y = 0; y < height; y++) {
-            int row = y * width;
-            for (int x = 0; x < width; x++) {
-                nativeImage.setPixelRGBA(x, y, abgr[row + x]);
-            }
-        }
+        byte[] rgba = frame.rgba();
+        long pixelsPtr = UNSAFE.getLong(nativeImage, NATIVE_IMAGE_PIXELS_OFFSET);
+        UNSAFE.copyMemory(
+            rgba, UNSAFE.arrayBaseOffset(byte[].class),
+            null, pixelsPtr,
+            rgba.length
+        );
+
         if (texture != null) {
             texture.upload();
         }
@@ -542,20 +559,7 @@ public final class VideoPlayer {
         }
         long ts = sessionBaseMicros + frameIndex * frameDurationMicros;
         frameIndex++;
-        return new VideoFrame(ts, videoWidth, videoHeight, toAbgr(buffer, videoWidth, videoHeight));
-    }
-
-    /** Converts a packed {@code rgba} frame to the {@code abgr} ints NativeImage expects. */
-    private static int[] toAbgr(byte[] rgba, int width, int height) {
-        int[] abgr = new int[width * height];
-        for (int i = 0, p = 0; i < abgr.length; i++, p += 4) {
-            int r = rgba[p] & 0xFF;
-            int g = rgba[p + 1] & 0xFF;
-            int b = rgba[p + 2] & 0xFF;
-            int a = rgba[p + 3] & 0xFF;
-            abgr[i] = (a << 24) | (b << 16) | (g << 8) | r;
-        }
-        return abgr;
+        return new VideoFrame(ts, videoWidth, videoHeight, buffer.clone());
     }
 
     /**
@@ -790,6 +794,6 @@ public final class VideoPlayer {
 
 
     /** A single decoded, display-ready frame in {@code abgr} layout. */
-    private record VideoFrame(long tsMicros, int width, int height, int[] abgr) {
+    private record VideoFrame(long tsMicros, int width, int height, byte[] rgba) {
     }
 }

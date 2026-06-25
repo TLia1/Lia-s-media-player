@@ -259,8 +259,15 @@ public final class MediaWindowOverlay {
             MediaKind kind = MediaSources.kindOf(url);
             if (kind == MediaKind.VIDEO) {
                 // Default: queue the link into the current player. Shift-click opens a
-                // separate, independent window instead.
-                if (Screen.hasShiftDown()) {
+                // separate, independent window instead. Alt-click forces it to play as
+                // audio only.
+                if (Screen.hasAltDown()) {
+                    if (Screen.hasShiftDown()) {
+                        AudioPlayerManager.open(url).bringToFront();
+                    } else {
+                        AudioPlayerManager.enqueue(url);
+                    }
+                } else if (Screen.hasShiftDown()) {
                     VideoPlayerManager.open(url).bringToFront();
                 } else {
                     VideoPlayerManager.enqueue(url);

@@ -52,4 +52,13 @@ public final class Playlist {
             list.remove(index);
         }
     }
+
+    public void swap(int indexA, int indexB) {
+        List<String> list = urls();
+        if (indexA >= 0 && indexA < list.size() && indexB >= 0 && indexB < list.size()) {
+            String temp = list.get(indexA);
+            list.set(indexA, list.get(indexB));
+            list.set(indexB, temp);
+        }
+    }
 }

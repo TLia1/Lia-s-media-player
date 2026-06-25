@@ -32,6 +32,9 @@ public class LiasMediaPlayer {
         // Install yt-dlp and ffmpeg in the background so they are ready when needed.
         MediaBinaries.installAllAsync();
 
+        // Load persisted volume.
+        com.lia.mediaplayer.media.Volume.load();
+
         // Fire the source registration event during client setup so addons can
         // register their custom MediaSources.
         modEventBus.addListener(this::onClientSetup);

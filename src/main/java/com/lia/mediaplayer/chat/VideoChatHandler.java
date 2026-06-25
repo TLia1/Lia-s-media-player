@@ -10,6 +10,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.HoverEvent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -46,6 +47,7 @@ public final class VideoChatHandler {
             return inherited
                     .withColor(ChatFormatting.AQUA)
                     .withUnderlined(true)
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("gui.liasmediaplayer.tooltip.video")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url));
         }
     };

@@ -168,6 +168,17 @@ public final class MediaBinaries {
             LiasMediaPlayer.LOGGER.info("Media tools ready: yt-dlp={}, ffmpeg={}",
                     ytDlp != null ? ytDlp : "MISSING",
                     ffmpeg != null ? ffmpeg : "MISSING");
+            
+            if (ytDlp != null && ffmpeg != null) {
+                net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                    net.minecraft.client.gui.components.toasts.SystemToast.add(
+                        net.minecraft.client.Minecraft.getInstance().getToasts(),
+                        net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                        net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
+                        net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.downloaded")
+                    );
+                });
+            }
         }, "liasmediaplayer-binary-installer");
         thread.setDaemon(true);
         thread.start();

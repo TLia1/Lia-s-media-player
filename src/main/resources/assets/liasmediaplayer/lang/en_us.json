@@ -26,5 +26,14 @@
   "gui.liasmediaplayer.playlists.count": "Playlists (%s)",
   "gui.liasmediaplayer.video.playback_failed": "Playback failed",
   "gui.liasmediaplayer.video.loading": "Loading video...",
-  "gui.liasmediaplayer.video.buffering": "Buffering..."
+  "gui.liasmediaplayer.video.buffering": "Buffering...",
+  "gui.liasmediaplayer.tooltip.video": "Click to open video or adding it to the queue\nAlt-Click to play audio only\nShift-Click to open the video in another window without adding it to the queue",
+  "gui.liasmediaplayer.tooltip.audio": "Click to play audio\nShift-Click to open the audio in another window without adding it to the queue",
+  "gui.liasmediaplayer.playlists.button.import": "In",
+  "gui.liasmediaplayer.playlists.tooltip.import": "Import from clipboard",
+  "gui.liasmediaplayer.playlists.button.export": "Out",
+  "gui.liasmediaplayer.playlists.tooltip.export": "Export to clipboard",
+  "gui.liasmediaplayer.playlists.imported": "Imported Playlist",
+  "gui.liasmediaplayer.toast.title": "Lia's Media Player",
+  "gui.liasmediaplayer.toast.downloaded": "Media tools downloaded!"
 }

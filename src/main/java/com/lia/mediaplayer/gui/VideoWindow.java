@@ -569,8 +569,8 @@ final class VideoWindow extends MediaWindow {
         boolean overUp = inRect(mouseX, mouseY, upX, btnY, BUTTON, BUTTON);
         boolean overDown = inRect(mouseX, mouseY, downBtnX(), btnY, BUTTON, BUTTON);
         boolean overRemove = inRect(mouseX, mouseY, removeBtnX(), btnY, BUTTON, BUTTON);
-        drawArrow(g, upX, btnY, true, canUp ? (overUp ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
-        drawArrow(g, downBtnX(), btnY, false, canDown ? (overDown ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
+        Glyphs.arrow(g, upX, btnY, true, canUp ? (overUp ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
+        Glyphs.arrow(g, downBtnX(), btnY, false, canDown ? (overDown ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
         g.drawString(font, Component.literal("x"), removeBtnX() + 3, btnY + 2,
                 overRemove ? 0xFFFF6B6B : BTN_COLOR);
     }
@@ -592,15 +592,6 @@ final class VideoWindow extends MediaWindow {
             String dots = thumb.state == VideoThumbnailCache.State.FAILED ? "?" : "...";
             g.drawString(font, Component.literal(dots),
                     tx + (THUMB_W - font.width(dots)) / 2, ty + (THUMB_H - font.lineHeight) / 2, 0xFF888888);
-        }
-    }
-
-    /** Up/down triangle inside an 11px button box. */
-    private void drawArrow(GuiGraphics g, int x, int y, boolean up, int color) {
-        for (int i = 0; i < 4; i++) {
-            int row = up ? i : 3 - i;
-            int half = i;
-            g.fill(x + 5 - half, y + 3 + row, x + 6 + half, y + 4 + row, color);
         }
     }
 

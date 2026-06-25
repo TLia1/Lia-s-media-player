@@ -38,6 +38,8 @@ Previews and pinned windows are automatically scaled down to fit comfortably on 
 ## Videos
 
 Click a video label and the mod opens a real, working video player *inside Minecraft* — with sound.
+Hovering over a video label provides a handy tooltip reminder of your options.
+* **Alt-Click a video link** to play it as audio-only in the compact audio bar.
 
 **What it can play:**
 
@@ -55,6 +57,12 @@ Click a video label and the mod opens a real, working video player *inside Minec
 
 **A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the current player's queue. When one finishes (or you press next), the window automatically swaps to the next video in place. The queue panel shows each entry's thumbnail and its real video name (the actual YouTube title, or the file name), so you can tell what's coming up at a glance.
 
+**In-Game Playlists GUI** (`/liasmediaplayer playlists`)
+  - Create, manage, and rename multiple personal playlists.
+  - Reorder tracks effortlessly (click the up/down arrows or use the swap buttons next to tracks).
+  - One-click shuffle play.
+  - Import playlists directly from your clipboard (lines of URLs) and export playlists to your clipboard for easy sharing.
+
 **Keeps playing in the background.** Hide a player, and it keeps running — audio and all — so you can listen while you play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay drawn on your HUD so a clip keeps showing during normal gameplay.
 
 **Everything just works.** Video playback relies on two small helper tools: `ffmpeg` (to decode video and sound) and `yt-dlp` (to play YouTube links). If you don't already have them, the mod quietly downloads the official copies into its own folder when the game starts — so you don't have to set anything up. If you *do* have them installed, the mod finds them automatically in the usual places.
@@ -63,7 +71,7 @@ Click a video label and the mod opens a real, working video player *inside Minec
 
 ## Audio
 
-Click an **[audio]** label and the mod opens a small **audio bar** — just the track name and a row of controls — so you can listen without a big window in the way.
+Click an **[audio]** label and the mod opens a small **audio bar** — just the track name and a row of controls — so you can listen without a big window in the way. Hovering over an audio label will provide a tooltip reminder to click it.
 
 **What it can play:**
 
@@ -87,7 +95,7 @@ Open the **Playlists** button in the top-left of your chat (or bind a key for it
 
 - **Create** a playlist and give it a name.
 - **Add** tracks by pasting a link — a direct audio file *or* a YouTube video (only the sound is played).
-- **Rename**, **remove tracks**, or **delete** a playlist.
+- **Rename**, **reorder tracks** (with the up/down arrows), **remove tracks**, or **delete** a playlist.
 - **Play** it in order, or **Shuffle** it for a random order.
 
 Your playlists are **saved to disk**, so they're still there next time you play.
@@ -96,9 +104,9 @@ Your playlists are **saved to disk**, so they're still there next time you play.
 
 ## Keybinds
 
-The mod adds keys you can set in **Options → Controls → "Lia's Media Player"** to drive the audio player without opening chat:
+The mod adds keys you can set in **Options → Controls → "Lia's Media Player"** to drive the players without opening chat:
 
-- **Play / Pause**, **Next track** and **Previous track** (they act on your active audio bar)
+- **Play / Pause**, **Next track** and **Previous track**: these apply to the active audio track, or if none is playing, the active video player.
 - **Open playlists**
 
 They're **unbound by default** so they never clash with your existing keys — just assign whatever you like.
