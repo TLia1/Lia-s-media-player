@@ -40,9 +40,10 @@ other players see, and it is **not required by anyone else** on the server.
 ## Installing (for players)
 
 1. Install NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version -->.
-2. Drop the mod jar (from `build/libs/`, or a release) into your client's `mods/`
+2. Get the mod from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/lias-media-player) or [Modrinth](https://modrinth.com/mod/lias-media-player)
+3. Drop the mod jar into your client's `mods/`
    folder. Do **not** put it on a server — it is client-only and does nothing there.
-3. Launch the game. The first time you play a video, the mod quietly downloads
+4. Launch the game. The first time you play a video, the mod quietly downloads
    `ffmpeg`/`ffprobe` (and, for YouTube, `yt-dlp`) into
    `<gamedir>/liasmediaplayer/bin/`. Everything else works immediately.
 
