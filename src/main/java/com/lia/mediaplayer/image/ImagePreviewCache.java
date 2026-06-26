@@ -39,9 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * happen on a background IO pool and are published back on the main thread.</p>
  */
 public final class ImagePreviewCache {
-    /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */
-    private static final int MAX_ENTRIES = 100;
+    /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */private static final int MAX_ENTRIES = 30;
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+    private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024; // 256 MB
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
     private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
@@ -210,13 +210,31 @@ public final class ImagePreviewCache {
             entry.animationStartMs = 0L;
             entry.width = images[0].getWidth();
             entry.height = images[0].getHeight();
+            entry.estimatedSizeBytes = (long) entry.width * entry.height * 4 * images.length;
             entry.state = State.LOADED;
             LiasMediaPlayer.LOGGER.info("Loaded image preview {}x{} ({} frame(s)) from {}",
                     entry.width, entry.height, images.length, url);
+            enforceCacheSizeLimit();
         } catch (Exception e) {
             entry.state = State.FAILED;
             closeFrames(decoded);
             LiasMediaPlayer.LOGGER.warn("Failed to create preview texture for {}", url, e);
+        }
+    }
+
+    private static void enforceCacheSizeLimit() {
+        long currentSize = 0;
+        for (Entry e : CACHE.values()) {
+            currentSize += e.estimatedSizeBytes;
+        }
+
+        var iterator = CACHE.entrySet().iterator();
+        while (iterator.hasNext() && currentSize > MAX_CACHE_BYTES) {
+            Map.Entry<String, Entry> eldest = iterator.next();
+            Entry e = eldest.getValue();
+            currentSize -= e.estimatedSizeBytes;
+            e.releaseTexture();
+            iterator.remove();
         }
     }
 
@@ -247,6 +265,7 @@ public final class ImagePreviewCache {
         long animationStartMs;
         public int width;
         public int height;
+        public long estimatedSizeBytes;
 
         /**
          * The texture to draw right now. For a static image this is always the
@@ -287,6 +306,7 @@ public final class ImagePreviewCache {
             frameDelaysMs = null;
             totalDurationMs = 0;
             animationStartMs = 0L;
+            estimatedSizeBytes = 0L;
             state = State.IDLE;
         }
     }
