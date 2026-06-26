@@ -20,6 +20,9 @@ import javax.sound.sampled.SourceDataLine;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -94,6 +97,7 @@ public final class VideoPlayer {
     private static final Logger LOGGER = com.lia.mediaplayer.LiasMediaPlayer.LOGGER;
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger(0);
     private static final long NATIVE_IMAGE_PIXELS_OFFSET;
+    private static final long BUFFER_ADDRESS_OFFSET;
     private static final sun.misc.Unsafe UNSAFE;
 
     static {
@@ -103,6 +107,9 @@ public final class VideoPlayer {
             UNSAFE = (sun.misc.Unsafe) f.get(null);
             NATIVE_IMAGE_PIXELS_OFFSET = UNSAFE.objectFieldOffset(
                 NativeImage.class.getDeclaredField("pixels")
+            );
+            BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(
+                java.nio.Buffer.class.getDeclaredField("address")
             );
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize Unsafe for VideoPlayer", e);
@@ -115,6 +122,7 @@ public final class VideoPlayer {
 
     // --- Decode side (written by decode thread, read by render thread) ------
     private final BlockingQueue<VideoFrame> frameQueue = new ArrayBlockingQueue<>(FRAME_QUEUE_CAPACITY);
+    private final BlockingQueue<ByteBuffer> freeBuffers = new ArrayBlockingQueue<>(FRAME_QUEUE_CAPACITY + 4);
     private volatile Thread decodeThread;
     private volatile boolean running = true;
     private volatile State state = State.LOADING;
@@ -140,6 +148,8 @@ public final class VideoPlayer {
     private volatile Process videoProcess;
     @Nullable
     private volatile InputStream videoIn;
+    @Nullable
+    private volatile ReadableByteChannel videoChannel;
     @Nullable
     private volatile Process audioProcess;
     @Nullable
@@ -281,6 +291,7 @@ public final class VideoPlayer {
         releaseTexture();
         java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
         frameQueue.drainTo(drained);
+        drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
     }
 
     // ------------------------------------------------------------------
@@ -427,9 +438,12 @@ public final class VideoPlayer {
     public ResourceLocation prepareFrame() {
         long position = positionMicros();
 
-        VideoFrame chosen = currentFrame;
+        VideoFrame chosen = null;
         VideoFrame head;
         while ((head = frameQueue.peek()) != null && head.tsMicros() <= position) {
+            if (chosen != null) {
+                freeBuffers.offer(chosen.rgbaBuffer());
+            }
             chosen = frameQueue.poll();
         }
         // If we have not shown anything yet, show the first available frame even
@@ -439,6 +453,9 @@ public final class VideoPlayer {
         }
 
         if (chosen != null && chosen != currentFrame) {
+            if (currentFrame != null) {
+                freeBuffers.offer(currentFrame.rgbaBuffer());
+            }
             currentFrame = chosen;
             uploadFrame(chosen);
         }
@@ -456,12 +473,13 @@ public final class VideoPlayer {
             mc.getTextureManager().register(textureLocation, texture);
         }
 
-        byte[] rgba = frame.rgba();
+        ByteBuffer buffer = frame.rgbaBuffer();
+        long bufferPtr = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET);
         long pixelsPtr = UNSAFE.getLong(nativeImage, NATIVE_IMAGE_PIXELS_OFFSET);
         UNSAFE.copyMemory(
-            rgba, UNSAFE.arrayBaseOffset(byte[].class),
-            null, pixelsPtr,
-            rgba.length
+            bufferPtr,
+            pixelsPtr,
+            buffer.capacity()
         );
 
         if (texture != null) {
@@ -502,6 +520,13 @@ public final class VideoPlayer {
 
             hasAudio = info.hasAudio() && openAudioLine(info);
 
+            // Allocate the off-heap buffer pool
+            freeBuffers.clear();
+            int frameBytes = videoWidth * videoHeight * 4;
+            for (int i = 0; i < FRAME_QUEUE_CAPACITY + 4; i++) {
+                freeBuffers.offer(ByteBuffer.allocateDirect(frameBytes));
+            }
+
             // Launch the first session from the start of the stream.
             startSession(0);
 
@@ -513,8 +538,6 @@ public final class VideoPlayer {
             }
             state = State.PLAYING;
 
-            byte[] frameBytes = new byte[videoWidth * videoHeight * 4];
-
             while (running) {
                 // Honor pause / handle pending seek before reading the next frame.
                 if (!awaitResumeOrSeek()) {
@@ -524,8 +547,12 @@ public final class VideoPlayer {
                     performSeek();
                 }
 
-                VideoFrame decoded = readVideoFrame(frameBytes);
+                VideoFrame decoded = readVideoFrame();
                 if (decoded == null) {
+                    // Check if it returned null due to a seek requested while waiting for buffer
+                    if (seekRequested || !running) {
+                        continue;
+                    }
                     onEndOfStream();
                     continue;
                 }
@@ -544,22 +571,40 @@ public final class VideoPlayer {
     }
 
     /**
-     * Reads exactly one scaled frame from the current video pipe and wraps it as a
-     * timestamped {@link VideoFrame}. Returns {@code null} at end of stream.
+     * Reads exactly one scaled frame from the current video pipe into a direct buffer
+     * and wraps it as a timestamped {@link VideoFrame}. Returns {@code null} at end of stream.
      */
     @Nullable
-    private VideoFrame readVideoFrame(byte[] buffer) throws IOException {
-        InputStream in = videoIn;
-        if (in == null) {
+    private VideoFrame readVideoFrame() throws IOException, InterruptedException {
+        ReadableByteChannel channel = videoChannel;
+        if (channel == null) {
             return null;
         }
-        int read = in.readNBytes(buffer, 0, buffer.length);
-        if (read < buffer.length) {
-            return null; // EOF (or the process was killed for a seek/dispose)
+
+        ByteBuffer buffer = null;
+        while (running && !seekRequested) {
+            buffer = freeBuffers.poll(50, TimeUnit.MILLISECONDS);
+            if (buffer != null) {
+                break;
+            }
         }
+        if (buffer == null) {
+            return null; // disposed or seek requested
+        }
+
+        buffer.clear();
+        while (buffer.hasRemaining()) {
+            int read = channel.read(buffer);
+            if (read < 0) {
+                freeBuffers.offer(buffer);
+                return null; // EOF (or the process was killed for a seek/dispose)
+            }
+        }
+        buffer.flip();
+
         long ts = sessionBaseMicros + frameIndex * frameDurationMicros;
         frameIndex++;
-        return new VideoFrame(ts, videoWidth, videoHeight, buffer.clone());
+        return new VideoFrame(ts, videoWidth, videoHeight, buffer);
     }
 
     /**
@@ -590,6 +635,7 @@ public final class VideoPlayer {
         }
         java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
         frameQueue.drainTo(drained);
+        drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
 
         // Relaunch both processes from the new position. A failure here just leaves
         // us with no video pipe, which the read loop treats as end-of-stream.
@@ -673,6 +719,7 @@ public final class VideoPlayer {
         Process video = FFmpegCli.openVideo(mediaUrl, videoWidth, videoHeight, startSeconds);
         videoProcess = video;
         videoIn = video.getInputStream();
+        videoChannel = Channels.newChannel(videoIn);
 
         SourceDataLine line = audioLine;
         if (hasAudio && line != null) {
@@ -698,6 +745,12 @@ public final class VideoPlayer {
         if (video != null) {
             video.destroyForcibly();
             videoProcess = null;
+        }
+        if (videoChannel != null) {
+            try {
+                videoChannel.close();
+            } catch (IOException ignored) {}
+            videoChannel = null;
         }
         videoIn = null;
         Thread thread = audioThread;
@@ -793,7 +846,7 @@ public final class VideoPlayer {
 
 
 
-    /** A single decoded, display-ready frame in {@code abgr} layout. */
-    private record VideoFrame(long tsMicros, int width, int height, byte[] rgba) {
+    /** A single decoded, display-ready frame backed by off-heap memory. */
+    private record VideoFrame(long tsMicros, int width, int height, ByteBuffer rgbaBuffer) {
     }
 }
