@@ -140,8 +140,6 @@ ffmpeg tooling (YouTube playlist entries play as sound only). Saved playlists pe
 a JSON file in the game folder, and a few configurable keybinds drive the active audio
 player.
 
-A built-in **memory manager** automatically monitors the game's RAM usage and aggressively unloads background videos and old image previews if the game gets close to crashing, keeping the mod stable.
-
 The code is organized into small, single-responsibility packages under
 `com.lia.mediaplayer`: `source` (what a link is — the extension point), `chat`
 (rewriting chat into labels), `gui` (the on-screen windows, overlay and playlist

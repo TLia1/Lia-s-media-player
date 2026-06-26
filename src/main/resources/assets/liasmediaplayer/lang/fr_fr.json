@@ -35,8 +35,5 @@
   "gui.liasmediaplayer.playlists.tooltip.export": "Exporter vers le presse-papiers",
   "gui.liasmediaplayer.playlists.imported": "Playlist importée",
   "gui.liasmediaplayer.toast.title": "Lia's Media Player",
-  "gui.liasmediaplayer.toast.downloaded": "Outils médias téléchargés !",
-  "liasmediaplayer.memory.freed.moderate": "Lia's Media Player : Mémoire libérée pour maintenir les performances",
-  "liasmediaplayer.memory.freed.critical": "Lia's Media Player : Mémoire libérée pour éviter un plantage",
-  "liasmediaplayer.memory.video_closed": "Lia's Media Player : Vidéo en arrière-plan fermée pour économiser la mémoire"
+  "gui.liasmediaplayer.toast.downloaded": "Outils médias téléchargés !"
 }

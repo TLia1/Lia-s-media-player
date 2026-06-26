@@ -242,17 +242,6 @@ disposes pinned windows and clears `ImagePreviewCache`; the video side
 (`VideoChatHandler`) disposes all players and clears `VideoThumbnailCache` /
 `MediaTitleCache`; the audio side (`AudioChatHandler`) disposes all audio bars.
 
-### 4. Memory Management
-
-To prevent the game from running out of RAM due to cached media or paused players, the mod includes a built-in memory manager:
-- `MemoryMonitor`: Periodically checks the JVM's heap usage. If it exceeds 85% (moderate) or 95% (critical), it requests memory release from registered components.
-- `MemoryReleasable`: An interface implemented by caches and player managers. They are registered with a priority (lower means released first):
-  - `ImagePreviewCache` (priority 10): Evicts 50% of the oldest images (at 85%) or the entire cache (at 95%).
-  - `VideoThumbnailCache` (priority 10): Clears all thumbnails.
-  - `VideoPlayerManager` & `AudioPlayerManager` (priority 50): Disposes of background (hidden or paused) players.
-
-When memory is released, a translatable chat message is displayed to inform the user.
-
 ## Images & GIFs
 
 ### Preview cache (`image/ImagePreviewCache`)

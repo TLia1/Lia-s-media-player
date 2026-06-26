@@ -1,8 +1,6 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.api.MemoryReleasable;
-import com.lia.mediaplayer.media.MemoryMonitor;
 import com.lia.mediaplayer.source.TenorSource;
 
 import com.mojang.blaze3d.platform.NativeImage;
@@ -56,36 +54,6 @@ public final class ImagePreviewCache {
             return false;
         }
     };
-
-    static {
-        MemoryMonitor.register(new MemoryReleasable() {
-            @Override
-            public int getReleasePriority() {
-                return 10;
-            }
-
-            @Override
-            public boolean releaseMemory(boolean isCritical) {
-                if (CACHE.isEmpty()) {
-                    return false;
-                }
-                Minecraft.getInstance().execute(() -> {
-                    if (isCritical) {
-                        clear();
-                    } else {
-                        int toRemove = Math.max(1, CACHE.size() / 2);
-                        var iterator = CACHE.entrySet().iterator();
-                        for (int i = 0; i < toRemove && iterator.hasNext(); i++) {
-                            Map.Entry<String, Entry> eldest = iterator.next();
-                            eldest.getValue().releaseTexture();
-                            iterator.remove();
-                        }
-                    }
-                });
-                return true;
-            }
-        });
-    }
 
     private ImagePreviewCache() {
     }

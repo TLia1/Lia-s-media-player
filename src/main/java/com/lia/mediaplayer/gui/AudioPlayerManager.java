@@ -1,10 +1,7 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.api.MemoryReleasable;
-import com.lia.mediaplayer.media.MemoryMonitor;
 import com.lia.mediaplayer.audio.AudioPlayer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -31,39 +28,6 @@ public final class AudioPlayerManager {
     private static final int MAX_WINDOWS = 4;
 
     private static final List<AudioWindow> WINDOWS = new ArrayList<>();
-
-    static {
-        MemoryMonitor.register(new MemoryReleasable() {
-            @Override
-            public int getReleasePriority() {
-                return 50;
-            }
-
-            @Override
-            public boolean releaseMemory(boolean isCritical) {
-                List<AudioWindow> toClose = new ArrayList<>();
-                AudioWindow front = frontMost();
-
-                for (AudioWindow window : WINDOWS) {
-                    if (window == front) continue; // Never close the front-most
-                    
-                    if (!window.isVisible() || window.player().isPaused() || window.player().state() == AudioPlayer.State.ENDED) {
-                        toClose.add(window);
-                    }
-                }
-
-                if (!toClose.isEmpty()) {
-                    Minecraft.getInstance().execute(() -> {
-                        for (AudioWindow window : toClose) {
-                            close(window);
-                        }
-                    });
-                    return true;
-                }
-                return false;
-            }
-        });
-    }
 
     private AudioPlayerManager() {
     }
