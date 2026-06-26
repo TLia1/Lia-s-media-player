@@ -11,7 +11,7 @@ queue); clicking an audio label opens a compact **audio bar** with its own queue
 audio/YouTube links and play them in order or shuffled, and a set of **configurable
 keybinds** drives the active audio player.
 
-- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->`com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.3.0`<!-- /mod_version -->
+- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->`com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.3.1`<!-- /mod_version -->
 - **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a
   server and is not required by anyone else on the server.
@@ -159,7 +159,9 @@ public entry point.
 | `KeybindHandler.java`                                                 | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`.                                                                                                                                                                                                                                                                                    |
 | **`tools/`**                                                          |                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `FFmpegCli.java`                                                      | Thin wrapper around the `ffmpeg`/`ffprobe` binaries. Probes stream metadata (via `ffprobe` JSON, parsed with Gson) and starts ffmpeg processes that pipe raw `rgba` video and `s16le` PCM audio to stdout. A shutdown hook tracks and forcibly kills active processes on game exit to prevent orphaned binaries.                                                                                                                                                                                            |
-| `MediaBinaries.java`                                                  | Locates — and, if missing, downloads — the external `yt-dlp`, `ffmpeg` and `ffprobe` tools. Shared plumbing for finding binaries, fetching the official releases, and unpacking them into the game folder.                                                                                                                                                                                            |
+| `MediaBinaries.java`                                                  | Public facade that orchestrates `BinaryLocator` and `BinaryDownloader`. Exposes the resolved paths for `yt-dlp`, `ffmpeg` and `ffprobe`, caches results, and manages the once-per-session download guard. The only class the rest of the mod imports from `tools/` (besides `FFmpegCli`).                                                                                                             |
+| `BinaryLocator.java`                                                  | Scans for existing installations of each tool: explicit overrides (JVM property / env var), the mod's managed directory, every directory on `PATH`, and common per-OS install locations (winget, scoop, Chocolatey, Homebrew, pip Scripts, …). Probes bare command names as a last resort. Never downloads anything.                                                                                    |
+| `BinaryDownloader.java`                                               | Downloads and installs tools when `BinaryLocator` finds nothing. Handles the two download shapes: a single executable (yt-dlp) and a per-platform archive (ffmpeg bundle). Unpacks `.zip` (JDK) and `.tar.xz` (system `tar`) with zip-slip protection. Uses a shared `HttpClient` and temp-file-then-atomic-move for safe writes.                                                                     |
 
 Resources:
 
@@ -333,7 +335,7 @@ It prefers a single progressive stream that already muxes audio + video. If `yt-
 is missing or times out (25 s), the player fails with a clear message instead of
 hanging. This always runs on a background thread.
 
-### External tools (`tools/MediaBinaries`)
+### External tools (`tools/MediaBinaries`, `BinaryLocator`, `BinaryDownloader`)
 
 FFmpeg is **not embedded** in the jar. Instead, the mod manages three external
 command-line tools the same way: `yt-dlp` (YouTube resolution), and `ffmpeg` +
@@ -341,25 +343,34 @@ command-line tools the same way: `yt-dlp` (YouTube resolution), and `ffmpeg` +
 background daemon thread so the tools are usually ready before the first link is
 clicked.
 
-For each tool, it looks in order for:
+The work is split across three classes with distinct responsibilities:
 
-1. an explicit override — the `-Dliasmediaplayer.<tool>=<path>` JVM argument, or the
-   matching environment variable (`YT_DLP_PATH`/`YTDLP_PATH`, `FFMPEG_PATH`,
-   `FFPROBE_PATH`);
-2. a copy this mod previously downloaded into `<gamedir>/liasmediaplayer/bin/`;
-3. every directory on `PATH`;
-4. common per-OS install locations (winget Links, scoop shims, Chocolatey, pip
-   `Scripts`, Homebrew, `/usr/local/bin`, `~/.local/bin`, …);
-5. the bare command name (trusting the launcher's `PATH`).
+- **`MediaBinaries`** is the public **facade**. It exposes the resolved paths
+  (`ytDlp()`, `ffmpeg()`, `ffprobe()`), manages the per-tool result cache
+  (`ConcurrentHashMap`), and enforces the once-per-session download guard. The rest
+  of the mod only imports this class (and `FFmpegCli`).
+- **`BinaryLocator`** handles **finding existing installations**. For each tool it
+  builds an ordered, de-duplicated list of candidate paths by checking:
+  1. an explicit override — the `-Dliasmediaplayer.<tool>=<path>` JVM argument, or
+     the matching environment variable (`YT_DLP_PATH`/`YTDLP_PATH`, `FFMPEG_PATH`,
+     `FFPROBE_PATH`);
+  2. a copy this mod previously downloaded into `<gamedir>/liasmediaplayer/bin/`;
+  3. every directory on `PATH`;
+  4. common per-OS install locations (winget Links, scoop shims, Chocolatey, pip
+     `Scripts`, Homebrew, `/usr/local/bin`, `~/.local/bin`, …);
+  5. the bare command name (trusting the launcher's `PATH`).
+- **`BinaryDownloader`** handles **downloading and installing** when `BinaryLocator`
+  finds nothing. It supports two download shapes: a single executable (yt-dlp from
+  the project's GitHub releases) and a per-platform archive (ffmpeg from BtbN's
+  builds on Windows/Linux, evermeet.cx single-binary zips on macOS). Archives are
+  unpacked with the JDK's zip support (or the system `tar` for `.tar.xz`), with
+  zip-slip protection. It uses a shared `HttpClient` instance and writes through a
+  temporary file with an atomic move so a failed download never leaves a corrupt
+  binary.
 
-If none of those yield a usable binary, it downloads the official release into
-`<gamedir>/liasmediaplayer/bin/` and uses that — yt-dlp from the project's GitHub
-releases, ffmpeg from BtbN's builds (Windows `.zip` / Linux `.tar.xz`, both holding
-ffmpeg *and* ffprobe), and evermeet.cx single-binary zips on macOS. Archives are
-unpacked with the JDK's zip support (or the system `tar` for `.tar.xz`), with
-zip-slip protection. The download is attempted **at most once per tool per game
-session**; failures are logged with every location that was checked, so the usual
-fix is to add `-Dliasmediaplayer.ffmpeg=...` (etc.) to the launch arguments.
+The download is attempted **at most once per tool per game session**; failures are
+logged with every location that was checked, so the usual fix is to add
+`-Dliasmediaplayer.ffmpeg=...` (etc.) to the launch arguments.
 
 > **Why a GUI launcher needs this.** Minecraft is normally started from a launcher
 > whose environment does not include the directories a user added to their shell
@@ -652,7 +663,9 @@ for what the mod does in-game.
   `DynamicTexture` and OpenGL. `FFmpegCli`/`media.MediaUrlResolver`/`MediaBinaries` calls
   must never run on the render thread (they spawn processes and block).
 - **External tools.** If ffmpeg/yt-dlp download endpoints or archive layouts change,
-  update the URLs and the unpack logic in `MediaBinaries`. If YouTube changes
+  update the URLs in `BinaryDownloader` and the unpack logic in the same class.
+  Locating logic (PATH scanning, per-OS locations) lives in `BinaryLocator`;
+  `MediaBinaries` is the facade that orchestrates both. If YouTube changes
   formats, updating `yt-dlp` is usually enough (delete the copy in
   `liasmediaplayer/bin/` to force a fresh download).
 - **Windows & z-order.** A new on-screen element is a `MediaWindow` subclass in the
