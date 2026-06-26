@@ -38,6 +38,7 @@ public final class YouTubeSource implements com.lia.mediaplayer.api.MediaSource 
      * needs to single out YouTube links for their dedicated resolution paths.
      */
     public static boolean isYouTube(String url) {
+        if (url == null) return false;
         try {
             URI uri = new URI(url);
             String host = uri.getHost();

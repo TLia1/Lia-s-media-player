@@ -24,6 +24,9 @@ public final class ChatLinkRewriter {
     /** Any {@code http(s)} URL; the {@link LinkRewrite} decides which ones it claims. */
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
 
+    /** Punctuation commonly found at the end of a sentence/message that shouldn't be part of the URL. */
+    private static final Pattern TRAILING_PUNCTUATION = Pattern.compile("[.,;:!?)>\\]]+$");
+
     private ChatLinkRewriter() {
     }
 
@@ -65,7 +68,15 @@ public final class ChatLinkRewriter {
             int last = 0;
             Matcher matcher = URL_PATTERN.matcher(text);
             while (matcher.find()) {
-                String url = matcher.group();
+                String rawUrl = matcher.group();
+                Matcher punctMatcher = TRAILING_PUNCTUATION.matcher(rawUrl);
+                int stripLen = 0;
+                if (punctMatcher.find()) {
+                    stripLen = punctMatcher.group().length();
+                }
+                String url = rawUrl.substring(0, rawUrl.length() - stripLen);
+                int matchEnd = matcher.end() - stripLen;
+
                 if (!rule.matches(url)) {
                     continue;
                 }
@@ -74,7 +85,7 @@ public final class ChatLinkRewriter {
                 }
                 rebuilt.append(rule.label(url).copy().setStyle(rule.style(style, url)));
                 rule.onMatch(url);
-                last = matcher.end();
+                last = matchEnd;
                 changed[0] = true;
             }
             if (last < text.length()) {
