@@ -1,6 +1,10 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.MemoryReleasable;
+import com.lia.mediaplayer.media.MemoryMonitor;
 import com.lia.mediaplayer.video.VideoPlayer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -28,6 +32,44 @@ public final class VideoPlayerManager {
     private static final int MAX_WINDOWS = 4;
 
     private static final List<VideoWindow> WINDOWS = new ArrayList<>();
+
+    static {
+        MemoryMonitor.register(new MemoryReleasable() {
+            @Override
+            public int getReleasePriority() {
+                return 50;
+            }
+
+            @Override
+            public boolean releaseMemory(boolean isCritical) {
+                List<VideoWindow> toClose = new ArrayList<>();
+                VideoWindow front = frontMost();
+
+                for (VideoWindow window : WINDOWS) {
+                    if (window == front) continue; // Never close the front-most
+                    
+                    if (!window.isVisible() || window.player().isPaused() || window.player().state() == VideoPlayer.State.ENDED) {
+                        toClose.add(window);
+                    }
+                }
+
+                if (!toClose.isEmpty()) {
+                    Minecraft.getInstance().execute(() -> {
+                        for (VideoWindow window : toClose) {
+                            close(window);
+                        }
+                        if (Minecraft.getInstance().player != null) {
+                            Minecraft.getInstance().player.displayClientMessage(
+                                Component.translatable("liasmediaplayer.memory.video_closed"), false
+                            );
+                        }
+                    });
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
 
     private VideoPlayerManager() {
     }

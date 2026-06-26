@@ -162,6 +162,36 @@ MediaPlayerAPI.createPlaylist("Server Radio");
 MediaPlayerAPI.addToPlaylist("Server Radio", "https://youtube.com/...");
 ```
 
+### 6. Memory Management
+
+You can integrate your own large memory objects (like custom caches) with Lia's Media Player's memory manager. When the game runs low on RAM, the memory manager will ask your components to release memory based on their priority.
+
+```java
+import com.lia.mediaplayer.media.MemoryMonitor;
+import com.lia.mediaplayer.api.MemoryReleasable;
+
+public class MyCustomCache implements MemoryReleasable {
+    public MyCustomCache() {
+        // Register the releasable to receive memory alerts
+        MemoryMonitor.register(this);
+    }
+
+    @Override
+    public int getReleasePriority() {
+        return 20; // Lower values are asked to free memory first
+    }
+
+    @Override
+    public boolean releaseMemory(boolean isCritical) {
+        if (myMap.isEmpty()) return false;
+        
+        myMap.clear();
+        // Return true if resources were actually freed
+        return true; 
+    }
+}
+```
+
 ## Class Reference
 
 | Class                          | Description                                                                                       |
@@ -170,5 +200,6 @@ MediaPlayerAPI.addToPlaylist("Server Radio", "https://youtube.com/...");
 | `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
 | `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
 | `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |
+| `MemoryReleasable`             | Interface to implement to respond to low memory situations and release resources.                 |
 | `MediaSourceRegistrationEvent` | Mod bus event fired during `FMLClientSetupEvent` to collect custom `MediaSource` implementations. |
 | `PlaybackEvent`                | Game bus event fired on transport changes (started, paused, seeked, ended, etc.).                 |

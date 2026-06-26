@@ -1,6 +1,8 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.api.MemoryReleasable;
+import com.lia.mediaplayer.media.MemoryMonitor;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.source.YouTubeSource;
 import com.lia.mediaplayer.image.GifDecoder;
@@ -61,6 +63,24 @@ public final class VideoThumbnailCache {
             return false;
         }
     };
+
+    static {
+        MemoryMonitor.register(new MemoryReleasable() {
+            @Override
+            public int getReleasePriority() {
+                return 10;
+            }
+
+            @Override
+            public boolean releaseMemory(boolean isCritical) {
+                if (CACHE.isEmpty()) {
+                    return false;
+                }
+                Minecraft.getInstance().execute(VideoThumbnailCache::clear);
+                return true;
+            }
+        });
+    }
 
     private VideoThumbnailCache() {
     }

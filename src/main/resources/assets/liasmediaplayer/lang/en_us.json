@@ -35,5 +35,8 @@
   "gui.liasmediaplayer.playlists.tooltip.export": "Export to clipboard",
   "gui.liasmediaplayer.playlists.imported": "Imported Playlist",
   "gui.liasmediaplayer.toast.title": "Lia's Media Player",
-  "gui.liasmediaplayer.toast.downloaded": "Media tools downloaded!"
+  "gui.liasmediaplayer.toast.downloaded": "Media tools downloaded!",
+  "liasmediaplayer.memory.freed.moderate": "Lia's Media Player: Freed memory to maintain performance",
+  "liasmediaplayer.memory.freed.critical": "Lia's Media Player: Freed memory to prevent game crash",
+  "liasmediaplayer.memory.video_closed": "Lia's Media Player: Closed background video to save memory"
 }
