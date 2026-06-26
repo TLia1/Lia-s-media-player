@@ -34,10 +34,6 @@ final class AudioWindow extends MediaWindow {
     /** How many played tracks to remember for the "previous" control. */
     private static final int MAX_HISTORY = 64;
 
-    /** Pop-up volume slider geometry (mirrors VideoWindow). */
-    private static final int VOL_BAR_W = 6;
-    private static final int VOL_BAR_H = 40;
-
     private AudioPlayer player;
     private final PlayQueue queue = new PlayQueue();
     /** Previously-played URLs, most recent last (backs the "previous" button). */
@@ -220,8 +216,8 @@ final class AudioWindow extends MediaWindow {
         volBtnX = nextBtnX + BUTTON + 4;
 
         // The slider pops up vertically above the speaker button.
-        volBarX = volBtnX + (BUTTON - VOL_BAR_W) / 2;
-        volBarY = volBtnY - 4 - VOL_BAR_H;
+        volBarX = volBtnX + (BUTTON - MediaControls.VOL_BAR_W) / 2;
+        volBarY = volBtnY - 4 - MediaControls.VOL_BAR_H;
 
         seekX = volBtnX + BUTTON + 4;
         seekH = 4;
@@ -316,7 +312,7 @@ final class AudioWindow extends MediaWindow {
             player.toggleMute();
             return ClickResult.HANDLED;
         }
-        if (showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6)) {
+        if (showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6)) {
             draggingVolume = true;
             player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
@@ -359,7 +355,7 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected boolean overPopup(double mouseX, double mouseY) {
         return showVolumePopup
-                && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, VOL_BAR_W + 6, VOL_BAR_H + 6);
+                && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6);
     }
 
     /** Plain mouse wheel over the bar changes the volume in 10% steps. */

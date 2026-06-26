@@ -86,7 +86,7 @@ URL — does it `matches(...)`, what `kind()` is it (`IMAGE` or `VIDEO`), and wh
 `MediaSources` is the registry: it holds the ordered list of sources and exposes
 the lookups everyone else uses — `find`, `kindOf`, `isImage`, `isVideo`, `isAudio`,
 `isSupported` and `labelFor`. Because every caller (the chat handlers, the overlay's
-click routing, the labels) goes through these lookups, teaching the mod is one new class plus one line in the registry** — nothing in the chat, GUI or
+click routing, the labels) goes through these lookups, **teaching the mod is one new class plus one line in the registry** — nothing in the chat, GUI or
 playback code changes. The image, video and audio kinds are kept **disjoint** across
 all sources, so a single link is only ever claimed by one feature (a `.gif` is an
 image; a `.mp4` is a video; a `.mp3` is audio — and audio-only siblings like `.weba`/

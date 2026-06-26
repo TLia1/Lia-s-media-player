@@ -33,10 +33,6 @@ final class VideoWindow extends MediaWindow {
     /** Smallest seek bar we keep when computing the minimum window width. */
     private static final int MIN_SEEK_W = 20;
 
-    /** Pop-up volume slider geometry. */
-    private static final int VOL_BAR_W = 6;
-    private static final int VOL_BAR_H = 40;
-
     /** Queue panel geometry. */
     private static final int ROW_H = 30;
     private static final int THUMB_W = 48;
@@ -252,7 +248,7 @@ final class VideoWindow extends MediaWindow {
             buttons += 1;                      // speaker
         }
         int buttonsW = buttons * (BUTTON + 4);
-        int timeW = font.width(timeText());
+        int timeW = font.width(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size()));
         // buttons + minimal seek + gap + time + grip margin (matches layoutControls).
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
         return Math.max(MIN_CONTENT, needed);
@@ -345,8 +341,8 @@ final class VideoWindow extends MediaWindow {
             volBtnY = playBtnY;
             cursor = volBtnX + BUTTON + 4;
             // The slider pops up vertically above the speaker button.
-            volBarX = volBtnX + (BUTTON - VOL_BAR_W) / 2;
-            volBarY = volBtnY - 4 - VOL_BAR_H;
+            volBarX = volBtnX + (BUTTON - MediaControls.VOL_BAR_W) / 2;
+            volBarY = volBtnY - 4 - MediaControls.VOL_BAR_H;
         }
 
         seekX = cursor;
@@ -355,7 +351,7 @@ final class VideoWindow extends MediaWindow {
 
         // Reserve room on the right of the bar for the time read-out and the
         // resize grip in the corner.
-        int timeWidth = font.width(timeText());
+        int timeWidth = font.width(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size()));
         int rightLimit = contentX + contentW - GRIP - 2;
         seekW = Math.max(10, rightLimit - timeWidth - 6 - seekX);
         timeTextX = seekX + seekW + 4;
@@ -731,23 +727,6 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected boolean overExtraRegion(double mouseX, double mouseY) {
         return queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH);
-    }
-
-    private String timeText() {
-        int queued = queue.size();
-        String suffix = queued > 0 ? "  +" + queued : "";
-        long duration = player.durationMicros();
-        if (duration <= 0) {
-            return "LIVE" + suffix;
-        }
-        return format(player.positionMicros()) + " / " + format(duration) + suffix;
-    }
-
-    private static String format(long micros) {
-        long totalSeconds = Math.max(0, micros / 1_000_000L);
-        long minutes = totalSeconds / 60;
-        long seconds = totalSeconds % 60;
-        return String.format("%d:%02d", minutes, seconds);
     }
 
     private static String trim(String s, int max) {

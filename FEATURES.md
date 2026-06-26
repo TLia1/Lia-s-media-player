@@ -122,4 +122,4 @@ They're **unbound by default** so they never clash with your existing keys — j
 
 ---
 
-*Lia's Utils Client is a client-side convenience mod. It only affects how shared image and video links appear in your own chat — it does not modify gameplay, the world, or other players.*
+*Lia's Media Player is a client-side convenience mod. It only affects how shared image, video, and audio links appear in your own chat — it does not modify gameplay, the world, or other players.*

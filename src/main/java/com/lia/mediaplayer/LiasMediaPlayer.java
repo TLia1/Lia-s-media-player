@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 /**
  * Replaces image links with a hoverable
  * [picture] entry that renders an image preview over the chat, and turns
- * video/YouTube links into an in-game player.
+ * video/YouTube and audio links into an in-game player.
  *
  * <p>The player shells out to two external command-line tools — yt-dlp (to
  * resolve YouTube links) and ffmpeg (to decode video/audio). Rather than
