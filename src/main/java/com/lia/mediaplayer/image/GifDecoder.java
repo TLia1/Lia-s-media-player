@@ -34,7 +34,7 @@ import org.w3c.dom.Node;
  */
 public final class GifDecoder {
     /** Hard cap on frames regardless of size, to bound texture handles. */
-    private static final int MAX_FRAMES = 256;
+
     /** Total RGBA pixels kept across every frame (~96 MB of VRAM at 4 bytes). */
     private static final long MAX_TOTAL_PIXELS = 24_000_000L;
     /** GIFs with a 0 (or absent) delay are shown at this rate, like browsers. */
@@ -79,7 +79,7 @@ public final class GifDecoder {
             BufferedImage restorePoint = null;
 
             try {
-                for (int i = 0; i < frameCount && composited.size() < MAX_FRAMES; i++) {
+                for (int i = 0; i < frameCount && composited.size() < com.lia.mediaplayer.config.ConfigStore.MAX_GIF_FRAMES.getValue(); i++) {
                     BufferedImage frame = reader.read(i);
                     FrameMeta meta = readFrameMeta(reader, i);
 

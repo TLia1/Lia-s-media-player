@@ -162,13 +162,43 @@ MediaPlayerAPI.createPlaylist("Server Radio");
 MediaPlayerAPI.addToPlaylist("Server Radio", "https://youtube.com/...");
 ```
 
+### 6. Registering Configuration Options
+
+The API provides a way to register custom configuration options that are automatically saved, loaded, and rendered in the mod's Options menu (`ConfigScreen`).
+
+First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption`:
+
+```java
+import com.lia.mediaplayer.api.config.IntSliderOption;
+import com.lia.mediaplayer.api.MediaPlayerAPI;
+
+IntSliderOption myOption = new IntSliderOption(
+    "myaddon:custom_limit", // Unique ID
+    "My Custom Limit",      // Translation key / display name
+    10,                     // Default value
+    1,                      // Min value
+    100                     // Max value
+);
+
+// Register it
+MediaPlayerAPI.registerConfigOption(myOption);
+```
+
+Once registered, your option will automatically appear in the Options menu. You can access its current value at any time:
+
+```java
+int currentLimit = myOption.getValue();
+```
+
 ## Class Reference
 
 | Class                          | Description                                                                                       |
 |--------------------------------|---------------------------------------------------------------------------------------------------|
-| `MediaPlayerAPI`               | The main static facade for controlling playback, volume, playlists, and registering sources.      |
+| `MediaPlayerAPI`               | The main static facade for controlling playback, volume, playlists, and registering sources/configs.|
 | `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
 | `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
 | `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |
 | `MediaSourceRegistrationEvent` | Mod bus event fired during `FMLClientSetupEvent` to collect custom `MediaSource` implementations. |
 | `PlaybackEvent`                | Game bus event fired on transport changes (started, paused, seeked, ended, etc.).                 |
+| `ConfigOption<T>`              | Base class for an extensible configuration option.                                                |
+| `IntSliderOption`              | A `ConfigOption` implementation for integer values controlled via a slider.                       |

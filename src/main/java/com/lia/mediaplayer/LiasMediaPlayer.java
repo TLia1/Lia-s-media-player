@@ -28,7 +28,9 @@ public class LiasMediaPlayer {
     public static final String MODID = "liasmediaplayer";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public LiasMediaPlayer(IEventBus modEventBus) {
+    public LiasMediaPlayer(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
+        modContainer.registerExtensionPoint(net.neoforged.neoforge.client.gui.IConfigScreenFactory.class, (mc, parent) -> new com.lia.mediaplayer.gui.ConfigScreen(parent));
+
         // Install yt-dlp and ffmpeg in the background so they are ready when needed.
         MediaBinaries.installAllAsync();
 

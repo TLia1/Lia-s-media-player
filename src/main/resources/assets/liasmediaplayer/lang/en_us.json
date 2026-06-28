@@ -35,5 +35,12 @@
   "gui.liasmediaplayer.playlists.tooltip.export": "Export to clipboard",
   "gui.liasmediaplayer.playlists.imported": "Imported Playlist",
   "gui.liasmediaplayer.toast.title": "Lia's Media Player",
-  "gui.liasmediaplayer.toast.downloaded": "Media tools downloaded!"
+  "gui.liasmediaplayer.toast.downloaded": "Media tools downloaded!",
+  "gui.liasmediaplayer.config.title": "Lia's Media Player Options",
+  "config.liasmediaplayer.video_resolution": "Video Resolution",
+  "config.liasmediaplayer.max_pinned_images": "Max Pinned Images",
+  "config.liasmediaplayer.max_video_windows": "Max Video Windows",
+  "config.liasmediaplayer.max_audio_windows": "Max Audio Windows",
+  "config.liasmediaplayer.max_gif_frames": "Max GIF Frames",
+  "config.liasmediaplayer.max_image_cache_entries": "Max Image Cache Entries"
 }

@@ -125,9 +125,11 @@ public final class PlaylistScreen extends Screen {
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.import")))
                 .build());
 
-        // Bottom: close.
+        // Bottom: close and options.
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"), b -> onClose())
-                .bounds(width / 2 - 40, height - 26, 80, 20).build());
+                .bounds(width / 2 - 82, height - 26, 80, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.options"), b -> this.minecraft.setScreen(new com.lia.mediaplayer.gui.ConfigScreen(this)))
+                .bounds(width / 2 + 2, height - 26, 80, 20).build());
 
         if (selected != null) {
             int rx = rightX();

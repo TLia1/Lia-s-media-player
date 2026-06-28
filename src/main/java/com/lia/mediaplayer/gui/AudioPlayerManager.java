@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.audio.AudioPlayer;
-import net.minecraft.client.Minecraft;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -25,7 +24,7 @@ import java.util.List;
  */
 public final class AudioPlayerManager {
     /** Hard cap on simultaneous bars; the oldest is disposed past this. */
-    private static final int MAX_WINDOWS = 4;
+
 
     private static final List<AudioWindow> WINDOWS = new ArrayList<>();
 
@@ -72,7 +71,7 @@ public final class AudioPlayerManager {
         if (shuffle) {
             Collections.shuffle(order);
         }
-        AudioWindow window = open(order.get(0));
+        AudioWindow window = open(order.getFirst());
         if (order.size() > 1) {
             window.enqueueAll(order.subList(1, order.size()));
         }
@@ -161,7 +160,7 @@ public final class AudioPlayerManager {
     }
 
     private static void evictIfFull() {
-        while (WINDOWS.size() >= MAX_WINDOWS) {
+        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_AUDIO_WINDOWS.getValue()) {
             AudioWindow eldest = WINDOWS.removeFirst();
             eldest.disposeAll();
         }

@@ -11,6 +11,8 @@ import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.MediaSources;
+import com.lia.mediaplayer.api.config.ConfigOption;
+import com.lia.mediaplayer.config.ConfigStore;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -55,6 +57,30 @@ public final class MediaPlayerAPI {
      */
     public static void registerSource(MediaSource source) {
         MediaSources.register(source);
+    }
+
+    // ====================================================================
+    // Config Registration
+    // ====================================================================
+
+    /**
+     * Registers a custom configuration option. This option will automatically be
+     * saved/loaded from config.json and presented in the Config screen.
+     *
+     * @param option the config option to register
+     */
+    public static void registerConfigOption(ConfigOption<?> option) {
+        ConfigStore.register(option);
+    }
+
+    /**
+     * Retrieves a registered configuration option by its ID.
+     *
+     * @param id the unique identifier of the option
+     * @return the configuration option, or null if not found
+     */
+    public static <T> ConfigOption<T> getConfigOption(String id) {
+        return ConfigStore.getOption(id);
     }
 
     // ====================================================================

@@ -20,7 +20,7 @@ import java.util.Map;
  */
 public final class ImageWindowManager {
     /** Hard cap on simultaneous pinned images; the oldest is dropped past this. */
-    private static final int MAX_WINDOWS = 6;
+
 
     private static final LinkedHashMap<String, ImageWindow> WINDOWS = new LinkedHashMap<>();
 
@@ -67,7 +67,7 @@ public final class ImageWindowManager {
     }
 
     private static void evictIfFull() {
-        while (WINDOWS.size() >= MAX_WINDOWS) {
+        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_PINNED_IMAGES.getValue()) {
             Iterator<Map.Entry<String, ImageWindow>> it = WINDOWS.entrySet().iterator();
             if (!it.hasNext()) {
                 return;

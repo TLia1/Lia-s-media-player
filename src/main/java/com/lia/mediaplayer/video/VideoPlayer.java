@@ -24,8 +24,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * and audio on background threads, and provides the current frame to the render thread.
  */
 public final class VideoPlayer {
-    private static final int MAX_WIDTH = 854;
-    private static final int MAX_HEIGHT = 480;
     private static final int FRAME_QUEUE_CAPACITY = 64;
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
@@ -260,7 +258,7 @@ public final class VideoPlayer {
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
-            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), MAX_WIDTH, MAX_HEIGHT);
+            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), com.lia.mediaplayer.config.ConfigStore.videoMaxWidth(), com.lia.mediaplayer.config.ConfigStore.videoMaxHeight());
             videoWidth = target[0];
             videoHeight = target[1];
             durationMicros = Math.max(0, info.durationMicros());

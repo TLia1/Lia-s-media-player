@@ -1,8 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.video.VideoPlayer;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -27,7 +25,7 @@ public final class VideoPlayerManager {
     /**
      * Hard cap on simultaneous windows; the oldest is disposed past this.
      */
-    private static final int MAX_WINDOWS = 4;
+
 
     private static final List<VideoWindow> WINDOWS = new ArrayList<>();
 
@@ -133,7 +131,7 @@ public final class VideoPlayerManager {
     }
 
     private static void evictIfFull() {
-        while (WINDOWS.size() >= MAX_WINDOWS) {
+        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_VIDEO_WINDOWS.getValue()) {
             VideoWindow eldest = WINDOWS.removeFirst();
             eldest.disposeAll();
         }

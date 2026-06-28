@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * happen on a background IO pool and are published back on the main thread.</p>
  */
 public final class ImagePreviewCache {
-    /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */private static final int MAX_ENTRIES = 30;
+    /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
     private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024; // 256 MB
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
@@ -47,7 +47,7 @@ public final class ImagePreviewCache {
     private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
-            if (size() > MAX_ENTRIES) {
+            if (size() > com.lia.mediaplayer.config.ConfigStore.MAX_IMAGE_CACHE_ENTRIES.getValue()) {
                 eldest.getValue().releaseTexture();
                 return true;
             }
