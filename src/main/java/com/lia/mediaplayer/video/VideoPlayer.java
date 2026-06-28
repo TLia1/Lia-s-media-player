@@ -5,23 +5,12 @@ import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.tools.FFmpegCli;
 
-import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
 
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.DataLine;
-import javax.sound.sampled.SourceDataLine;
 import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -31,94 +20,24 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * One playing (or paused) video. Owns a pair of background ffmpeg processes (one
- * for video, one for audio) driven through {@link FFmpegCli}, a small queue of
- * decoded frames, an optional audio line, and the {@link DynamicTexture} that the
- * GUI blits.
- *
- * <h2>Decoding model</h2>
- * <p>Instead of the in-process JavaCV grabber, we shell out to the standalone
- * ffmpeg binary that {@link com.lia.mediaplayer.tools.MediaBinaries} manages. ffmpeg writes scaled
- * {@code rgba} frames to one pipe and {@code s16le} PCM to another; we read those
- * pipes on background threads. {@code ffprobe} gives us dimensions, frame rate,
- * duration and audio layout up front.</p>
- *
- * <h2>Threading</h2>
- * <ul>
- *   <li><b>Decode thread</b> — orchestrates the session: launches ffmpeg, reads
- *       video frames in order, timestamps them from the frame index and frame
- *       rate, and pushes them onto {@link #frameQueue}, blocking (back-pressure)
- *       while the queue is full so ffmpeg pre-buffers a jitter cushion ahead of the
- *       clock. Also handles pause and seek. Never touches OpenGL.</li>
- *   <li><b>Audio thread</b> — reads PCM from the audio process and blocking-writes
- *       it to the {@link SourceDataLine} (which paces it to real time).</li>
- *   <li><b>Render/main thread</b> — {@link #prepareFrame()} selects the frame
- *       matching the playback clock and uploads it to the texture.</li>
- * </ul>
- *
- * <h2>Clock</h2>
- * When the video has audio, the audio line's {@code getMicrosecondPosition()} is
- * the master clock (so picture follows sound). Otherwise a wall clock that only
- * advances while playing is used. Video frames are shown once their timestamp is
- * &le; the clock; late frames are skipped.
+ * One playing (or paused) video. Orchestrates playback state, decodes video frames
+ * and audio on background threads, and provides the current frame to the render thread.
  */
 public final class VideoPlayer {
-    /** Output frames are scaled to fit this box (never upscaled) to bound CPU/VRAM. */
     private static final int MAX_WIDTH = 854;
     private static final int MAX_HEIGHT = 480;
-    /**
-     * How many decoded frames to buffer ahead of the playback clock. This is the
-     * jitter cushion that absorbs an uneven/slow connection: the decoder keeps it
-     * full (see {@link #enqueue}) so a brief network stall drains the buffer instead
-     * of freezing the picture. Each frame costs up to {@code MAX_WIDTH*MAX_HEIGHT*4}
-     * bytes, so this also bounds memory — raise it for a deeper cushion at the cost
-     * of RAM, lower it on memory-constrained machines.
-     */
     private static final int FRAME_QUEUE_CAPACITY = 64;
-    /** Audio is never more than stereo: most lines don't accept more, and we don't need it. */
-    private static final int MAX_AUDIO_CHANNELS = 2;
-    /**
-     * Never let a seek land in the very last slice of the stream: ffmpeg can return
-     * EOF there with no decodable frame after the seek point, which freezes the
-     * picture on the old frame and leaves the seek bar stuck. Keep a small margin
-     * before the reported end so there is always something left to play.
-     */
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
-    /**
-     * Past this much wall-clock time paused, we assume the current ffmpeg session
-     * may have gone stale — for network inputs (YouTube/Discord/…) the server can
-     * drop an idle connection, and our paused ffmpeg processes are blocked on a
-     * full output pipe so they aren't reading the socket. Resuming such a session
-     * freezes the picture on a dead pipe (or a dead audio process stalls the audio
-     * clock). When the pause exceeds this, we relaunch the session at the current
-     * position on resume (the proven seek path) instead of un-pausing in place.
-     */
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
-    private static final Logger LOGGER = com.lia.mediaplayer.LiasMediaPlayer.LOGGER;
-    private static final AtomicInteger TEXTURE_ID = new AtomicInteger(0);
-    private static final long NATIVE_IMAGE_PIXELS_OFFSET;
-    private static final long BUFFER_ADDRESS_OFFSET;
-    private static final sun.misc.Unsafe UNSAFE;
-
-    static {
-        try {
-            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            UNSAFE = (sun.misc.Unsafe) f.get(null);
-            NATIVE_IMAGE_PIXELS_OFFSET = UNSAFE.objectFieldOffset(
-                NativeImage.class.getDeclaredField("pixels")
-            );
-            BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(
-                java.nio.Buffer.class.getDeclaredField("address")
-            );
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize Unsafe for VideoPlayer", e);
-        }
-    }
+    private static final AtomicInteger PLAYER_ID = new AtomicInteger(0);
 
     public enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
 
     private final String url;
+    private final VideoRenderer renderer;
+    private final AudioOutput audioOutput;
+    private final PlaybackClock clock;
+    private final FFmpegSession session;
 
     // --- Decode side (written by decode thread, read by render thread) ------
     private final BlockingQueue<VideoFrame> frameQueue = new ArrayBlockingQueue<>(FRAME_QUEUE_CAPACITY);
@@ -138,58 +57,26 @@ public final class VideoPlayer {
     // Resolved (direct) media URL and decode geometry, set once on startup.
     private String mediaUrl;
     private long frameDurationMicros = 33_333L; // ~30fps default until probed
-    private int audioSampleRate;
-    private int audioChannels;
 
-    // --- Current ffmpeg session (swapped on seek) ---------------------------
-    /** Bumped every time the processes are (re)launched, so the audio thread can tell sessions apart. */
+    // --- Current ffmpeg session ---
     private volatile int sessionGen;
-    @Nullable
-    private volatile Process videoProcess;
-    @Nullable
-    private volatile InputStream videoIn;
-    @Nullable
-    private volatile ReadableByteChannel videoChannel;
-    @Nullable
-    private volatile Process audioProcess;
-    @Nullable
-    private volatile Thread audioThread;
-    /** Playback time (micros) the current session started at; video timestamps build on this. */
     private volatile long sessionBaseMicros;
-    /** Video frames read in the current session (decode thread only). */
     private long frameIndex;
 
-    // --- Pause / seek gate (decode thread waits here) -----------------------
+    // --- Pause / seek gate (decode thread waits here) ---
     private final ReentrantLock gate = new ReentrantLock();
     private final Condition gateSignal = gate.newCondition();
     private volatile boolean seekRequested;
     private volatile long seekTargetMicros;
 
-    // --- Clock --------------------------------------------------------------
-    private final Object clockLock = new Object();
-    @Nullable
-    private volatile SourceDataLine audioLine;
-    // Volume is shared by every player (see com.lia.mediaplayer.media.Volume) so the
-    // level stays in sync and carries over when switching to another video/track.
-    private volatile float lastAppliedGain = -1f; // last effective 0..1 pushed to the line
-    private long clockOffsetMicros;   // playback time represented by lineBase / wall baseline
-    private long lineBaseMicros;      // audio line position captured at the last (re)baseline
-    private long wallAccumMicros;     // accumulated time while paused (no-audio clock)
-    private long wallResumeNanos;     // nanoTime when playback last (re)started (no-audio clock)
-    private volatile long pausedAtNanos; // nanoTime when the player was last paused (0 if not paused)
-
-    // --- Render side (main thread only) -------------------------------------
-    @Nullable
-    private ResourceLocation textureLocation;
-    @Nullable
-    private DynamicTexture texture;
-    @Nullable
-    private NativeImage nativeImage;
-    @Nullable
-    private VideoFrame currentFrame;
+    private volatile long pausedAtNanos; // used to detect stale sessions
 
     public VideoPlayer(String url) {
         this.url = url;
+        this.renderer = new VideoRenderer();
+        this.audioOutput = new AudioOutput(url);
+        this.clock = new PlaybackClock();
+        this.session = new FFmpegSession();
     }
 
     public String url() {
@@ -213,12 +100,10 @@ public final class VideoPlayer {
         return state == State.PAUSED;
     }
 
-    /** True once an audio line was successfully opened (i.e. there is sound to control). */
     public boolean hasAudio() {
         return hasAudio;
     }
 
-    /** Current volume in 0..1 (the shared level). */
     public float volume() {
         return Volume.level();
     }
@@ -227,13 +112,9 @@ public final class VideoPlayer {
         return Volume.isMuted();
     }
 
-    /** Sets the (shared) volume (0..1) and applies it to the audio line immediately. */
     public void setVolume(float value) {
         Volume.set(value);
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            applyGain(line);
-        }
+        audioOutput.applyGain();
     }
 
     public void changeVolume(float delta) {
@@ -242,10 +123,7 @@ public final class VideoPlayer {
 
     public void toggleMute() {
         Volume.toggleMute();
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            applyGain(line);
-        }
+        audioOutput.applyGain();
     }
 
     public int videoWidth() {
@@ -256,47 +134,34 @@ public final class VideoPlayer {
         return videoHeight;
     }
 
-    /** Total length in microseconds, or 0 if unknown (some live streams). */
     public long durationMicros() {
         return durationMicros;
     }
 
-    // ------------------------------------------------------------------
-    // Lifecycle
-    // ------------------------------------------------------------------
-
-    /** Starts the background decode thread. Safe to call once. */
     public void start() {
         if (decodeThread != null) {
             return;
         }
-        Thread thread = new Thread(this::decodeLoop, "liasmediaplayer-video-" + TEXTURE_ID.get());
+        Thread thread = new Thread(this::decodeLoop, "liasmediaplayer-video-" + PLAYER_ID.getAndIncrement());
         thread.setDaemon(true);
         decodeThread = thread;
         thread.start();
     }
 
-    /** Stops decoding, frees the audio line and texture. Call on the main thread. */
     public void dispose() {
         running = false;
-        // Wake the decode thread if it is parked on the pause/seek gate.
         signalGate();
-        // Unblock a paused audio thread stuck in line.write, then tear down processes.
-        closeAudioLine();
-        killSession();
+        audioOutput.close();
+        session.kill();
         Thread thread = decodeThread;
         if (thread != null) {
             thread.interrupt();
         }
-        releaseTexture();
+        renderer.releaseTexture();
         java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
         frameQueue.drainTo(drained);
         drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
     }
-
-    // ------------------------------------------------------------------
-    // Playback control (called from the render/main thread)
-    // ------------------------------------------------------------------
 
     public void togglePause() {
         if (state == State.PLAYING) {
@@ -304,7 +169,6 @@ public final class VideoPlayer {
         } else if (state == State.PAUSED) {
             resume();
         } else if (state == State.ENDED) {
-            // Restart from the beginning.
             seekTo(0);
             resume();
         }
@@ -314,58 +178,35 @@ public final class VideoPlayer {
         if (state != State.PLAYING) {
             return;
         }
-        synchronized (clockLock) {
-            // Freeze the no-audio wall clock at the current position.
-            wallAccumMicros = currentPositionMicrosLocked();
-        }
+        clock.pause(hasAudio, audioOutput.getLine());
         pausedAtNanos = System.nanoTime();
         state = State.PAUSED;
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            // Stopping the line stalls the audio thread inside line.write, which in
-            // turn back-pressures the audio ffmpeg process: playback freezes cleanly.
-            line.stop();
-        }
+        audioOutput.stopLine();
     }
 
     public void resume() {
         if (state != State.PAUSED && state != State.ENDED) {
             return;
         }
-        // If we were paused long enough that the ffmpeg session may be stale, don't
-        // try to un-pause the (possibly dead) processes in place — that's what makes
-        // the picture freeze until the user scrubs the seek bar. Instead relaunch a
-        // fresh session at the current position via the seek path, which is known to
-        // recover cleanly.
         long pausedAt = pausedAtNanos;
         boolean stale = state == State.PAUSED
                 && pausedAt != 0
                 && (System.nanoTime() - pausedAt) > STALE_PAUSE_NANOS;
         pausedAtNanos = 0;
 
-        long resumePos;
-        synchronized (clockLock) {
-            resumePos = currentPositionMicrosLocked();
-            wallResumeNanos = System.nanoTime();
-            SourceDataLine line = audioLine;
-            if (line != null) {
-                lineBaseMicros = line.getMicrosecondPosition();
-                clockOffsetMicros = wallAccumMicros;
-                line.start();
-            }
-        }
+        long resumePos = clock.currentPositionMicros(hasAudio, audioOutput.getLine(), false);
+        
+        clock.resume(audioOutput.getLine());
+        audioOutput.startLine();
+        
         state = State.PLAYING;
         if (stale) {
-            // Relaunch the ffmpeg processes (video + audio) from where we paused.
-            // performSeek (on the decode thread) flushes the queue/line and re-baselines
-            // the clock, so playback continues seamlessly from the paused position.
             seekTo(resumePos);
         } else {
             signalGate();
         }
     }
 
-    /** Seeks to {@code fraction} (0..1) of the total duration. */
     public void seekToFraction(double fraction) {
         if (durationMicros <= 0) {
             return;
@@ -376,8 +217,6 @@ public final class VideoPlayer {
 
     public void seekTo(long targetMicros) {
         long target = Math.max(0, targetMicros);
-        // Clamp to just before the end so the user can't scrub past the actual
-        // content (which would freeze the picture and bug the bar).
         long duration = durationMicros;
         if (duration > 0) {
             long maxTarget = Math.max(0, duration - SEEK_END_MARGIN_MICROS);
@@ -388,32 +227,16 @@ public final class VideoPlayer {
         signalGate();
     }
 
-    /** Current playback position in microseconds. */
     public long positionMicros() {
-        synchronized (clockLock) {
-            return currentPositionMicrosLocked();
-        }
+        return clock.currentPositionMicros(hasAudio, audioOutput.getLine(), state == State.PLAYING);
     }
 
-    /** Playback progress as a 0..1 fraction (0 when the duration is unknown). */
     public double progress() {
         long duration = durationMicros;
         if (duration <= 0) {
             return 0.0;
         }
         return Math.max(0.0, Math.min(1.0, positionMicros() / (double) duration));
-    }
-
-    private long currentPositionMicrosLocked() {
-        SourceDataLine line = audioLine;
-        if (hasAudio && line != null) {
-            return clockOffsetMicros + (line.getMicrosecondPosition() - lineBaseMicros);
-        }
-        long base = wallAccumMicros;
-        if (state == State.PLAYING) {
-            base += (System.nanoTime() - wallResumeNanos) / 1000L;
-        }
-        return base;
     }
 
     private void signalGate() {
@@ -425,85 +248,10 @@ public final class VideoPlayer {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Render side — select and upload the current frame (main thread)
-    // ------------------------------------------------------------------
-
-    /**
-     * Advances the displayed frame to match the playback clock and uploads it to
-     * the GPU. Returns the texture to blit, or {@code null} if nothing is ready
-     * yet. Must run on the render thread.
-     */
     @Nullable
     public ResourceLocation prepareFrame() {
-        long position = positionMicros();
-
-        VideoFrame chosen = null;
-        VideoFrame head;
-        while ((head = frameQueue.peek()) != null && head.tsMicros() <= position) {
-            if (chosen != null) {
-                freeBuffers.offer(chosen.rgbaBuffer());
-            }
-            chosen = frameQueue.poll();
-        }
-        // If we have not shown anything yet, show the first available frame even
-        // if its timestamp is slightly ahead (avoids a black box on startup).
-        if (currentFrame == null && chosen == null) {
-            chosen = frameQueue.poll();
-        }
-
-        if (chosen != null && chosen != currentFrame) {
-            if (currentFrame != null) {
-                freeBuffers.offer(currentFrame.rgbaBuffer());
-            }
-            currentFrame = chosen;
-            uploadFrame(chosen);
-        }
-        return textureLocation;
+        return renderer.prepareFrame(positionMicros(), frameQueue, freeBuffers);
     }
-
-    private void uploadFrame(VideoFrame frame) {
-        Minecraft mc = Minecraft.getInstance();
-        if (nativeImage == null || nativeImage.getWidth() != frame.width() || nativeImage.getHeight() != frame.height()) {
-            releaseTexture();
-            nativeImage = new NativeImage(NativeImage.Format.RGBA, frame.width(), frame.height(), false);
-            texture = new DynamicTexture(nativeImage);
-            textureLocation = ResourceLocation.fromNamespaceAndPath(
-                    LiasMediaPlayer.MODID, "video/" + TEXTURE_ID.getAndIncrement());
-            mc.getTextureManager().register(textureLocation, texture);
-        }
-
-        ByteBuffer buffer = frame.rgbaBuffer();
-        long bufferPtr = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET);
-        long pixelsPtr = UNSAFE.getLong(nativeImage, NATIVE_IMAGE_PIXELS_OFFSET);
-        UNSAFE.copyMemory(
-            bufferPtr,
-            pixelsPtr,
-            buffer.capacity()
-        );
-
-        if (texture != null) {
-            texture.upload();
-        }
-    }
-
-    private void releaseTexture() {
-        if (textureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(textureLocation);
-            textureLocation = null;
-        }
-        // DynamicTexture.close() also closes the backing NativeImage.
-        if (texture != null) {
-            texture.close();
-            texture = null;
-        }
-        nativeImage = null;
-        currentFrame = null;
-    }
-
-    // ------------------------------------------------------------------
-    // Decode thread (orchestrator)
-    // ------------------------------------------------------------------
 
     private void decodeLoop() {
         try {
@@ -518,30 +266,21 @@ public final class VideoPlayer {
             durationMicros = Math.max(0, info.durationMicros());
             frameDurationMicros = info.frameDurationMicros();
 
-            hasAudio = info.hasAudio() && openAudioLine(info);
+            hasAudio = info.hasAudio() && audioOutput.open(info);
 
-            // Allocate the off-heap buffer pool
             freeBuffers.clear();
             int frameBytes = videoWidth * videoHeight * 4;
             for (int i = 0; i < FRAME_QUEUE_CAPACITY + 4; i++) {
                 freeBuffers.offer(ByteBuffer.allocateDirect(frameBytes));
             }
 
-            // Launch the first session from the start of the stream.
             startSession(0);
-
-            synchronized (clockLock) {
-                clockOffsetMicros = 0;
-                lineBaseMicros = audioLine != null ? audioLine.getMicrosecondPosition() : 0;
-                wallAccumMicros = 0;
-                wallResumeNanos = System.nanoTime();
-            }
+            clock.start(0, audioOutput.getLine());
             state = State.PLAYING;
 
             while (running) {
-                // Honor pause / handle pending seek before reading the next frame.
                 if (!awaitResumeOrSeek()) {
-                    break; // disposed
+                    break;
                 }
                 if (seekRequested) {
                     performSeek();
@@ -549,7 +288,6 @@ public final class VideoPlayer {
 
                 VideoFrame decoded = readVideoFrame();
                 if (decoded == null) {
-                    // Check if it returned null due to a seek requested while waiting for buffer
                     if (seekRequested || !running) {
                         continue;
                     }
@@ -565,18 +303,14 @@ public final class VideoPlayer {
             state = State.FAILED;
             LiasMediaPlayer.LOGGER.warn("Video playback failed for {}: {}", url, errorMessage);
         } finally {
-            closeAudioLine();
-            killSession();
+            audioOutput.close();
+            session.kill();
         }
     }
 
-    /**
-     * Reads exactly one scaled frame from the current video pipe into a direct buffer
-     * and wraps it as a timestamped {@link VideoFrame}. Returns {@code null} at end of stream.
-     */
     @Nullable
     private VideoFrame readVideoFrame() throws IOException, InterruptedException {
-        ReadableByteChannel channel = videoChannel;
+        ReadableByteChannel channel = session.getVideoChannel();
         if (channel == null) {
             return null;
         }
@@ -589,7 +323,7 @@ public final class VideoPlayer {
             }
         }
         if (buffer == null) {
-            return null; // disposed or seek requested
+            return null;
         }
 
         buffer.clear();
@@ -597,7 +331,7 @@ public final class VideoPlayer {
             int read = channel.read(buffer);
             if (read < 0) {
                 freeBuffers.offer(buffer);
-                return null; // EOF (or the process was killed for a seek/dispose)
+                return null;
             }
         }
         buffer.flip();
@@ -607,10 +341,6 @@ public final class VideoPlayer {
         return new VideoFrame(ts, videoWidth, videoHeight, buffer);
     }
 
-    /**
-     * Blocks while paused. Returns {@code false} if the player was disposed while
-     * waiting. Returns immediately if a seek is pending (so seeks work while paused).
-     */
     private boolean awaitResumeOrSeek() throws InterruptedException {
         gate.lock();
         try {
@@ -627,45 +357,26 @@ public final class VideoPlayer {
         long target = seekTargetMicros;
         seekRequested = false;
 
-        // Drop any buffered audio so the line can't keep playing pre-seek sound,
-        // and so a paused audio thread blocked in line.write is released to exit.
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            line.flush();
-        }
+        audioOutput.flushLine();
         java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
         frameQueue.drainTo(drained);
         drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
 
-        // Relaunch both processes from the new position. A failure here just leaves
-        // us with no video pipe, which the read loop treats as end-of-stream.
         try {
             startSession(target / 1_000_000.0);
         } catch (IOException e) {
             LiasMediaPlayer.LOGGER.warn("Seek failed for {}: {}", url, e.toString());
         }
 
-        synchronized (clockLock) {
-            SourceDataLine l = audioLine;
-            clockOffsetMicros = target;
-            lineBaseMicros = l != null ? l.getMicrosecondPosition() : 0;
-            wallAccumMicros = target;
-            wallResumeNanos = System.nanoTime();
-        }
+        clock.seekTo(target, audioOutput.getLine());
         if (state == State.ENDED) {
             state = State.PLAYING;
         }
     }
 
     private void onEndOfStream() throws InterruptedException {
-        // Let any queued audio finish playing before we mark the video as ended,
-        // so the auto-close (driven by the ENDED state) doesn't clip the tail.
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            line.drain();
-        }
+        audioOutput.drainLine();
         state = State.ENDED;
-        // Park until the user seeks (replay) or the player is disposed.
         gate.lock();
         try {
             while (running && state == State.ENDED && !seekRequested) {
@@ -675,19 +386,11 @@ public final class VideoPlayer {
             gate.unlock();
         }
         if (seekRequested) {
-            // performSeek runs at the top of the loop.
             state = State.PLAYING;
         }
     }
 
     private void enqueue(VideoFrame frame) {
-        // Back-pressure: block until the queue has room, so ffmpeg reads ahead and
-        // keeps the buffer full (the jitter cushion that absorbs a slow/uneven
-        // connection) instead of racing to the end of the stream. Blocking the decode
-        // thread is safe — audio runs on its own thread and process — but we stay
-        // responsive to pause/seek/dispose so the decode loop can act on them
-        // promptly. A frame dropped on the way out here is one the queue is about to
-        // flush on a seek anyway.
         while (running && !seekRequested) {
             try {
                 if (frameQueue.offer(frame, 50, TimeUnit.MILLISECONDS)) {
@@ -700,153 +403,13 @@ public final class VideoPlayer {
         }
     }
 
-    // ------------------------------------------------------------------
-    // ffmpeg session management (decode thread)
-    // ------------------------------------------------------------------
-
-    /**
-     * Tears down any running processes and starts a fresh video (and, if present,
-     * audio) ffmpeg process seeking to {@code startSeconds}. Resets the per-session
-     * frame counter and base timestamp.
-     */
     private void startSession(double startSeconds) throws IOException {
-        killSession();
-
         int gen = ++sessionGen;
         frameIndex = 0;
         sessionBaseMicros = Math.round(startSeconds * 1_000_000.0);
 
-        Process video = FFmpegCli.openVideo(mediaUrl, videoWidth, videoHeight, startSeconds);
-        videoProcess = video;
-        videoIn = video.getInputStream();
-        videoChannel = Channels.newChannel(videoIn);
-
-        SourceDataLine line = audioLine;
-        if (hasAudio && line != null) {
-            Process audio = FFmpegCli.openAudio(mediaUrl, audioSampleRate, audioChannels, startSeconds);
-            audioProcess = audio;
-            InputStream audioStream = audio.getInputStream();
-            Thread thread = new Thread(() -> audioLoop(gen, audioStream, line),
-                    "liasmediaplayer-audio-" + gen);
-            thread.setDaemon(true);
-            audioThread = thread;
-            thread.start();
-        }
-    }
-
-    /** Destroys the current session's processes and stops its audio thread. */
-    private void killSession() {
-        Process audio = audioProcess;
-        if (audio != null) {
-            audio.destroyForcibly();
-            audioProcess = null;
-        }
-        Process video = videoProcess;
-        if (video != null) {
-            video.destroyForcibly();
-            videoProcess = null;
-        }
-        if (videoChannel != null) {
-            try {
-                videoChannel.close();
-            } catch (IOException ignored) {}
-            videoChannel = null;
-        }
-        videoIn = null;
-        Thread thread = audioThread;
-        if (thread != null) {
-            thread.interrupt();
-            audioThread = null;
-        }
-    }
-
-    /**
-     * Pumps PCM from one audio ffmpeg process into the line. Exits when the player
-     * stops, the session is superseded (a seek launched a newer one), or the stream
-     * ends. Blocking writes pace playback; a stopped line back-pressures into a pause.
-     */
-    private void audioLoop(int gen, InputStream in, SourceDataLine line) {
-        byte[] buffer = new byte[8192];
-        try {
-            int read;
-            while (running && gen == sessionGen && (read = in.read(buffer)) >= 0) {
-                if (gen != sessionGen) {
-                    break;
-                }
-                applyGain(line);
-                line.write(buffer, 0, read);
-            }
-        } catch (Exception ignored) {
-            // Process killed, pipe closed, or line closed (typically a seek/dispose) — just exit.
-        } finally {
-            try {
-                in.close();
-            } catch (IOException ignored) {
-                // nothing useful to do
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Audio line setup (decode thread)
-    // ------------------------------------------------------------------
-
-    private boolean openAudioLine(FFmpegCli.MediaInfo info) {
-        int channels = Math.min(Math.max(info.channels(), 1), MAX_AUDIO_CHANNELS);
-        int sampleRate = info.sampleRate();
-        if (sampleRate <= 0) {
-            return false;
-        }
-        try {
-            // s16le, signed, little-endian — matches ffmpeg's pcm_s16le output exactly.
-            AudioFormat format = new AudioFormat(sampleRate, 16, channels, true, false);
-            DataLine.Info lineInfo = new DataLine.Info(SourceDataLine.class, format);
-            if (!AudioSystem.isLineSupported(lineInfo)) {
-                LiasMediaPlayer.LOGGER.info("No audio line for {} ch @ {} Hz; playing video without sound",
-                        channels, sampleRate);
-                return false;
-            }
-            SourceDataLine line = (SourceDataLine) AudioSystem.getLine(lineInfo);
-            line.open(format);
-            line.start();
-            applyGain(line);
-            audioLine = line;
-            audioSampleRate = sampleRate;
-            audioChannels = channels;
-            return true;
-        } catch (Exception e) {
-            LiasMediaPlayer.LOGGER.info("Could not open audio for {}: {}", url, e.toString());
-            audioLine = null;
-            return false;
-        }
-    }
-
-    /**
-     * Pushes the shared volume onto the line (dB gain, master-scaled). Delegates to
-     * {@link Volume#apply}, which skips redundant hardware writes so the audio thread
-     * can re-apply it every buffer to follow live master-volume changes.
-     */
-    private void applyGain(SourceDataLine line) {
-        lastAppliedGain = Volume.apply(line, lastAppliedGain);
-    }
-
-    private void closeAudioLine() {
-        SourceDataLine line = audioLine;
-        if (line != null) {
-            try {
-                line.stop();
-                line.flush();
-                line.close();
-            } catch (Exception ignored) {
-                // ignore
-            }
-            audioLine = null;
-        }
-    }
-
-
-
-    /** A single decoded, display-ready frame backed by off-heap memory. */
-    private record VideoFrame(long tsMicros, int width, int height, ByteBuffer rgbaBuffer) {
+        session.start(mediaUrl, videoWidth, videoHeight, startSeconds, hasAudio, audioOutput.getSampleRate(), audioOutput.getChannels(), gen, (in) -> {
+            audioOutput.pumpAudio(gen, () -> sessionGen, () -> running, in);
+        });
     }
 }

@@ -147,7 +147,12 @@ public entry point.
 | `GifDecoder.java`                                                     | Decodes animated GIFs into a sequence of fully composited frames with per-frame delays, with caps on frame count and total pixels to bound VRAM. Also exposes `toNativeImage` helpers used by the image and thumbnail caches.                                                                                                                                                                         |
 | `TenorResolver.java`                                                  | Turns a `tenor.com/view/...` share page into a direct, downloadable GIF URL by scraping the page markup. (Recognizing a Tenor link is `TenorSource`'s job; this class only resolves one.)                                                                                                                                                                                                             |
 | **`video/`**                                                          |                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `VideoPlayer.java`                                                    | The decode/playback engine. Drives a pair of background `ffmpeg` processes (one video, one audio) through `FFmpegCli`, buffers decoded frames ahead of the clock, plays synced PCM audio through a `SourceDataLine`, and exposes play/pause/seek; the render thread uploads the current frame to a `DynamicTexture`. Resolves URLs via `media.MediaUrlResolver` and uses the shared `media.Volume`.   |
+| `VideoPlayer.java`                                                    | The orchestrator. Exposes play/pause/seek and coordinates playback state, using `FFmpegSession`, `VideoRenderer`, `AudioOutput`, and `PlaybackClock`.   |
+| `VideoFrame.java`                                                     | Data record holding the off-heap `ByteBuffer` and timestamp for a decoded frame.   |
+| `VideoRenderer.java`                                                  | Handles OpenGL `NativeImage` setup, `DynamicTexture` lifecycle, and uploading frames using `Unsafe`.   |
+| `AudioOutput.java`                                                    | Manages the Java Sound `SourceDataLine`, audio volume, and the loop pumping PCM data from the process.   |
+| `PlaybackClock.java`                                                  | Encapsulates the synchronization logic between wall-clock time and the audio line.   |
+| `FFmpegSession.java`                                                  | Wraps process execution for ffmpeg video and audio output, managing streams and process cleanup.   |
 | `VideoThumbnailCache.java`                                            | Builds and caches a small still image for each queued video (the YouTube thumbnail, or the first decoded frame for direct files) so the queue panel can show what each entry is.                                                                                                                                                                                                                      |
 | **`audio/`**                                                          |                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `AudioPlayer.java`                                                    | The sound-only playback engine — the audio counterpart of `VideoPlayer`. Probes the stream, opens a `SourceDataLine`, and runs a control thread (resolve/probe/launch/seek) plus a per-session **pump thread** that blocking-writes PCM to the line. Reuses `FFmpegCli`, `media.MediaUrlResolver` and `media.Volume`; YouTube links play as sound only (ffmpeg opens the resolved stream with `-vn`). |
@@ -400,34 +405,15 @@ Both seek (`-ss`) and end-of-stream are handled by the caller. stderr is discard
 a real failure surfaces as an early stdout EOF (the URL was already validated by the
 probe). Everything here runs on background threads.
 
-### Decoding & playback (`video/VideoPlayer`)
+### Decoding & playback (`video` package)
 
-Each player owns:
+Each player (`VideoPlayer`) coordinates several single-responsibility components:
 
-- a **decode thread** that resolves the URL, probes it, computes a target size that
-  fits within **854×480** (never upscaled, even dimensions), launches the ffmpeg
-  video (and, if present, audio) session, then reads `rgba` frames in order. Each
-  frame is timestamped from the frame index × frame duration, read straight into
-  a pooled direct `ByteBuffer`, and pushed onto a bounded queue (capacity
-  **64**). The decode thread **blocks (back-pressure) while the queue is full**, so
-  ffmpeg reads ahead and keeps the queue full — a **jitter buffer** that absorbs an
-  uneven or slow connection instead of letting the picture freeze. (Blocking the
-  decode thread is safe: audio runs on its own thread and process.) The wait stays
-  responsive to pause/seek/dispose. It also handles pause and seek, and parks in
-  `ENDED` at end-of-stream until sought or disposed.
-- an **audio thread** per session that reads PCM from the audio process and
-  blocking-writes it to the `SourceDataLine` (whose blocking write paces playback);
-  a stopped line back-pressures into a clean pause.
-- the **render/main thread** path: `prepareFrame()` advances to the queued frame
-  whose timestamp is ≤ the playback clock. The direct `ByteBuffer` is copied
-  straight into the `NativeImage` backing memory using `sun.misc.Unsafe.copyMemory`
-  (a zero-copy upload that bypasses Java arrays), and uploaded to a reused
-  `DynamicTexture` (`liasmediaplayer:video/<n>`). Textures and GL are touched only
-  here.
-
-**Clock & sync.** When the video has audio, the line's `getMicrosecondPosition()` is
-the master clock so the picture follows the sound; otherwise a wall clock that only
-advances while playing is used. Video frames are shown once their timestamp is ≤ the
+- **Process management** (`FFmpegSession`): Resolves the URL, probes it, computes a target size that fits within **854×480** (never upscaled), and launches the ffmpeg video and audio processes.
+- **Decode thread** (`VideoPlayer`): Reads `rgba` frames in order from the video pipe. Each frame is timestamped, wrapped in a `VideoFrame` record with a pooled direct `ByteBuffer`, and pushed onto a bounded queue (capacity **64**). The decode thread **blocks (back-pressure) while the queue is full**, so ffmpeg reads ahead and keeps the queue full — a **jitter buffer** that absorbs network instability.
+- **Audio output** (`AudioOutput`): Runs an audio thread per session that reads PCM from the audio process and blocking-writes it to the `SourceDataLine` (whose blocking write paces playback); a stopped line back-pressures into a clean pause.
+- **Render side** (`VideoRenderer`): The render/main thread path calls `prepareFrame()`, advancing to the queued frame whose timestamp is ≤ the playback clock. The direct `ByteBuffer` is copied straight into the `NativeImage` backing memory using `sun.misc.Unsafe.copyMemory` (a zero-copy upload that bypasses Java arrays), and uploaded to a reused `DynamicTexture`.
+- **Clock & sync** (`PlaybackClock`): When the video has audio, the line's `getMicrosecondPosition()` is the master clock so the picture follows the sound; otherwise a wall clock that only advances while playing is used. Video frames are shown once their timestamp is ≤ the
 clock; late frames are skipped, and the jitter buffer keeps enough decoded frames
 ahead of the clock that ordinary network unevenness never starves the picture.
 
