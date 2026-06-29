@@ -373,7 +373,22 @@ final class VideoWindow extends MediaWindow {
             };
             int tx = contentX + (contentW - font.width(status)) / 2;
             int ty = contentY + (contentH - font.lineHeight) / 2;
+            if (player.state() == VideoPlayer.State.FAILED) {
+                ty = contentY + 10;
+            }
             g.drawString(font, status, tx, ty, TEXT_COLOR);
+
+            if (player.state() == VideoPlayer.State.FAILED) {
+                String msg = player.errorMessage();
+                if (msg != null) {
+                    List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(msg), Math.max(10, contentW - 20));
+                    int startY = ty + font.lineHeight + 8;
+                    for (int i = 0; i < lines.size(); i++) {
+                        if (startY + i * font.lineHeight > contentY + contentH - 4) break;
+                        g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, 0xFFFF6B6B);
+                    }
+                }
+            }
         }
     }
 
@@ -381,13 +396,6 @@ final class VideoWindow extends MediaWindow {
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
         int barTop = contentY + contentH;
         g.fill(boxX, barTop, boxX + boxW, boxY + boxH, BAR_COLOR);
-
-        if (player.state() == VideoPlayer.State.FAILED) {
-            String msg = player.errorMessage();
-            if (msg != null) {
-                g.drawString(font, Component.literal(trim(msg, 60)), contentX, barTop + 4, 0xFFFF6B6B);
-            }
-        }
 
         // Play / pause button.
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
@@ -729,7 +737,4 @@ final class VideoWindow extends MediaWindow {
         return queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH);
     }
 
-    private static String trim(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
-    }
 }

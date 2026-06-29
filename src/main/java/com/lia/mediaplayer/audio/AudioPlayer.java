@@ -310,8 +310,22 @@ public final class AudioPlayer {
 
     private void controlLoop() {
         try {
-            mediaUrl = MediaUrlResolver.resolve(url);
-            FFmpegCli.MediaInfo info = FFmpegCli.probe(mediaUrl);
+            int retries = 1;
+            FFmpegCli.MediaInfo info = null;
+            while (true) {
+                try {
+                    mediaUrl = MediaUrlResolver.resolve(url);
+                    info = FFmpegCli.probe(mediaUrl);
+                    break;
+                } catch (IOException e) {
+                    if (retries > 0) {
+                        retries--;
+                        LiasMediaPlayer.LOGGER.warn("Media resolution failed for {}, retrying... ({})", url, e.getMessage());
+                        continue;
+                    }
+                    throw e;
+                }
+            }
             if (!info.hasAudio()) {
                 throw new IllegalStateException("This file has no audio track");
             }

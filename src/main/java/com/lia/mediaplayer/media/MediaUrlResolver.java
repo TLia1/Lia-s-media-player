@@ -113,8 +113,8 @@ public final class MediaUrlResolver {
 
         if (firstLine == null || firstLine.isBlank()) {
             String detail = !stderr.isEmpty() ? " — " + stderr.toString().trim() : "";
-            throw new IOException("yt-dlp returned no media URL for " + url
-                    + " (exit code " + process.exitValue() + ")" + detail);
+            String message = net.minecraft.network.chat.Component.translatable("error.liasmediaplayer.ytdlp_failed").getString();
+            throw new IOException(message);
         }
         LiasMediaPlayer.LOGGER.info("Resolved YouTube link {} -> direct stream via {}", url, executable);
         return firstLine.trim();

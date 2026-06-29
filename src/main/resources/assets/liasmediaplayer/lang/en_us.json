@@ -42,5 +42,6 @@
   "config.liasmediaplayer.max_video_windows": "Max Video Windows",
   "config.liasmediaplayer.max_audio_windows": "Max Audio Windows",
   "config.liasmediaplayer.max_gif_frames": "Max GIF Frames",
-  "config.liasmediaplayer.max_image_cache_entries": "Max Image Cache Entries"
+  "config.liasmediaplayer.max_image_cache_entries": "Max Image Cache Entries",
+  "error.liasmediaplayer.ytdlp_failed": "No youtube video was foud with this url"
 }

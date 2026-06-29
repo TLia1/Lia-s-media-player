@@ -257,8 +257,22 @@ public final class VideoPlayer {
 
     private void decodeLoop() {
         try {
-            mediaUrl = MediaUrlResolver.resolve(url);
-            FFmpegCli.MediaInfo info = FFmpegCli.probe(mediaUrl);
+            int retries = 1;
+            FFmpegCli.MediaInfo info = null;
+            while (true) {
+                try {
+                    mediaUrl = MediaUrlResolver.resolve(url);
+                    info = FFmpegCli.probe(mediaUrl);
+                    break;
+                } catch (IOException e) {
+                    if (retries > 0) {
+                        retries--;
+                        LiasMediaPlayer.LOGGER.warn("Media resolution failed for {}, retrying... ({})", url, e.getMessage());
+                        continue;
+                    }
+                    throw e;
+                }
+            }
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
