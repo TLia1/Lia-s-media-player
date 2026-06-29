@@ -177,6 +177,10 @@ public class AudioPlayerManager {
         return window != null ? window.getId() : -1;
     }
 
+    public long playNewWindowPublic(String url){
+        return open(url).getId();
+    }
+
     public void seekFrontMost(double fraction) {
         AudioWindow window = frontMost();
         if (window != null) {

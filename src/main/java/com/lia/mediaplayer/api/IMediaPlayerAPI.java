@@ -65,6 +65,8 @@ public interface IMediaPlayerAPI {
 
     long playAudio(String url);
 
+    long playAudioNewWindow(String url);
+
     long playAudioAll(List<String> urls, boolean shuffle);
 
     // ====================================================================

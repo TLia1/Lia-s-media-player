@@ -128,6 +128,9 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     }
 
     @Override
+    public long playAudioNewWindow(String url) { return audioManager.playNewWindowPublic(url); }
+
+    @Override
     public long playAudioAll(List<String> urls, boolean shuffle) {
         return audioManager.playAllPublic(urls, shuffle);
     }
