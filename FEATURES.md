@@ -121,6 +121,14 @@ The mod adds keys you can set in **Options → Controls → "Lia's Media Player"
 
 They're **unbound by default** so they never clash with your existing keys — just assign whatever you like.
 
+## Chat Commands
+
+You can also start playing media directly via chat commands without receiving a link first:
+- `/show <type> <url> [newPlayer]`
+  - `type`: Either `image`, `video`, or `audio` (with auto-completion). Note: A video URL can be played as `video` or `audio`, but you cannot play an audio URL as a video.
+  - `url`: The link to the media.
+  - `newPlayer` *(optional)*: When `true`, opens the media in a brand-new player window instead of adding it to the queue of an existing player. Defaults to `false`.
+
 ---
 
 ## Why you'll like it
