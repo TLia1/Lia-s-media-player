@@ -51,6 +51,10 @@ public final class PlaylistScreen extends Screen {
         super(Component.translatable("gui.liasmediaplayer.playlists.title"));
     }
 
+    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
+        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    }
+
     @Override
     public boolean isPauseScreen() {
         return false; // keep the game (and any other players) running while editing
@@ -174,7 +178,7 @@ public final class PlaylistScreen extends Screen {
 
     private void createPlaylist() {
         String name = newNameBox != null ? newNameBox.getValue() : "";
-        selected = PlaylistStore.create(name);
+        selected = getContext().getPlaylistStore().create(name);
         if (newNameBox != null) {
             newNameBox.setValue("");
         }
@@ -188,7 +192,7 @@ public final class PlaylistScreen extends Screen {
         String name = nameBox.getValue().strip();
         if (!name.isBlank()) {
             selected.setName(name);
-            PlaylistStore.save();
+            getContext().getPlaylistStore().save();
         }
     }
 
@@ -199,7 +203,7 @@ public final class PlaylistScreen extends Screen {
         String url = addBox.getValue().strip();
         if (!url.isBlank()) {
             selected.add(url);
-            PlaylistStore.save();
+            getContext().getPlaylistStore().save();
             MediaTitleCache.getOrLoad(url); // warm the name for the list
             addBox.setValue("");
             rebuild();
@@ -208,14 +212,14 @@ public final class PlaylistScreen extends Screen {
 
     private void play(boolean shuffle) {
         if (selected != null && !selected.isEmpty()) {
-            AudioPlayerManager.playAll(selected.urls(), shuffle);
+            getContext().getAudioManager().playAll(selected.urls(), shuffle);
             onClose();
         }
     }
 
     private void deleteSelected() {
         if (selected != null) {
-            PlaylistStore.delete(selected);
+            getContext().getPlaylistStore().delete(selected);
             selected = null;
             rebuild();
         }
@@ -231,7 +235,7 @@ public final class PlaylistScreen extends Screen {
     private void importClipboard() {
         String in = minecraft.keyboardHandler.getClipboard();
         if (in != null && !in.isBlank()) {
-            Playlist pl = PlaylistStore.create(Component.translatable("gui.liasmediaplayer.playlists.imported").getString());
+            Playlist pl = getContext().getPlaylistStore().create(Component.translatable("gui.liasmediaplayer.playlists.imported").getString());
             for (String line : in.split("\n")) {
                 String url = line.strip();
                 if (url.startsWith("http://") || url.startsWith("https://")) {
@@ -239,9 +243,9 @@ public final class PlaylistScreen extends Screen {
                 }
             }
             if (pl.isEmpty()) {
-                PlaylistStore.delete(pl);
+                getContext().getPlaylistStore().delete(pl);
             } else {
-                PlaylistStore.save();
+                getContext().getPlaylistStore().save();
                 selected = pl;
                 rebuild();
             }
@@ -271,7 +275,7 @@ public final class PlaylistScreen extends Screen {
     }
 
     private void renderPlaylistList(GuiGraphics g, int mouseX, int mouseY) {
-        List<Playlist> playlists = PlaylistStore.all();
+        List<Playlist> playlists = getContext().getPlaylistStore().all();
         int x = leftX();
         int w = leftW();
         int top = listTop();
@@ -349,7 +353,7 @@ public final class PlaylistScreen extends Screen {
         }
 
         // Left list: select a playlist.
-        List<Playlist> playlists = PlaylistStore.all();
+        List<Playlist> playlists = getContext().getPlaylistStore().all();
         int rows = visiblePlaylistRows();
         for (int i = 0; i < rows; i++) {
             int index = playlistScroll + i;
@@ -381,20 +385,20 @@ public final class PlaylistScreen extends Screen {
 
                 if (MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1)) {
                     selected.removeAt(index);
-                    PlaylistStore.save();
+                    getContext().getPlaylistStore().save();
                     rebuild();
                     return true;
                 } else if (MediaWindow.inRect(mouseX, mouseY, downX, rowY, ROW_EN, ROW_EN - 1)) {
                     if (index < urls.size() - 1) {
                         selected.swap(index, index + 1);
-                        PlaylistStore.save();
+                        getContext().getPlaylistStore().save();
                         rebuild();
                         return true;
                     }
                 } else if (MediaWindow.inRect(mouseX, mouseY, upX, rowY, ROW_EN, ROW_EN - 1)) {
                     if (index > 0) {
                         selected.swap(index, index - 1);
-                        PlaylistStore.save();
+                        getContext().getPlaylistStore().save();
                         rebuild();
                         return true;
                     }
@@ -424,7 +428,7 @@ public final class PlaylistScreen extends Screen {
     }
 
     private void clampScroll() {
-        int playlists = PlaylistStore.all().size();
+        int playlists = getContext().getPlaylistStore().all().size();
         playlistScroll = Mth.clamp(playlistScroll, 0, Math.max(0, playlists - visiblePlaylistRows()));
         int entries = selected != null ? selected.size() : 0;
         entryScroll = Mth.clamp(entryScroll, 0, Math.max(0, entries - visibleEntryRows()));

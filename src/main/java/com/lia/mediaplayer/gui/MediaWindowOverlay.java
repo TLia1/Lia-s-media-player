@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.source.MediaSources;
@@ -32,72 +33,56 @@ import java.util.Map;
 /**
  * Single coordinator that renders and drives <em>all</em> media windows — the
  * pinned {@link ImageWindow}s and the {@link VideoWindow}s — as one stack.
- *
- * <p>Previously each kind drew and handled input in its own event subscriber, so
- * the two stacks were independent: an image and a video could overlap with no
- * defined order, a click could "fall through" to a window drawn underneath, and
- * a video's batched text (the timestamp / volume pop-up) floated above windows
- * sitting on top of it because all text is flushed in one late pass.</p>
- *
- * <p>Here everything shares the {@link MediaWindow#zOrder() z-order}: windows are
- * drawn back-to-front, each in its own depth band, and the text buffer is
- * {@linkplain GuiGraphics#flush() flushed} after every window so a front window
- * fully occludes the one behind it — content <em>and</em> text. Clicking a window
- * raises it ({@link MediaWindow#bringToFront()}), and input is tested top-first so
- * only the front-most window under the cursor reacts.</p>
  */
 @EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class MediaWindowOverlay {
-    /** Base depth for the lowest window; above the chat, below the hover tooltip (400). */
     private static final int BASE_Z = 300;
-    /** Depth separation between stacked windows, so a front one occludes the text of one behind. */
     private static final int Z_STEP = 5;
 
-    /** Last-laid-out geometry of the "reveal hidden videos" chat button (for hit-testing). */
     private static boolean revealVisible;
     private static int revealX, revealY, revealW, revealH;
 
-    /** Last-laid-out geometry of the always-on "Playlists" chat button (for hit-testing). */
     private static int plBtnX, plBtnY, plBtnW, plBtnH;
 
     private MediaWindowOverlay() {
+    }
+
+    private static MediaPlayerContext getContext() {
+        return (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
     }
 
     // ------------------------------------------------------------------
     // Shared stack
     // ------------------------------------------------------------------
 
-    /** Every media window (image + video), sorted bottom-to-top by z-order. */
     private static List<MediaWindow> orderedWindows() {
+        MediaPlayerContext ctx = getContext();
         List<MediaWindow> all = new ArrayList<>();
-        all.addAll(ImageWindowManager.windows());
-        all.addAll(VideoPlayerManager.windows());
-        all.addAll(AudioPlayerManager.windows());
+        if (ctx != null) {
+            all.addAll(ctx.getImageManager().getWindows());
+            all.addAll(ctx.getVideoManager().getWindows());
+            all.addAll(ctx.getAudioManager().getWindows());
+        }
         all.sort(Comparator.comparingLong(MediaWindow::zOrder));
         return all;
     }
 
     private static boolean noWindows() {
-        return ImageWindowManager.isEmpty() && VideoPlayerManager.isEmpty() && AudioPlayerManager.isEmpty();
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) return true;
+        return ctx.getImageManager().isEmpty() && ctx.getVideoManager().isEmpty() && ctx.getAudioManager().isEmpty();
     }
 
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
 
-    /**
-     * Draws the whole stack back-to-front. Each window gets its own depth band and
-     * its text is flushed before the next window draws, so the front window always
-     * covers the one behind it — including the seek time and volume pop-up.
-     */
     private static void renderAll(GuiGraphics g, int screenWidth, int screenHeight,
                                   int mouseX, int mouseY, boolean withControls) {
         List<MediaWindow> all = orderedWindows();
         if (all.isEmpty()) {
             return;
         }
-        // Each anchor group (images vs videos) cascades independently, so same-kind
-        // windows fan out without landing on top of each other.
         Map<Integer, Integer> slotByGroup = new HashMap<>();
         int depth = 0;
         for (MediaWindow window : all) {
@@ -110,14 +95,11 @@ public final class MediaWindowOverlay {
             window.layout(screenWidth, screenHeight, slot);
             window.render(g, mouseX, mouseY, withControls);
             g.pose().popPose();
-            // Force the batched text to draw now, before the next (higher) window's
-            // fills, so a window in front occludes the text of the one behind it.
             g.flush();
             depth++;
         }
     }
 
-    /** On the chat screen: full windows with controls, then the hover preview on top. */
     @SubscribeEvent
     public static void onScreenRender(ScreenEvent.Render.Post event) {
         if (!(event.getScreen() instanceof ChatScreen)) {
@@ -135,7 +117,6 @@ public final class MediaWindowOverlay {
                 screenWidth, screenHeight);
     }
 
-    /** A small always-present chat button (top-left) that opens the playlist manager. */
     private static void renderPlaylistsButton(GuiGraphics g, int mouseX, int mouseY) {
         Font font = Minecraft.getInstance().font;
         Component label = Component.translatable("gui.liasmediaplayer.playlists");
@@ -148,7 +129,7 @@ public final class MediaWindowOverlay {
         boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
-        g.pose().translate(0, 0, 500); // above the windows and their batched text
+        g.pose().translate(0, 0, 500); 
         g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? 0xF0303030 : 0xD0181818);
         Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
         g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
@@ -156,31 +137,27 @@ public final class MediaWindowOverlay {
         g.flush();
     }
 
-    /**
-     * Draws a small button in the top-left of the chat screen that brings any hidden
-     * (minimised-but-still-playing) video windows back on screen. Shown only while at
-     * least one video is hidden.
-     */
     private static void renderRevealButton(GuiGraphics g, int mouseX, int mouseY) {
-        int hidden = VideoPlayerManager.hiddenCount() + AudioPlayerManager.hiddenCount();
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) return;
+        int hidden = ctx.getVideoManager().hiddenCount() + ctx.getAudioManager().hiddenCount();
         revealVisible = hidden > 0;
         if (!revealVisible) {
             return;
         }
         Font font = Minecraft.getInstance().font;
         Component label = Component.translatable(hidden > 1 ? "gui.liasmediaplayer.hidden_players.plural" : "gui.liasmediaplayer.hidden_players.singular", hidden);
-        int triW = 8; // room for the little play triangle on the left
+        int triW = 8; 
         revealW = triW + font.width(label) + 10;
         revealH = 14;
         revealX = 4;
-        revealY = 22; // sit just below the always-present "Playlists" button
+        revealY = 22; 
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
-        g.pose().translate(0, 0, 500); // above the windows and their batched text
+        g.pose().translate(0, 0, 500); 
         g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? 0xF0303030 : 0xD0181818);
-        // A small play triangle, vertically centred.
         int tx = revealX + 5;
         int ty = revealY + 3;
         for (int i = 0; i < 8; i++) {
@@ -192,9 +169,6 @@ public final class MediaWindowOverlay {
         g.flush();
     }
 
-
-
-    /** While no screen is open, keep the windows on the HUD (picture only, no controls). */
     @SubscribeEvent
     public static void onRenderHud(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
@@ -215,23 +189,23 @@ public final class MediaWindowOverlay {
         if (!(event.getScreen() instanceof ChatScreen)) {
             return;
         }
-        // The always-present "Playlists" button opens the playlist manager.
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) return;
+
         if (event.getButton() == 0
                 && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
             Minecraft.getInstance().setScreen(new PlaylistScreen());
             event.setCanceled(true);
             return;
         }
-        // The "reveal hidden players" button takes priority over the windows.
         if (event.getButton() == 0 && revealVisible
                 && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), revealX, revealY, revealW, revealH)) {
-            VideoPlayerManager.revealAll();
-            AudioPlayerManager.revealAll();
+            ctx.getVideoManager().revealAll();
+            ctx.getAudioManager().revealAll();
             event.setCanceled(true);
             return;
         }
         List<MediaWindow> all = orderedWindows();
-        // Front-most (last drawn) window first, so a click can't reach one behind it.
         for (int i = all.size() - 1; i >= 0; i--) {
             MediaWindow window = all.get(i);
             if (!window.isVisible()) {
@@ -245,44 +219,39 @@ public final class MediaWindowOverlay {
                 return;
             }
             if (result == MediaWindow.ClickResult.HANDLED) {
-                window.bringToFront(); // focus: raise the clicked window above the rest
+                window.bringToFront();
                 event.setCanceled(true);
                 return;
             }
         }
-        // Nothing consumed it: a click on a media link spawns / focuses its window.
         if (event.getButton() == 0) {
             String url = hoveredUrl(event.getMouseX(), event.getMouseY());
             if (url == null) {
                 return;
             }
-            MediaKind kind = MediaSources.kindOf(url);
+            MediaKind kind = ctx.getMediaSources().kindOf(url);
             if (kind == MediaKind.VIDEO) {
-                // Default: queue the link into the current player. Shift-click opens a
-                // separate, independent window instead. Alt-click forces it to play as
-                // audio only.
                 if (Screen.hasAltDown()) {
                     if (Screen.hasShiftDown()) {
-                        AudioPlayerManager.open(url).bringToFront();
+                        ctx.getAudioManager().open(url).bringToFront();
                     } else {
-                        AudioPlayerManager.enqueue(url);
+                        ctx.getAudioManager().enqueue(url);
                     }
                 } else if (Screen.hasShiftDown()) {
-                    VideoPlayerManager.open(url).bringToFront();
+                    ctx.getVideoManager().open(url).bringToFront();
                 } else {
-                    VideoPlayerManager.enqueue(url);
+                    ctx.getVideoManager().enqueue(url);
                 }
                 event.setCanceled(true);
             } else if (kind == MediaKind.AUDIO) {
-                // Default: queue into the current bar. Shift-click opens a separate bar.
                 if (Screen.hasShiftDown()) {
-                    AudioPlayerManager.open(url).bringToFront();
+                    ctx.getAudioManager().open(url).bringToFront();
                 } else {
-                    AudioPlayerManager.enqueue(url);
+                    ctx.getAudioManager().enqueue(url);
                 }
                 event.setCanceled(true);
             } else if (kind == MediaKind.IMAGE) {
-                ImageWindowManager.show(url).bringToFront();
+                ctx.getImageManager().show(url).bringToFront();
                 event.setCanceled(true);
             }
         }
@@ -337,24 +306,23 @@ public final class MediaWindowOverlay {
     // Lifecycle: close finished videos
     // ------------------------------------------------------------------
 
-    /**
-     * Once a video has played through to the end, advance to the next queued URL in
-     * the same window; if nothing is queued, dispose the window automatically.
-     */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
-        if (!VideoPlayerManager.isEmpty()) {
-            for (VideoWindow window : VideoPlayerManager.windows()) {
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) return;
+
+        if (!ctx.getVideoManager().isEmpty()) {
+            for (VideoWindow window : ctx.getVideoManager().getWindows()) {
                 if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {
-                    VideoPlayerManager.close(window);
+                    ctx.getVideoManager().close(window);
                 }
             }
         }
-        if (!AudioPlayerManager.isEmpty()) {
-            for (AudioWindow window : AudioPlayerManager.windows()) {
+        if (!ctx.getAudioManager().isEmpty()) {
+            for (AudioWindow window : ctx.getAudioManager().getWindows()) {
                 AudioPlayer ap = window.player();
                 if (ap.state() == AudioPlayer.State.ENDED && !ap.isPaused() && !window.advance()) {
-                    AudioPlayerManager.close(window);
+                    ctx.getAudioManager().close(window);
                 }
             }
         }

@@ -22,21 +22,19 @@ import java.util.List;
  * ({@link #togglePauseFrontMost()}, {@link #nextFrontMost()}, {@link #previousFrontMost()})
  * back the configurable keybinds and act on the front-most bar.</p>
  */
-public final class AudioPlayerManager {
+public class AudioPlayerManager {
     /** Hard cap on simultaneous bars; the oldest is disposed past this. */
+    private final List<AudioWindow> windows = new ArrayList<>();
 
-
-    private static final List<AudioWindow> WINDOWS = new ArrayList<>();
-
-    private AudioPlayerManager() {
+    public AudioPlayerManager() {
     }
 
     /** Creates a brand-new, independent bar playing {@code url} and starts it. */
-    static AudioWindow open(String url) {
+    public AudioWindow open(String url) {
         evictIfFull();
         AudioPlayer player = new AudioPlayer(url);
         AudioWindow window = new AudioWindow(player);
-        WINDOWS.add(window);
+        windows.add(window);
         player.start();
         window.setVisible(true);
         return window;
@@ -46,7 +44,7 @@ public final class AudioPlayerManager {
      * Adds {@code url} to the queue of the front-most bar (creating one if none exists),
      * reveals it and brings it to the front.
      */
-    static AudioWindow enqueue(String url) {
+    public AudioWindow enqueue(String url) {
         AudioWindow target = frontMost();
         if (target == null) {
             return open(url);
@@ -63,7 +61,7 @@ public final class AudioPlayerManager {
      * up front. Returns {@code null} for an empty list.
      */
     @Nullable
-    public static AudioWindow playAll(List<String> urls, boolean shuffle) {
+    public AudioWindow playAll(List<String> urls, boolean shuffle) {
         if (urls == null || urls.isEmpty()) {
             return null;
         }
@@ -80,25 +78,25 @@ public final class AudioPlayerManager {
     }
 
     @Nullable
-    static AudioWindow frontMost() {
-        return WINDOWS.stream().max(Comparator.comparingLong(AudioWindow::zOrder)).orElse(null);
+    public AudioWindow frontMost() {
+        return windows.stream().max(Comparator.comparingLong(AudioWindow::zOrder)).orElse(null);
     }
 
-    public static boolean hasFrontMost() {
+    public boolean hasFrontMost() {
         return frontMost() != null;
     }
 
-    static List<AudioWindow> windows() {
-        return new ArrayList<>(WINDOWS);
+    public List<AudioWindow> getWindows() {
+        return new ArrayList<>(windows);
     }
 
-    static boolean isEmpty() {
-        return WINDOWS.isEmpty();
+    public boolean isEmpty() {
+        return windows.isEmpty();
     }
 
-    static int hiddenCount() {
+    public int hiddenCount() {
         int n = 0;
-        for (AudioWindow window : WINDOWS) {
+        for (AudioWindow window : windows) {
             if (!window.isVisible()) {
                 n++;
             }
@@ -106,8 +104,8 @@ public final class AudioPlayerManager {
         return n;
     }
 
-    static void revealAll() {
-        for (AudioWindow window : WINDOWS) {
+    public void revealAll() {
+        for (AudioWindow window : windows) {
             if (!window.isVisible()) {
                 window.setVisible(true);
                 window.bringToFront();
@@ -115,18 +113,18 @@ public final class AudioPlayerManager {
         }
     }
 
-    static void close(AudioWindow window) {
-        if (WINDOWS.remove(window)) {
+    public void close(AudioWindow window) {
+        if (windows.remove(window)) {
             window.disposeAll();
         }
     }
 
     /** Disposes every bar (e.g. on disconnect). */
-    public static void disposeAll() {
-        for (AudioWindow window : WINDOWS) {
+    public void disposeAll() {
+        for (AudioWindow window : windows) {
             window.disposeAll();
         }
-        WINDOWS.clear();
+        windows.clear();
     }
 
     // ------------------------------------------------------------------
@@ -134,55 +132,52 @@ public final class AudioPlayerManager {
     // ------------------------------------------------------------------
 
     /** Whether at least one audio bar exists (so a keybind has something to act on). */
-    public static boolean hasAny() {
-        return !WINDOWS.isEmpty();
+    public boolean hasAny() {
+        return !windows.isEmpty();
     }
 
-    public static void togglePauseFrontMost() {
+    public void togglePauseFrontMost() {
         AudioWindow window = frontMost();
         if (window != null) {
             window.player().togglePause();
         }
     }
 
-    public static void nextFrontMost() {
+    public void nextFrontMost() {
         AudioWindow window = frontMost();
         if (window != null) {
             window.advance();
         }
     }
 
-    public static void previousFrontMost() {
+    public void previousFrontMost() {
         AudioWindow window = frontMost();
         if (window != null) {
             window.previous();
         }
     }
 
-    private static void evictIfFull() {
-        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_AUDIO_WINDOWS.getValue()) {
-            AudioWindow eldest = WINDOWS.removeFirst();
+    private void evictIfFull() {
+        while (windows.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_AUDIO_WINDOWS.getValue()) {
+            AudioWindow eldest = windows.removeFirst();
             eldest.disposeAll();
         }
     }
 
     // ------------------------------------------------------------------
-    // Public API entry points (called by MediaPlayerAPI)
+    // Public API entry points (called by MediaPlayerContext)
     // ------------------------------------------------------------------
 
-    /** Public entry point for the API: enqueue an audio URL. Returns the window ID. */
-    public static long enqueuePublic(String url) {
+    public long enqueuePublic(String url) {
         return enqueue(url).getId();
     }
 
-    /** Public entry point for the API: play a list of URLs. Returns the window ID, or -1 if empty. */
-    public static long playAllPublic(List<String> urls, boolean shuffle) {
+    public long playAllPublic(List<String> urls, boolean shuffle) {
         AudioWindow window = playAll(urls, shuffle);
         return window != null ? window.getId() : -1;
     }
 
-    /** Seeks the front-most audio player to a fraction (API). */
-    public static void seekFrontMost(double fraction) {
+    public void seekFrontMost(double fraction) {
         AudioWindow window = frontMost();
         if (window != null) {
             window.player().seekToFraction(fraction);
@@ -193,8 +188,8 @@ public final class AudioPlayerManager {
     // ID-based API methods
     // ------------------------------------------------------------------
 
-    static AudioWindow getById(long id) {
-        for (AudioWindow window : WINDOWS) {
+    public AudioWindow getById(long id) {
+        for (AudioWindow window : windows) {
             if (window.getId() == id) {
                 return window;
             }
@@ -202,46 +197,46 @@ public final class AudioPlayerManager {
         return null;
     }
 
-    public static boolean exists(long id) {
+    public boolean exists(long id) {
         return getById(id) != null;
     }
 
-    public static void togglePause(long id) {
+    public void togglePause(long id) {
         AudioWindow window = getById(id);
         if (window != null) {
             window.player().togglePause();
         }
     }
 
-    public static void next(long id) {
+    public void next(long id) {
         AudioWindow window = getById(id);
         if (window != null) {
             window.advance();
         }
     }
 
-    public static void previous(long id) {
+    public void previous(long id) {
         AudioWindow window = getById(id);
         if (window != null) {
             window.previous();
         }
     }
 
-    public static void enqueueTo(long id, String url) {
+    public void enqueueTo(long id, String url) {
         AudioWindow window = getById(id);
         if (window != null) {
             window.enqueue(url);
         }
     }
 
-    public static void setVisible(long id, boolean visible) {
+    public void setVisible(long id, boolean visible) {
         AudioWindow window = getById(id);
         if (window != null) {
             window.setVisible(visible);
         }
     }
 
-    public static void closePublic(long id) {
+    public void closePublic(long id) {
         AudioWindow window = getById(id);
         if (window != null) {
             close(window);

@@ -31,25 +31,29 @@ public final class KeybindHandler {
                 mc.setScreen(new PlaylistScreen());
             }
         }
+
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        if (ctx == null) return;
+
         while (ModKeybinds.PLAY_PAUSE.consumeClick()) {
-            if (AudioPlayerManager.hasFrontMost()) {
-                AudioPlayerManager.togglePauseFrontMost();
-            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
-                com.lia.mediaplayer.gui.VideoPlayerManager.togglePauseFrontMost();
+            if (ctx.getAudioManager().hasFrontMost()) {
+                ctx.getAudioManager().togglePauseFrontMost();
+            } else if (ctx.getVideoManager().hasFrontMost()) {
+                ctx.getVideoManager().togglePauseFrontMost();
             }
         }
         while (ModKeybinds.NEXT.consumeClick()) {
-            if (AudioPlayerManager.hasFrontMost()) {
-                AudioPlayerManager.nextFrontMost();
-            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
-                com.lia.mediaplayer.gui.VideoPlayerManager.nextFrontMost();
+            if (ctx.getAudioManager().hasFrontMost()) {
+                ctx.getAudioManager().nextFrontMost();
+            } else if (ctx.getVideoManager().hasFrontMost()) {
+                ctx.getVideoManager().nextFrontMost();
             }
         }
         while (ModKeybinds.PREVIOUS.consumeClick()) {
-            if (AudioPlayerManager.hasFrontMost()) {
-                AudioPlayerManager.previousFrontMost();
-            } else if (com.lia.mediaplayer.gui.VideoPlayerManager.hasFrontMost()) {
-                com.lia.mediaplayer.gui.VideoPlayerManager.previousFrontMost();
+            if (ctx.getAudioManager().hasFrontMost()) {
+                ctx.getAudioManager().previousFrontMost();
+            } else if (ctx.getVideoManager().hasFrontMost()) {
+                ctx.getVideoManager().previousFrontMost();
             }
         }
     }

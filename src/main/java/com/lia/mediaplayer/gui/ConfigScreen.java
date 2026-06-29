@@ -29,8 +29,10 @@ public class ConfigScreen extends Screen {
         int dy = 24;
 
         // Iterate over all registered options and create their widgets
-        for (ConfigOption<?> option : ConfigStore.getAllOptions()) {
-            AbstractWidget widget = option.createWidget(x, y, w, ConfigStore::save);
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        if (ctx == null) return;
+        for (ConfigOption<?> option : ctx.getConfigStore().getAllOptions()) {
+            AbstractWidget widget = option.createWidget(x, y, w, ctx.getConfigStore()::save);
             if (widget != null) {
                 this.addRenderableWidget(widget);
                 y += dy;

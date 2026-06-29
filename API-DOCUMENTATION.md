@@ -18,14 +18,14 @@ In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dep
 [[dependencies.yourmodid]]
     modId="liasmediaplayerapi"
     type="required"
-    versionRange="[1.0.0,)"
+    versionRange="[1.2.0,)"
     ordering="AFTER"
     side="CLIENT"
 ```
 
 ## Core Concepts
 
-All interactions with the API go through the `com.lia.mediaplayer.api.MediaPlayerAPI` facade class, or through NeoForge events.
+All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlayerAPI` interface, obtained via `LiasMediaPlayerApi.getInstance()`, or through NeoForge events.
 
 ### Thread Safety
 - **Media Queries** (`isSupported`, `kindOf`, volume getters/setters) are thread-safe and can be called from any thread.
@@ -76,29 +76,29 @@ class MyCustomAudioSource implements MediaSource {
 }
 ```
 
-Alternatively, you can register a source at any time by calling `MediaPlayerAPI.registerSource(source)`.
+Alternatively, you can register a source at any time by calling `LiasMediaPlayerApi.getInstance().registerSource(source)`.
 
 ### 2. Triggering Playback
 
 You can programmatically trigger media playback from your mod. These methods return a `long` ID which uniquely identifies the player window.
 
 ```java
-import com.lia.mediaplayer.api.MediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
 // Enqueue a video in the front-most video player (or open a new one if none exists)
-long videoId = MediaPlayerAPI.playVideo("https://www.youtube.com/watch?v=...");
+long videoId = LiasMediaPlayerApi.getInstance().playVideo("https://www.youtube.com/watch?v=...");
 
 // Open a video in a brand-new, independent player window
-long newVideoId = MediaPlayerAPI.playVideoNewWindow("https://www.youtube.com/watch?v=...");
+long newVideoId = LiasMediaPlayerApi.getInstance().playVideoNewWindow("https://www.youtube.com/watch?v=...");
 
 // Enqueue audio in the compact audio bar
-long audioId = MediaPlayerAPI.playAudio("https://example.com/sound.mp3");
+long audioId = LiasMediaPlayerApi.getInstance().playAudio("https://example.com/sound.mp3");
 
 // Play a full playlist of audio tracks (starts immediately, queues the rest)
-long playlistId = MediaPlayerAPI.playAudioAll(List.of("url1", "url2", "url3"), true /* shuffle */);
+long playlistId = LiasMediaPlayerApi.getInstance().playAudioAll(List.of("url1", "url2", "url3"), true /* shuffle */);
 
 // Pin an image window
-long imageId = MediaPlayerAPI.showImage("https://example.com/image.png");
+long imageId = LiasMediaPlayerApi.getInstance().showImage("https://example.com/image.png");
 ```
 
 ### 3. Listening to Playback Events
@@ -133,39 +133,39 @@ public class SyncListener {
 You can act on the front-most active player using the API:
 
 ```java
-import com.lia.mediaplayer.api.MediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
 // Toggles pause state for the active video
-MediaPlayerAPI.togglePauseVideo();
+LiasMediaPlayerApi.getInstance().togglePauseVideo();
 
 // Skips to the next track in the audio bar
-MediaPlayerAPI.nextAudio();
+LiasMediaPlayerApi.getInstance().nextAudio();
 
 // Seeks the video to 50%
-MediaPlayerAPI.seekVideo(0.5);
+LiasMediaPlayerApi.getInstance().seekVideo(0.5);
 ```
 
 You can also use the `long` ID returned by the playback methods to control a specific player directly, regardless of whether it is front-most:
 
 ```java
-import com.lia.mediaplayer.api.MediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
-long playerId = MediaPlayerAPI.playVideo("https://www.youtube.com/watch?v=...");
+long playerId = LiasMediaPlayerApi.getInstance().playVideo("https://www.youtube.com/watch?v=...");
 
 // Toggle pause on this specific player
-MediaPlayerAPI.togglePause(playerId);
+LiasMediaPlayerApi.getInstance().togglePause(playerId);
 
 // Skip to the next track
-MediaPlayerAPI.next(playerId);
+LiasMediaPlayerApi.getInstance().next(playerId);
 
 // Enqueue another video to this specific player
-MediaPlayerAPI.enqueueTo(playerId, "https://example.com/next.mp4");
+LiasMediaPlayerApi.getInstance().enqueueTo(playerId, "https://example.com/next.mp4");
 
 // Hide the player window
-MediaPlayerAPI.setVisible(playerId, false);
+LiasMediaPlayerApi.getInstance().setVisible(playerId, false);
 
 // Close the player
-MediaPlayerAPI.close(playerId);
+LiasMediaPlayerApi.getInstance().close(playerId);
 ```
 
 ### 5. Accessing Playlists
@@ -173,16 +173,17 @@ MediaPlayerAPI.close(playerId);
 The API provides methods to read and modify the user's saved playlists:
 
 ```java
-import com.lia.mediaplayer.api.MediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.IMediaPlayerAPI;
 
 // List all playlists
-for (MediaPlayerAPI.PlaylistInfo info : MediaPlayerAPI.getPlaylists()) {
+for (IMediaPlayerAPI.PlaylistInfo info : LiasMediaPlayerApi.getInstance().getPlaylists()) {
     System.out.println("Playlist: " + info.name() + " has " + info.urls().size() + " tracks.");
 }
 
 // Create a playlist and add a track
-MediaPlayerAPI.createPlaylist("Server Radio");
-MediaPlayerAPI.addToPlaylist("Server Radio", "https://youtube.com/...");
+LiasMediaPlayerApi.getInstance().createPlaylist("Server Radio");
+LiasMediaPlayerApi.getInstance().addToPlaylist("Server Radio", "https://youtube.com/...");
 ```
 
 ### 6. Registering Configuration Options
@@ -193,7 +194,7 @@ First, create a `ConfigOption`. The API provides handy subclasses like `IntSlide
 
 ```java
 import com.lia.mediaplayer.api.config.IntSliderOption;
-import com.lia.mediaplayer.api.MediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
 IntSliderOption myOption = new IntSliderOption(
     "myaddon:custom_limit", // Unique ID
@@ -204,7 +205,7 @@ IntSliderOption myOption = new IntSliderOption(
 );
 
 // Register it
-MediaPlayerAPI.registerConfigOption(myOption);
+LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
 ```
 
 Once registered, your option will automatically appear in the Options menu. You can access its current value at any time:
@@ -217,7 +218,8 @@ int currentLimit = myOption.getValue();
 
 | Class                          | Description                                                                                       |
 |--------------------------------|---------------------------------------------------------------------------------------------------|
-| `MediaPlayerAPI`               | The main static facade for controlling playback, volume, playlists, and registering sources/configs.|
+| `LiasMediaPlayerApi`               | The API mod entrypoint. Provides `getInstance()` to retrieve the active `IMediaPlayerAPI`.        |
+| `IMediaPlayerAPI`              | The main interface for controlling playback, volume, playlists, and registering sources/configs.|
 | `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
 | `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
 | `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |

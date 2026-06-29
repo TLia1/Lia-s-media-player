@@ -45,13 +45,16 @@ final class ImageHoverPreview {
         }
 
         String url = clickEvent.getValue();
-        if (!MediaSources.isImage(url)) {
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        if (ctx == null) return;
+
+        if (!ctx.getMediaSources().isImage(url)) {
             return;
         }
 
         // If it is already pinned and showing, the window is the preview — don't also
         // draw the floating one on top of it.
-        ImageWindow pinned = ImageWindowManager.get(url);
+        ImageWindow pinned = ctx.getImageManager().get(url);
         if (pinned != null && pinned.isVisible()) {
             return;
         }

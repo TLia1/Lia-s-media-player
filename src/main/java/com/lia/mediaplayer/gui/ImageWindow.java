@@ -35,7 +35,7 @@ final class ImageWindow extends MediaWindow {
 
     @Override
     protected void close() {
-        ImageWindowManager.close(this);
+        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getImageManager().close(this);
     }
 
     @Override

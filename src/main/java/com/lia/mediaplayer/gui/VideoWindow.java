@@ -196,7 +196,7 @@ final class VideoWindow extends MediaWindow {
 
     @Override
     protected void close() {
-        VideoPlayerManager.close(this);
+        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getVideoManager().close(this);
     }
 
     @Override

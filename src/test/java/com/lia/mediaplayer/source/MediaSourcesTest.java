@@ -5,55 +5,64 @@ import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
+import org.junit.jupiter.api.BeforeEach;
+
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class MediaSourcesTest {
 
+    private MediaSources mediaSources;
+
+    @BeforeEach
+    void setUp() {
+        mediaSources = new MediaSources();
+    }
+
     @Test
     void kindOf_ReturnsCorrectKind() {
-        assertEquals(MediaKind.IMAGE, MediaSources.kindOf("https://example.com/image.png"));
-        assertEquals(MediaKind.VIDEO, MediaSources.kindOf("https://example.com/video.mp4"));
-        assertEquals(MediaKind.AUDIO, MediaSources.kindOf("https://example.com/audio.mp3"));
-        assertEquals(MediaKind.VIDEO, MediaSources.kindOf("https://youtube.com/watch?v=123"));
-        assertEquals(MediaKind.VIDEO, MediaSources.kindOf("https://example.com/stream.m3u8"));
-        assertEquals(MediaKind.IMAGE, MediaSources.kindOf("https://tenor.com/view/123"));
-        assertNull(MediaSources.kindOf("https://example.com/unknown.txt"));
-        assertNull(MediaSources.kindOf(null));
+        assertEquals(MediaKind.IMAGE, mediaSources.kindOf("https://example.com/image.png"));
+        assertEquals(MediaKind.VIDEO, mediaSources.kindOf("https://example.com/video.mp4"));
+        assertEquals(MediaKind.AUDIO, mediaSources.kindOf("https://example.com/audio.mp3"));
+        assertEquals(MediaKind.VIDEO, mediaSources.kindOf("https://youtube.com/watch?v=123"));
+        assertEquals(MediaKind.VIDEO, mediaSources.kindOf("https://example.com/stream.m3u8"));
+        assertEquals(MediaKind.IMAGE, mediaSources.kindOf("https://tenor.com/view/123"));
+        assertNull(mediaSources.kindOf("https://example.com/unknown.txt"));
+        assertNull(mediaSources.kindOf(null));
         
-        assertEquals(MediaKind.IMAGE, MediaSources.apiKindOf("https://example.com/image.png"));
+        assertEquals(MediaKind.IMAGE, mediaSources.apiKindOf("https://example.com/image.png"));
     }
 
     @Test
     void isMethods_WorkCorrectly() {
-        assertTrue(MediaSources.isImage("https://example.com/image.png"));
-        assertFalse(MediaSources.isVideo("https://example.com/image.png"));
+        assertTrue(mediaSources.isImage("https://example.com/image.png"));
+        assertFalse(mediaSources.isVideo("https://example.com/image.png"));
         
-        assertTrue(MediaSources.isVideo("https://example.com/video.mp4"));
-        assertFalse(MediaSources.isAudio("https://example.com/video.mp4"));
+        assertTrue(mediaSources.isVideo("https://example.com/video.mp4"));
+        assertFalse(mediaSources.isAudio("https://example.com/video.mp4"));
         
-        assertTrue(MediaSources.isAudio("https://example.com/audio.mp3"));
-        assertFalse(MediaSources.isImage("https://example.com/audio.mp3"));
+        assertTrue(mediaSources.isAudio("https://example.com/audio.mp3"));
+        assertFalse(mediaSources.isImage("https://example.com/audio.mp3"));
         
-        assertTrue(MediaSources.isSupported("https://example.com/image.png"));
-        assertFalse(MediaSources.isSupported("https://example.com/unknown.txt"));
+        assertTrue(mediaSources.isSupported("https://example.com/image.png"));
+        assertFalse(mediaSources.isSupported("https://example.com/unknown.txt"));
     }
 
     @Test
     void find_ReturnsCorrectSource() {
-        Optional<MediaSource> source = MediaSources.find("https://youtube.com/watch?v=123");
+        Optional<MediaSource> source = mediaSources.find("https://youtube.com/watch?v=123");
         assertTrue(source.isPresent());
         assertTrue(source.get() instanceof YouTubeSource);
         
-        assertFalse(MediaSources.find("https://example.com/unknown.txt").isPresent());
+        assertFalse(mediaSources.find("https://example.com/unknown.txt").isPresent());
     }
 
     @Test
     void labelFor_ReturnsSourceLabelOrRawText() {
-        assertEquals("[youtube]", MediaSources.labelFor("https://youtube.com/watch?v=123").getString());
-        assertEquals("[picture]", MediaSources.labelFor("https://example.com/image.png").getString());
-        assertEquals("https://example.com/unknown.txt", MediaSources.labelFor("https://example.com/unknown.txt").getString());
+        assertEquals("[youtube]", mediaSources.labelFor("https://youtube.com/watch?v=123").getString());
+        assertEquals("[picture]", mediaSources.labelFor("https://example.com/image.png").getString());
+        assertEquals("https://example.com/unknown.txt", mediaSources.labelFor("https://example.com/unknown.txt").getString());
     }
 
     @Test
@@ -73,10 +82,10 @@ class MediaSourcesTest {
             }
         };
         
-        MediaSources.register(customSource);
+        mediaSources.register(customSource);
         
-        assertTrue(MediaSources.isSupported("custom"));
-        assertEquals(MediaKind.AUDIO, MediaSources.kindOf("custom"));
-        assertEquals("[custom]", MediaSources.labelFor("custom").getString());
+        assertTrue(mediaSources.isSupported("custom"));
+        assertEquals(MediaKind.AUDIO, mediaSources.kindOf("custom"));
+        assertEquals("[custom]", mediaSources.labelFor("custom").getString());
     }
 }

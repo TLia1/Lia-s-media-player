@@ -33,12 +33,14 @@ public final class AudioChatHandler {
     private static final ChatLinkRewriter.LinkRewrite AUDIO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            return MediaSources.isAudio(url);
+            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+            return ctx != null && ctx.getMediaSources().isAudio(url);
         }
 
         @Override
         public Component label(String url) {
-            return MediaSources.labelFor(url);
+            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.literal("[audio]");
         }
 
         @Override
@@ -66,6 +68,9 @@ public final class AudioChatHandler {
 
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-        AudioPlayerManager.disposeAll();
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        if (ctx != null) {
+            ctx.getAudioManager().disposeAll();
+        }
     }
 }

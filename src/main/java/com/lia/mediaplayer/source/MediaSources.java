@@ -23,10 +23,10 @@ import java.util.Optional;
  * sources are mutually exclusive, so order only matters if a future source overlaps
  * an existing one. All methods are stateless and safe to call from any thread.</p>
  */
-public final class MediaSources {
+public class MediaSources {
 
     /** The registered sources, in match order. Mutable so addons can append. */
-    private static final List<com.lia.mediaplayer.api.MediaSource> REGISTERED = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
+    private final List<com.lia.mediaplayer.api.MediaSource> registered = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
             new YouTubeSource(),     // a youtube.com / youtu.be link
@@ -35,7 +35,7 @@ public final class MediaSources {
             new AudioFileSource()    // a direct .mp3/.ogg/.wav/... file
     ));
 
-    private MediaSources() {
+    public MediaSources() {
     }
 
     /**
@@ -43,15 +43,15 @@ public final class MediaSources {
      * {@link com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent}.
      * Sources are appended after the built-in ones.
      */
-    public static void register(com.lia.mediaplayer.api.MediaSource source) {
+    public void register(com.lia.mediaplayer.api.MediaSource source) {
         if (source != null) {
-            REGISTERED.add(source);
+            registered.add(source);
         }
     }
 
     /** The first source that recognizes {@code url}, if any. */
-    public static Optional<com.lia.mediaplayer.api.MediaSource> find(String url) {
-        for (com.lia.mediaplayer.api.MediaSource source : REGISTERED) {
+    public Optional<com.lia.mediaplayer.api.MediaSource> find(String url) {
+        for (com.lia.mediaplayer.api.MediaSource source : registered) {
             if (source.matches(url)) {
                 return Optional.of(source);
             }
@@ -61,38 +61,38 @@ public final class MediaSources {
 
     /** The kind of {@code url}, or {@code null} if no source recognizes it (internal, returns API kind). */
     @Nullable
-    public static com.lia.mediaplayer.api.MediaKind kindOf(String url) {
+    public com.lia.mediaplayer.api.MediaKind kindOf(String url) {
         return find(url).map(com.lia.mediaplayer.api.MediaSource::kind).orElse(null);
     }
 
     /** The kind of {@code url}, or {@code null} — for the public API. */
     @Nullable
-    public static com.lia.mediaplayer.api.MediaKind apiKindOf(String url) {
+    public com.lia.mediaplayer.api.MediaKind apiKindOf(String url) {
         return kindOf(url);
     }
 
     /** Whether {@code url} is a recognized image/GIF link. */
-    public static boolean isImage(String url) {
+    public boolean isImage(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.IMAGE;
     }
 
     /** Whether {@code url} is a recognized video/stream/YouTube link. */
-    public static boolean isVideo(String url) {
+    public boolean isVideo(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.VIDEO;
     }
 
     /** Whether {@code url} is a recognized direct audio file. */
-    public static boolean isAudio(String url) {
+    public boolean isAudio(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.AUDIO;
     }
 
     /** Whether any source recognizes {@code url}. */
-    public static boolean isSupported(String url) {
+    public boolean isSupported(String url) {
         return find(url).isPresent();
     }
 
     /** The chat label for {@code url}, or the raw URL text if nothing recognizes it. */
-    public static Component labelFor(String url) {
+    public Component labelFor(String url) {
         return find(url).map(source -> source.label(url)).orElseGet(() -> Component.literal(url));
     }
 }

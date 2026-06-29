@@ -23,12 +23,12 @@ import java.util.Map;
  * The user's saved configuration, persisted to {@code <gamedir>/liasmediaplayer/config.json}.
  * Dynamically registers and stores ConfigOptions.
  */
-public final class ConfigStore {
+public class ConfigStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static boolean loaded;
+    private boolean loaded;
     
-    private static final Map<String, ConfigOption<?>> REGISTERED_OPTIONS = new LinkedHashMap<>();
+    private final Map<String, ConfigOption<?>> registeredOptions = new LinkedHashMap<>();
 
     // Built-in options
     public static final StepSliderOption<Integer> VIDEO_RESOLUTION;
@@ -54,7 +54,9 @@ public final class ConfigStore {
         MAX_AUDIO_WINDOWS = new IntSliderOption("liasmediaplayer:max_audio_windows", "config.liasmediaplayer.max_audio_windows", 4, 1, 10);
         MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
         MAX_IMAGE_CACHE_ENTRIES = new IntSliderOption("liasmediaplayer:max_image_cache_entries", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100);
+    }
 
+    public ConfigStore() {
         register(VIDEO_RESOLUTION);
         register(MAX_PINNED_IMAGES);
         register(MAX_VIDEO_WINDOWS);
@@ -63,11 +65,8 @@ public final class ConfigStore {
         register(MAX_IMAGE_CACHE_ENTRIES);
     }
 
-    private ConfigStore() {
-    }
-
-    public static synchronized void register(ConfigOption<?> option) {
-        REGISTERED_OPTIONS.put(option.getId(), option);
+    public synchronized void register(ConfigOption<?> option) {
+        registeredOptions.put(option.getId(), option);
         if (loaded) {
             // Re-load to apply any saved values for newly registered options
             load();
@@ -75,15 +74,15 @@ public final class ConfigStore {
     }
 
     @SuppressWarnings("unchecked")
-    public static synchronized <T> ConfigOption<T> getOption(String id) {
-        return (ConfigOption<T>) REGISTERED_OPTIONS.get(id);
+    public synchronized <T> ConfigOption<T> getOption(String id) {
+        return (ConfigOption<T>) registeredOptions.get(id);
     }
 
-    public static synchronized Collection<ConfigOption<?>> getAllOptions() {
-        return REGISTERED_OPTIONS.values();
+    public synchronized Collection<ConfigOption<?>> getAllOptions() {
+        return registeredOptions.values();
     }
 
-    public static synchronized void ensureLoaded() {
+    public synchronized void ensureLoaded() {
         if (loaded) {
             return;
         }
@@ -91,7 +90,7 @@ public final class ConfigStore {
         load();
     }
 
-    public static synchronized void save() {
+    public synchronized void save() {
         Path path = file();
         if (path == null) {
             return;
@@ -101,7 +100,7 @@ public final class ConfigStore {
             Path tmp = path.resolveSibling("config.json.tmp");
             try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
                 JsonObject json = new JsonObject();
-                for (ConfigOption<?> option : REGISTERED_OPTIONS.values()) {
+                for (ConfigOption<?> option : registeredOptions.values()) {
                     json.add(option.getId(), option.serialize());
                 }
                 GSON.toJson(json, writer);
@@ -112,7 +111,7 @@ public final class ConfigStore {
         }
     }
 
-    private static void load() {
+    private void load() {
         Path path = file();
         if (path == null || !Files.isRegularFile(path)) {
             return;
@@ -121,7 +120,7 @@ public final class ConfigStore {
             JsonObject json = GSON.fromJson(reader, JsonObject.class);
             if (json != null) {
                 for (Map.Entry<String, com.google.gson.JsonElement> entry : json.entrySet()) {
-                    ConfigOption<?> option = REGISTERED_OPTIONS.get(entry.getKey());
+                    ConfigOption<?> option = registeredOptions.get(entry.getKey());
                     if (option != null) {
                         option.deserialize(entry.getValue());
                     }
@@ -132,7 +131,7 @@ public final class ConfigStore {
         }
     }
 
-    private static Path file() {
+    private Path file() {
         try {
             return Minecraft.getInstance().gameDirectory.toPath()
                     .resolve("liasmediaplayer").resolve("config.json");
@@ -142,12 +141,12 @@ public final class ConfigStore {
     }
 
     // Convenience delegates for the core built-in options
-    public static int videoMaxWidth() {
+    public int videoMaxWidth() {
         ensureLoaded();
         return RESOLUTION_WIDTHS[VIDEO_RESOLUTION.getValue()];
     }
 
-    public static int videoMaxHeight() {
+    public int videoMaxHeight() {
         ensureLoaded();
         return RESOLUTION_HEIGHTS[VIDEO_RESOLUTION.getValue()];
     }

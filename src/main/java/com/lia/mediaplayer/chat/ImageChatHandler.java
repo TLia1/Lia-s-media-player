@@ -32,12 +32,14 @@ public final class ImageChatHandler {
     private static final ChatLinkRewriter.LinkRewrite IMAGE_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            return MediaSources.isImage(url);
+            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+            return ctx != null && ctx.getMediaSources().isImage(url);
         }
 
         @Override
         public Component label(String url) {
-            return MediaSources.labelFor(url);
+            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.literal("[picture]");
         }
 
         @Override
@@ -68,7 +70,10 @@ public final class ImageChatHandler {
 
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-        ImageWindowManager.disposeAll();
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        if (ctx != null) {
+            ctx.getImageManager().disposeAll();
+        }
         ImagePreviewCache.clear();
     }
 }

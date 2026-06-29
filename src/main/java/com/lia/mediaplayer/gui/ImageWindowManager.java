@@ -18,57 +18,55 @@ import java.util.Map;
  * <p>All methods run on the render/main thread (the only place GUI events fire),
  * so no synchronization is needed.</p>
  */
-public final class ImageWindowManager {
+public class ImageWindowManager {
     /** Hard cap on simultaneous pinned images; the oldest is dropped past this. */
+    private final LinkedHashMap<String, ImageWindow> windows = new LinkedHashMap<>();
 
-
-    private static final LinkedHashMap<String, ImageWindow> WINDOWS = new LinkedHashMap<>();
-
-    private ImageWindowManager() {
+    public ImageWindowManager() {
     }
 
     /** Ensures a (visible) pinned window exists for the URL. */
-    static ImageWindow show(String url) {
-        ImageWindow window = WINDOWS.get(url);
+    public ImageWindow show(String url) {
+        ImageWindow window = windows.get(url);
         if (window == null) {
             evictIfFull();
             window = new ImageWindow(url);
-            WINDOWS.put(url, window);
+            windows.put(url, window);
         }
         window.setVisible(true);
         return window;
     }
 
     @Nullable
-    static ImageWindow get(String url) {
-        return WINDOWS.get(url);
+    public ImageWindow get(String url) {
+        return windows.get(url);
     }
 
     /** A stable snapshot for iterating during render / input handling. */
-    static List<ImageWindow> windows() {
-        return new ArrayList<>(WINDOWS.values());
+    public List<ImageWindow> getWindows() {
+        return new ArrayList<>(windows.values());
     }
 
-    static boolean isEmpty() {
-        return WINDOWS.isEmpty();
+    public boolean isEmpty() {
+        return windows.isEmpty();
     }
 
-    static void close(ImageWindow window) {
-        WINDOWS.values().remove(window);
+    public void close(ImageWindow window) {
+        windows.values().remove(window);
     }
 
-    public static void disposeAll() {
-        WINDOWS.clear();
+    public void disposeAll() {
+        windows.clear();
     }
 
     /** Public entry point for the API: show/pin an image URL. Returns the window ID. */
-    public static long showPublic(String url) {
+    public long showPublic(String url) {
         return show(url).getId();
     }
 
-    private static void evictIfFull() {
-        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_PINNED_IMAGES.getValue()) {
-            Iterator<Map.Entry<String, ImageWindow>> it = WINDOWS.entrySet().iterator();
+    private void evictIfFull() {
+        while (windows.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_PINNED_IMAGES.getValue()) {
+            Iterator<Map.Entry<String, ImageWindow>> it = windows.entrySet().iterator();
             if (!it.hasNext()) {
                 return;
             }
@@ -81,8 +79,8 @@ public final class ImageWindowManager {
     // ID-based API methods
     // ------------------------------------------------------------------
 
-    static ImageWindow getById(long id) {
-        for (ImageWindow window : WINDOWS.values()) {
+    public ImageWindow getById(long id) {
+        for (ImageWindow window : windows.values()) {
             if (window.getId() == id) {
                 return window;
             }
@@ -90,18 +88,18 @@ public final class ImageWindowManager {
         return null;
     }
 
-    public static boolean exists(long id) {
+    public boolean exists(long id) {
         return getById(id) != null;
     }
 
-    public static void setVisible(long id, boolean visible) {
+    public void setVisible(long id, boolean visible) {
         ImageWindow window = getById(id);
         if (window != null) {
             window.setVisible(visible);
         }
     }
 
-    public static void closePublic(long id) {
+    public void closePublic(long id) {
         ImageWindow window = getById(id);
         if (window != null) {
             close(window);

@@ -106,6 +106,10 @@ public final class AudioPlayer {
         return url;
     }
 
+    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
+        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    }
+
     public State state() {
         return state;
     }
@@ -133,32 +137,32 @@ public final class AudioPlayer {
     // ------------------------------------------------------------------
 
     public float volume() {
-        return Volume.level();
+        return getContext().getVolumeManager().level();
     }
 
     public boolean isMuted() {
-        return Volume.isMuted();
+        return getContext().getVolumeManager().isMuted();
     }
 
     public void setVolume(float value) {
-        Volume.set(value);
+        getContext().getVolumeManager().set(value);
         applyGainIfOpen();
     }
 
     public void changeVolume(float delta) {
-        Volume.change(delta);
+        getContext().getVolumeManager().change(delta);
         applyGainIfOpen();
     }
 
     public void toggleMute() {
-        Volume.toggleMute();
+        getContext().getVolumeManager().toggleMute();
         applyGainIfOpen();
     }
 
     private void applyGainIfOpen() {
         SourceDataLine line = audioLine;
         if (line != null) {
-            lastAppliedGain = Volume.apply(line, lastAppliedGain);
+            lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
         }
     }
 
@@ -453,7 +457,7 @@ public final class AudioPlayer {
                 if (!running || gen != sessionGen) {
                     return;
                 }
-                lastAppliedGain = Volume.apply(line, lastAppliedGain);
+                lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
                 line.write(buffer, 0, read);
             }
             // Clean end-of-stream for the current session: let the control thread react.
@@ -511,7 +515,7 @@ public final class AudioPlayer {
             line.open(format);
             line.start();
             audioLine = line;
-            lastAppliedGain = Volume.apply(line, lastAppliedGain);
+            lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
             audioSampleRate = sampleRate;
             audioChannels = channels;
             return true;

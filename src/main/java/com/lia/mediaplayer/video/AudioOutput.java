@@ -77,7 +77,8 @@ public class AudioOutput {
     }
 
     private void applyGain(SourceDataLine line) {
-        lastAppliedGain = Volume.apply(line, lastAppliedGain);
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        lastAppliedGain = ctx.getVolumeManager().apply(line, lastAppliedGain);
     }
 
     public void close() {

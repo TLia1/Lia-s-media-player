@@ -31,11 +31,15 @@ public class LiasMediaPlayer {
     public LiasMediaPlayer(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
         modContainer.registerExtensionPoint(net.neoforged.neoforge.client.gui.IConfigScreenFactory.class, (mc, parent) -> new com.lia.mediaplayer.gui.ConfigScreen(parent));
 
+        // Create the global context which holds all managers
+        MediaPlayerContext context = new MediaPlayerContext();
+        com.lia.mediaplayer.api.LiasMediaPlayerApi.setInstance(context);
+
         // Install yt-dlp and ffmpeg in the background so they are ready when needed.
         MediaBinaries.installAllAsync();
 
         // Load persisted volume.
-        com.lia.mediaplayer.media.Volume.load();
+        context.getVolumeManager().load();
 
         // Fire the source registration event during client setup so addons can
         // register their custom MediaSources.
@@ -47,7 +51,8 @@ public class LiasMediaPlayer {
         // Post to the mod event bus; addons that depend on the API listen for this.
         net.neoforged.fml.ModLoader.postEventWrapContainerInModOrder(registrationEvent);
         // Apply the registered sources.
-        registrationEvent.getRegistered().forEach(MediaSources::register);
+        MediaPlayerContext context = (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        registrationEvent.getRegistered().forEach(source -> context.getMediaSources().register(source));
         LOGGER.info("Registered {} external media source(s) via API",
                 registrationEvent.getRegistered().size());
     }

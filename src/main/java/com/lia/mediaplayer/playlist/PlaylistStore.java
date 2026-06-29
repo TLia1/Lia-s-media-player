@@ -26,42 +26,42 @@ import java.util.List;
  * every mutating call saves immediately. Methods are {@code synchronized} for safety,
  * though in practice they are only called from the render/main thread.</p>
  */
-public final class PlaylistStore {
+public class PlaylistStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Type LIST_TYPE = new TypeToken<List<Playlist>>() {
     }.getType();
 
-    private static final List<Playlist> PLAYLISTS = new ArrayList<>();
-    private static boolean loaded;
+    private final List<Playlist> playlists = new ArrayList<>();
+    private boolean loaded;
 
-    private PlaylistStore() {
+    public PlaylistStore() {
     }
 
     /** The live list of playlists (mutating a {@link Playlist} then calling {@link #save()} persists it). */
-    public static synchronized List<Playlist> all() {
+    public synchronized List<Playlist> all() {
         ensureLoaded();
-        return PLAYLISTS;
+        return playlists;
     }
 
     /** Creates and saves a new, empty playlist. */
-    public static synchronized Playlist create(String name) {
+    public synchronized Playlist create(String name) {
         ensureLoaded();
         Playlist playlist = new Playlist(name == null || name.isBlank() ? "New playlist" : name.strip());
-        PLAYLISTS.add(playlist);
+        playlists.add(playlist);
         save();
         return playlist;
     }
 
-    public static synchronized void delete(Playlist playlist) {
+    public synchronized void delete(Playlist playlist) {
         ensureLoaded();
-        if (PLAYLISTS.remove(playlist)) {
+        if (playlists.remove(playlist)) {
             save();
         }
     }
 
     /** Persists the current playlists to disk. Best-effort: a failure is logged, not thrown. */
-    public static synchronized void save() {
+    public synchronized void save() {
         Path path = file();
         if (path == null) {
             return;
@@ -70,7 +70,7 @@ public final class PlaylistStore {
             Files.createDirectories(path.getParent());
             Path tmp = path.resolveSibling("playlists.json.tmp");
             try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                GSON.toJson(PLAYLISTS, LIST_TYPE, writer);
+                GSON.toJson(playlists, LIST_TYPE, writer);
             }
             Files.move(tmp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | RuntimeException e) {
@@ -78,7 +78,7 @@ public final class PlaylistStore {
         }
     }
 
-    private static void ensureLoaded() {
+    private void ensureLoaded() {
         if (loaded) {
             return;
         }
@@ -86,7 +86,7 @@ public final class PlaylistStore {
         load();
     }
 
-    private static void load() {
+    private void load() {
         Path path = file();
         if (path == null || !Files.isRegularFile(path)) {
             return;
@@ -96,7 +96,7 @@ public final class PlaylistStore {
             if (parsed != null) {
                 for (Playlist playlist : parsed) {
                     if (playlist != null && playlist.name() != null) {
-                        PLAYLISTS.add(playlist);
+                        playlists.add(playlist);
                     }
                 }
             }
@@ -105,7 +105,7 @@ public final class PlaylistStore {
         }
     }
 
-    private static Path file() {
+    private Path file() {
         try {
             return Minecraft.getInstance().gameDirectory.toPath()
                     .resolve("liasmediaplayer").resolve("playlists.json");

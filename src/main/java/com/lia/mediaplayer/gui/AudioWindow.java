@@ -153,7 +153,7 @@ final class AudioWindow extends MediaWindow {
 
     @Override
     protected void close() {
-        AudioPlayerManager.close(this);
+        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getAudioManager().close(this);
     }
 
     @Override

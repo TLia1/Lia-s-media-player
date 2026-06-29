@@ -21,26 +21,24 @@ import java.util.List;
  * GUI events fire), so no synchronization is needed here — each {@link VideoPlayer}
  * handles its own background decoding internally.</p>
  */
-public final class VideoPlayerManager {
+public class VideoPlayerManager {
     /**
      * Hard cap on simultaneous windows; the oldest is disposed past this.
      */
+    private final List<VideoWindow> windows = new ArrayList<>();
 
-
-    private static final List<VideoWindow> WINDOWS = new ArrayList<>();
-
-    private VideoPlayerManager() {
+    public VideoPlayerManager() {
     }
 
     /**
      * Creates a brand-new, independent window playing {@code url} and starts it.
      * Use this when the user wants a separate player rather than queueing.
      */
-    static VideoWindow open(String url) {
+    public VideoWindow open(String url) {
         evictIfFull();
         VideoPlayer player = new VideoPlayer(url);
         VideoWindow window = new VideoWindow(player);
-        WINDOWS.add(window);
+        windows.add(window);
         player.start();
         window.setVisible(true);
         return window;
@@ -52,7 +50,7 @@ public final class VideoPlayerManager {
      * default click behaviour: links pile up in one player instead of opening a new
      * window each time.
      */
-    static VideoWindow enqueue(String url) {
+    public VideoWindow enqueue(String url) {
         VideoWindow target = frontMost();
         if (target == null) {
             return open(url);
@@ -67,31 +65,31 @@ public final class VideoPlayerManager {
      * The visible-or-hidden window with the highest stacking order, or {@code null}.
      */
     @Nullable
-    static VideoWindow frontMost() {
-        return WINDOWS.stream().max(Comparator.comparingLong(VideoWindow::zOrder)).orElse(null);
+    public VideoWindow frontMost() {
+        return windows.stream().max(Comparator.comparingLong(VideoWindow::zOrder)).orElse(null);
     }
 
-    public static boolean hasFrontMost() {
+    public boolean hasFrontMost() {
         return frontMost() != null;
     }
 
     /**
      * A stable snapshot for iterating during render / input handling.
      */
-    static List<VideoWindow> windows() {
-        return new ArrayList<>(WINDOWS);
+    public List<VideoWindow> getWindows() {
+        return new ArrayList<>(windows);
     }
 
-    static boolean isEmpty() {
-        return WINDOWS.isEmpty();
+    public boolean isEmpty() {
+        return windows.isEmpty();
     }
 
     /**
      * Number of windows that are currently hidden (playing but not on screen).
      */
-    static int hiddenCount() {
+    public int hiddenCount() {
         int n = 0;
-        for (VideoWindow window : WINDOWS) {
+        for (VideoWindow window : windows) {
             if (!window.isVisible()) {
                 n++;
             }
@@ -102,8 +100,8 @@ public final class VideoPlayerManager {
     /**
      * Makes every hidden window visible again and raises them to the front.
      */
-    static void revealAll() {
-        for (VideoWindow window : WINDOWS) {
+    public void revealAll() {
+        for (VideoWindow window : windows) {
             if (!window.isVisible()) {
                 window.setVisible(true);
                 window.bringToFront();
@@ -114,8 +112,8 @@ public final class VideoPlayerManager {
     /**
      * Disposes and removes a single window (and anything it had queued).
      */
-    static void close(VideoWindow window) {
-        if (WINDOWS.remove(window)) {
+    public void close(VideoWindow window) {
+        if (windows.remove(window)) {
             window.disposeAll();
         }
     }
@@ -123,58 +121,51 @@ public final class VideoPlayerManager {
     /**
      * Disposes every window (e.g. on disconnect).
      */
-    public static void disposeAll() {
-        for (VideoWindow window : WINDOWS) {
+    public void disposeAll() {
+        for (VideoWindow window : windows) {
             window.disposeAll();
         }
-        WINDOWS.clear();
+        windows.clear();
     }
 
-    private static void evictIfFull() {
-        while (WINDOWS.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_VIDEO_WINDOWS.getValue()) {
-            VideoWindow eldest = WINDOWS.removeFirst();
+    private void evictIfFull() {
+        while (windows.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_VIDEO_WINDOWS.getValue()) {
+            VideoWindow eldest = windows.removeFirst();
             eldest.disposeAll();
         }
     }
 
     // ------------------------------------------------------------------
-    // Public API entry points (called by MediaPlayerAPI)
+    // Public API entry points (called by MediaPlayerContext)
     // ------------------------------------------------------------------
 
-    /** Public entry point for the API: enqueue a video URL. Returns the window ID. */
-    public static long enqueuePublic(String url) {
+    public long enqueuePublic(String url) {
         return enqueue(url).getId();
     }
 
-    /** Public entry point for the API: open a new independent window. Returns the window ID. */
-    public static long openPublic(String url) {
+    public long openPublic(String url) {
         return open(url).getId();
     }
 
-    /** Toggles pause on the front-most video player (API + keybind). */
-    public static void togglePauseFrontMost() {
+    public void togglePauseFrontMost() {
         VideoWindow window = frontMost();
         if (window != null) {
             window.player().togglePause();
         }
     }
 
-    /** Skips to the next queued video in the front-most window (API). */
-    public static void nextFrontMost() {
+    public void nextFrontMost() {
         VideoWindow window = frontMost();
         if (window != null) {
             window.advance();
         }
     }
 
-    /** Skips to the previous queued video in the front-most window (API). */
-    public static void previousFrontMost() {
+    public void previousFrontMost() {
         // VideoWindow doesn't have previous(), but for keybind compatibility we just ignore it
-        // or we could implement it if we had a history. For now, do nothing.
     }
 
-    /** Seeks the front-most video player to a fraction (API). */
-    public static void seekFrontMost(double fraction) {
+    public void seekFrontMost(double fraction) {
         VideoWindow window = frontMost();
         if (window != null) {
             window.player().seekToFraction(fraction);
@@ -185,8 +176,8 @@ public final class VideoPlayerManager {
     // ID-based API methods
     // ------------------------------------------------------------------
 
-    static VideoWindow getById(long id) {
-        for (VideoWindow window : WINDOWS) {
+    public VideoWindow getById(long id) {
+        for (VideoWindow window : windows) {
             if (window.getId() == id) {
                 return window;
             }
@@ -194,39 +185,39 @@ public final class VideoPlayerManager {
         return null;
     }
 
-    public static boolean exists(long id) {
+    public boolean exists(long id) {
         return getById(id) != null;
     }
 
-    public static void togglePause(long id) {
+    public void togglePause(long id) {
         VideoWindow window = getById(id);
         if (window != null) {
             window.player().togglePause();
         }
     }
 
-    public static void next(long id) {
+    public void next(long id) {
         VideoWindow window = getById(id);
         if (window != null) {
             window.advance();
         }
     }
 
-    public static void enqueueTo(long id, String url) {
+    public void enqueueTo(long id, String url) {
         VideoWindow window = getById(id);
         if (window != null) {
             window.enqueue(url);
         }
     }
 
-    public static void setVisible(long id, boolean visible) {
+    public void setVisible(long id, boolean visible) {
         VideoWindow window = getById(id);
         if (window != null) {
             window.setVisible(visible);
         }
     }
 
-    public static void closePublic(long id) {
+    public void closePublic(long id) {
         VideoWindow window = getById(id);
         if (window != null) {
             close(window);

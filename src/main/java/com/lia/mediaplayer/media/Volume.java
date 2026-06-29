@@ -27,38 +27,38 @@ import java.nio.file.Paths;
  * additionally scales it by Minecraft's live master-volume slider so the in-game
  * sound options still apply. All methods are safe to call from any thread.</p>
  */
-public final class Volume {
+public class Volume {
 
     private static final float MUTE_THRESHOLD = 0.0001f;
 
     /** User-controlled level in 0..1, shared by audio and video. */
-    private static volatile float level = 1.0f;
+    private volatile float level = 1.0f;
     /** The level to restore when un-muting. */
-    private static volatile float beforeMute = 1.0f;
+    private volatile float beforeMute = 1.0f;
 
-    private Volume() {
+    public Volume() {
     }
 
     /** The current user-set level in 0..1. */
-    public static float level() {
+    public float level() {
         return level;
     }
 
-    public static boolean isMuted() {
+    public boolean isMuted() {
         return level <= MUTE_THRESHOLD;
     }
 
     /** Sets the level, clamped to 0..1. */
-    public static void set(float value) {
+    public void set(float value) {
         level = Math.max(0.0f, Math.min(1.0f, value));
         save();
     }
 
-    public static void change(float delta) {
+    public void change(float delta) {
         set(level + delta);
     }
 
-    public static synchronized void toggleMute() {
+    public synchronized void toggleMute() {
         if (level > MUTE_THRESHOLD) {
             beforeMute = level;
             set(0.0f);
@@ -68,12 +68,12 @@ public final class Volume {
     }
 
     /** The level actually sent to a line: the user setting scaled by the master slider. */
-    public static float effective() {
+    public float effective() {
         return Math.max(0.0f, Math.min(1.0f, level * master()));
     }
 
     /** The current Minecraft master-volume slider value (0..1), read live. */
-    public static float master() {
+    public float master() {
         try {
             return Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MASTER);
         } catch (Exception e) {
@@ -88,7 +88,7 @@ public final class Volume {
      * can re-apply it every buffer to follow live master-volume changes. Returns the
      * value the caller should remember as the new {@code lastApplied}.
      */
-    public static float apply(SourceDataLine line, float lastApplied) {
+    public float apply(SourceDataLine line, float lastApplied) {
         try {
             float v = effective();
             if (Math.abs(v - lastApplied) < 0.001f) {
@@ -112,11 +112,11 @@ public final class Volume {
         }
     }
 
-    private static Path getConfigPath() {
+    private Path getConfigPath() {
         return Paths.get(Minecraft.getInstance().gameDirectory.getAbsolutePath(), "config", "liasmediaplayer_volume.txt");
     }
 
-    public static void load() {
+    public void load() {
         try {
             Path path = getConfigPath();
             if (Files.exists(path)) {
@@ -128,7 +128,7 @@ public final class Volume {
         }
     }
 
-    private static void save() {
+    private void save() {
         try {
             Path path = getConfigPath();
             Files.createDirectories(path.getParent());

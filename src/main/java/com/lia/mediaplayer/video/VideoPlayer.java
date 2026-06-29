@@ -77,6 +77,10 @@ public final class VideoPlayer {
         this.session = new FFmpegSession();
     }
 
+    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
+        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    }
+
     public String url() {
         return url;
     }
@@ -103,24 +107,24 @@ public final class VideoPlayer {
     }
 
     public float volume() {
-        return Volume.level();
+        return getContext().getVolumeManager().level();
     }
 
     public boolean isMuted() {
-        return Volume.isMuted();
+        return getContext().getVolumeManager().isMuted();
     }
 
     public void setVolume(float value) {
-        Volume.set(value);
+        getContext().getVolumeManager().set(value);
         audioOutput.applyGain();
     }
 
     public void changeVolume(float delta) {
-        setVolume(Volume.level() + delta);
+        setVolume(getContext().getVolumeManager().level() + delta);
     }
 
     public void toggleMute() {
-        Volume.toggleMute();
+        getContext().getVolumeManager().toggleMute();
         audioOutput.applyGain();
     }
 
@@ -258,7 +262,7 @@ public final class VideoPlayer {
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
-            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), com.lia.mediaplayer.config.ConfigStore.videoMaxWidth(), com.lia.mediaplayer.config.ConfigStore.videoMaxHeight());
+            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), getContext().getConfigStore().videoMaxWidth(), getContext().getConfigStore().videoMaxHeight());
             videoWidth = target[0];
             videoHeight = target[1];
             durationMicros = Math.max(0, info.durationMicros());
