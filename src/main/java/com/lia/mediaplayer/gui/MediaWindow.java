@@ -42,6 +42,16 @@ abstract class MediaWindow {
 
     enum ClickResult {NONE, HANDLED, CLOSE}
 
+    /** Monotonic counter handing out unique IDs to every window. */
+    private static long idSeq;
+
+    /** This window's unique ID for API control. */
+    private final long id = ++idSeq;
+
+    public final long getId() {
+        return id;
+    }
+
     /** Monotonic counter handing out stacking order to every window (image or video). */
     private static long zSeq;
 

@@ -141,14 +141,14 @@ public final class VideoPlayerManager {
     // Public API entry points (called by MediaPlayerAPI)
     // ------------------------------------------------------------------
 
-    /** Public entry point for the API: enqueue a video URL. */
-    public static void enqueuePublic(String url) {
-        enqueue(url);
+    /** Public entry point for the API: enqueue a video URL. Returns the window ID. */
+    public static long enqueuePublic(String url) {
+        return enqueue(url).getId();
     }
 
-    /** Public entry point for the API: open a new independent window. */
-    public static void openPublic(String url) {
-        open(url);
+    /** Public entry point for the API: open a new independent window. Returns the window ID. */
+    public static long openPublic(String url) {
+        return open(url).getId();
     }
 
     /** Toggles pause on the front-most video player (API + keybind). */
@@ -178,6 +178,58 @@ public final class VideoPlayerManager {
         VideoWindow window = frontMost();
         if (window != null) {
             window.player().seekToFraction(fraction);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // ID-based API methods
+    // ------------------------------------------------------------------
+
+    static VideoWindow getById(long id) {
+        for (VideoWindow window : WINDOWS) {
+            if (window.getId() == id) {
+                return window;
+            }
+        }
+        return null;
+    }
+
+    public static boolean exists(long id) {
+        return getById(id) != null;
+    }
+
+    public static void togglePause(long id) {
+        VideoWindow window = getById(id);
+        if (window != null) {
+            window.player().togglePause();
+        }
+    }
+
+    public static void next(long id) {
+        VideoWindow window = getById(id);
+        if (window != null) {
+            window.advance();
+        }
+    }
+
+    public static void enqueueTo(long id, String url) {
+        VideoWindow window = getById(id);
+        if (window != null) {
+            window.enqueue(url);
+        }
+    }
+
+    public static void setVisible(long id, boolean visible) {
+        VideoWindow window = getById(id);
+        if (window != null) {
+            window.setVisible(visible);
+        }
+    }
+
+    public static void closePublic(long id) {
+        VideoWindow window = getById(id);
+        if (window != null) {
+            close(window);
         }
     }
 }

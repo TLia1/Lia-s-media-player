@@ -111,17 +111,21 @@ public final class MediaPlayerAPI {
     /**
      * Opens a video URL in the in-game video player. If a player window already
      * exists, the URL is appended to its queue; otherwise a new window is created.
+     *
+     * @return the unique ID of the player window
      */
-    public static void playVideo(String url) {
-        VideoPlayerManager.enqueuePublic(url);
+    public static long playVideo(String url) {
+        return VideoPlayerManager.enqueuePublic(url);
     }
 
     /**
      * Opens a video URL in a <b>new, independent</b> player window (bypassing
      * the queue of any existing window).
+     *
+     * @return the unique ID of the new player window
      */
-    public static void playVideoNewWindow(String url) {
-        VideoPlayerManager.openPublic(url);
+    public static long playVideoNewWindow(String url) {
+        return VideoPlayerManager.openPublic(url);
     }
 
     // ====================================================================
@@ -131,17 +135,21 @@ public final class MediaPlayerAPI {
     /**
      * Opens an audio URL in the in-game audio player. If an audio bar already
      * exists, the URL is appended to its queue; otherwise a new bar is created.
+     *
+     * @return the unique ID of the audio player
      */
-    public static void playAudio(String url) {
-        AudioPlayerManager.enqueuePublic(url);
+    public static long playAudio(String url) {
+        return AudioPlayerManager.enqueuePublic(url);
     }
 
     /**
      * Plays a list of audio URLs. The first track starts immediately and the
      * rest queue behind it. When {@code shuffle} is true, the order is randomized.
+     *
+     * @return the unique ID of the audio player, or -1 if the list is empty
      */
-    public static void playAudioAll(List<String> urls, boolean shuffle) {
-        AudioPlayerManager.playAll(urls, shuffle);
+    public static long playAudioAll(List<String> urls, boolean shuffle) {
+        return AudioPlayerManager.playAllPublic(urls, shuffle);
     }
 
     // ====================================================================
@@ -151,9 +159,11 @@ public final class MediaPlayerAPI {
     /**
      * Shows an image URL in a pinned window (or reveals the existing one for
      * this URL).
+     *
+     * @return the unique ID of the pinned image window
      */
-    public static void showImage(String url) {
-        ImageWindowManager.showPublic(url);
+    public static long showImage(String url) {
+        return ImageWindowManager.showPublic(url);
     }
 
     // ====================================================================
@@ -199,6 +209,66 @@ public final class MediaPlayerAPI {
      */
     public static void seekAudio(double fraction) {
         AudioPlayerManager.seekFrontMost(fraction);
+    }
+
+    // ====================================================================
+    // Playback controls (act on a specific player by ID)
+    // ====================================================================
+
+    /** Toggles pause/play on a specific player by its ID. */
+    public static void togglePause(long id) {
+        if (VideoPlayerManager.exists(id)) {
+            VideoPlayerManager.togglePause(id);
+        } else if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.togglePause(id);
+        }
+    }
+
+    /** Skips to the next track on a specific player by its ID. */
+    public static void next(long id) {
+        if (VideoPlayerManager.exists(id)) {
+            VideoPlayerManager.next(id);
+        } else if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.next(id);
+        }
+    }
+
+    /** Goes back to the previous track on a specific player by its ID. */
+    public static void previous(long id) {
+        if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.previous(id);
+        }
+    }
+
+    /** Enqueues a URL to a specific player by its ID. */
+    public static void enqueueTo(long id, String url) {
+        if (VideoPlayerManager.exists(id)) {
+            VideoPlayerManager.enqueueTo(id, url);
+        } else if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.enqueueTo(id, url);
+        }
+    }
+
+    /** Shows or hides a specific player by its ID. */
+    public static void setVisible(long id, boolean visible) {
+        if (VideoPlayerManager.exists(id)) {
+            VideoPlayerManager.setVisible(id, visible);
+        } else if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.setVisible(id, visible);
+        } else if (ImageWindowManager.exists(id)) {
+            ImageWindowManager.setVisible(id, visible);
+        }
+    }
+
+    /** Closes a specific player by its ID. */
+    public static void close(long id) {
+        if (VideoPlayerManager.exists(id)) {
+            VideoPlayerManager.closePublic(id);
+        } else if (AudioPlayerManager.exists(id)) {
+            AudioPlayerManager.closePublic(id);
+        } else if (ImageWindowManager.exists(id)) {
+            ImageWindowManager.closePublic(id);
+        }
     }
 
     // ====================================================================

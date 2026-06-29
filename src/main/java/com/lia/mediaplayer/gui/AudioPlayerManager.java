@@ -170,9 +170,15 @@ public final class AudioPlayerManager {
     // Public API entry points (called by MediaPlayerAPI)
     // ------------------------------------------------------------------
 
-    /** Public entry point for the API: enqueue an audio URL. */
-    public static void enqueuePublic(String url) {
-        enqueue(url);
+    /** Public entry point for the API: enqueue an audio URL. Returns the window ID. */
+    public static long enqueuePublic(String url) {
+        return enqueue(url).getId();
+    }
+
+    /** Public entry point for the API: play a list of URLs. Returns the window ID, or -1 if empty. */
+    public static long playAllPublic(List<String> urls, boolean shuffle) {
+        AudioWindow window = playAll(urls, shuffle);
+        return window != null ? window.getId() : -1;
     }
 
     /** Seeks the front-most audio player to a fraction (API). */
@@ -180,6 +186,65 @@ public final class AudioPlayerManager {
         AudioWindow window = frontMost();
         if (window != null) {
             window.player().seekToFraction(fraction);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // ID-based API methods
+    // ------------------------------------------------------------------
+
+    static AudioWindow getById(long id) {
+        for (AudioWindow window : WINDOWS) {
+            if (window.getId() == id) {
+                return window;
+            }
+        }
+        return null;
+    }
+
+    public static boolean exists(long id) {
+        return getById(id) != null;
+    }
+
+    public static void togglePause(long id) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            window.player().togglePause();
+        }
+    }
+
+    public static void next(long id) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            window.advance();
+        }
+    }
+
+    public static void previous(long id) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            window.previous();
+        }
+    }
+
+    public static void enqueueTo(long id, String url) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            window.enqueue(url);
+        }
+    }
+
+    public static void setVisible(long id, boolean visible) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            window.setVisible(visible);
+        }
+    }
+
+    public static void closePublic(long id) {
+        AudioWindow window = getById(id);
+        if (window != null) {
+            close(window);
         }
     }
 }

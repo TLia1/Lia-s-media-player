@@ -80,25 +80,25 @@ Alternatively, you can register a source at any time by calling `MediaPlayerAPI.
 
 ### 2. Triggering Playback
 
-You can programmatically trigger media playback from your mod.
+You can programmatically trigger media playback from your mod. These methods return a `long` ID which uniquely identifies the player window.
 
 ```java
 import com.lia.mediaplayer.api.MediaPlayerAPI;
 
 // Enqueue a video in the front-most video player (or open a new one if none exists)
-MediaPlayerAPI.playVideo("https://www.youtube.com/watch?v=...");
+long videoId = MediaPlayerAPI.playVideo("https://www.youtube.com/watch?v=...");
 
 // Open a video in a brand-new, independent player window
-MediaPlayerAPI.playVideoNewWindow("https://www.youtube.com/watch?v=...");
+long newVideoId = MediaPlayerAPI.playVideoNewWindow("https://www.youtube.com/watch?v=...");
 
 // Enqueue audio in the compact audio bar
-MediaPlayerAPI.playAudio("https://example.com/sound.mp3");
+long audioId = MediaPlayerAPI.playAudio("https://example.com/sound.mp3");
 
 // Play a full playlist of audio tracks (starts immediately, queues the rest)
-MediaPlayerAPI.playAudioAll(List.of("url1", "url2", "url3"), true /* shuffle */);
+long playlistId = MediaPlayerAPI.playAudioAll(List.of("url1", "url2", "url3"), true /* shuffle */);
 
 // Pin an image window
-MediaPlayerAPI.showImage("https://example.com/image.png");
+long imageId = MediaPlayerAPI.showImage("https://example.com/image.png");
 ```
 
 ### 3. Listening to Playback Events
@@ -143,6 +143,29 @@ MediaPlayerAPI.nextAudio();
 
 // Seeks the video to 50%
 MediaPlayerAPI.seekVideo(0.5);
+```
+
+You can also use the `long` ID returned by the playback methods to control a specific player directly, regardless of whether it is front-most:
+
+```java
+import com.lia.mediaplayer.api.MediaPlayerAPI;
+
+long playerId = MediaPlayerAPI.playVideo("https://www.youtube.com/watch?v=...");
+
+// Toggle pause on this specific player
+MediaPlayerAPI.togglePause(playerId);
+
+// Skip to the next track
+MediaPlayerAPI.next(playerId);
+
+// Enqueue another video to this specific player
+MediaPlayerAPI.enqueueTo(playerId, "https://example.com/next.mp4");
+
+// Hide the player window
+MediaPlayerAPI.setVisible(playerId, false);
+
+// Close the player
+MediaPlayerAPI.close(playerId);
 ```
 
 ### 5. Accessing Playlists

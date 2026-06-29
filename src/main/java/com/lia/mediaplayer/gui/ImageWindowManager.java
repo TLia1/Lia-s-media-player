@@ -61,9 +61,9 @@ public final class ImageWindowManager {
         WINDOWS.clear();
     }
 
-    /** Public entry point for the API: show/pin an image URL. */
-    public static void showPublic(String url) {
-        show(url);
+    /** Public entry point for the API: show/pin an image URL. Returns the window ID. */
+    public static long showPublic(String url) {
+        return show(url).getId();
     }
 
     private static void evictIfFull() {
@@ -74,6 +74,37 @@ public final class ImageWindowManager {
             }
             it.next();
             it.remove();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // ID-based API methods
+    // ------------------------------------------------------------------
+
+    static ImageWindow getById(long id) {
+        for (ImageWindow window : WINDOWS.values()) {
+            if (window.getId() == id) {
+                return window;
+            }
+        }
+        return null;
+    }
+
+    public static boolean exists(long id) {
+        return getById(id) != null;
+    }
+
+    public static void setVisible(long id, boolean visible) {
+        ImageWindow window = getById(id);
+        if (window != null) {
+            window.setVisible(visible);
+        }
+    }
+
+    public static void closePublic(long id) {
+        ImageWindow window = getById(id);
+        if (window != null) {
+            close(window);
         }
     }
 }
