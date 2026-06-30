@@ -43,5 +43,9 @@
   "config.liasmediaplayer.max_audio_windows": "Lecteurs audio max",
   "config.liasmediaplayer.max_gif_frames": "Images par GIF max",
   "config.liasmediaplayer.max_image_cache_entries": "Entrées du cache d'images max",
+  "config.liasmediaplayer.frame_queue_capacity": "Capacité de la file d'attente d'images vidéo",
+  "config.liasmediaplayer.frame_queue_capacity.warning": "Attention : Augmenter cette valeur consommera plus de mémoire !",
+  "config.liasmediaplayer.max_image_cache_mb": "Cache d'images max (Mo)",
+  "config.liasmediaplayer.yt_dlp_timeout": "Délai d'attente yt-dlp (secondes)",
   "error.liasmediaplayer.ytdlp_failed": "Aucune video youtube n'a été trouvé avec cette url"
 }

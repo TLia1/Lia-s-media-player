@@ -21,7 +21,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * and audio on background threads, and provides the current frame to the render thread.
  */
 public final class VideoPlayer {
-    private static final int FRAME_QUEUE_CAPACITY = 64;
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
     private static final AtomicInteger PLAYER_ID = new AtomicInteger(0);
@@ -35,8 +34,9 @@ public final class VideoPlayer {
     private final FFmpegSession session;
 
     // --- Decode side (written by decode thread, read by render thread) ------
-    private final BlockingQueue<VideoFrame> frameQueue = new ArrayBlockingQueue<>(FRAME_QUEUE_CAPACITY);
-    private final BlockingQueue<ByteBuffer> freeBuffers = new ArrayBlockingQueue<>(FRAME_QUEUE_CAPACITY + 4);
+    private final int frameQueueCapacity;
+    private final BlockingQueue<VideoFrame> frameQueue;
+    private final BlockingQueue<ByteBuffer> freeBuffers;
     private volatile Thread decodeThread;
     private volatile boolean running = true;
     private volatile State state = State.LOADING;
@@ -68,6 +68,9 @@ public final class VideoPlayer {
 
     public VideoPlayer(String url) {
         this.url = url;
+        this.frameQueueCapacity = com.lia.mediaplayer.config.ConfigStore.FRAME_QUEUE_CAPACITY.getValue();
+        this.frameQueue = new ArrayBlockingQueue<>(this.frameQueueCapacity);
+        this.freeBuffers = new ArrayBlockingQueue<>(this.frameQueueCapacity + 4);
         this.renderer = new VideoRenderer();
         this.audioOutput = new AudioOutput(url);
         this.clock = new PlaybackClock();
@@ -283,7 +286,7 @@ public final class VideoPlayer {
 
             freeBuffers.clear();
             int frameBytes = videoWidth * videoHeight * 4;
-            for (int i = 0; i < FRAME_QUEUE_CAPACITY + 4; i++) {
+            for (int i = 0; i < frameQueueCapacity + 4; i++) {
                 freeBuffers.offer(ByteBuffer.allocateDirect(frameBytes));
             }
 

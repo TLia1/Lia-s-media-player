@@ -14,12 +14,26 @@ public abstract class ConfigOption<T> {
     private final String translationKey;
     private final T defaultValue;
     private T currentValue;
+    private String warningKey;
 
     public ConfigOption(String id, String translationKey, T defaultValue) {
         this.id = id;
         this.translationKey = translationKey;
         this.defaultValue = defaultValue;
         this.currentValue = defaultValue;
+    }
+
+    /**
+     * Sets a warning translation key to be displayed as a tooltip when configuring this option.
+     * Useful for warning users about performance or memory implications.
+     */
+    public ConfigOption<T> withWarning(String warningKey) {
+        this.warningKey = warningKey;
+        return this;
+    }
+
+    public String getWarningKey() {
+        return warningKey;
     }
 
     /**

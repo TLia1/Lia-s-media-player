@@ -33,7 +33,9 @@ public final class MediaUrlResolver {
     /**
      * yt-dlp can be slow on first call (it sometimes self-updates / probes formats).
      */
-    private static final long YT_DLP_TIMEOUT_SECONDS = 25;
+    private static long getYtDlpTimeoutSeconds() {
+        return com.lia.mediaplayer.config.ConfigStore.YT_DLP_TIMEOUT_SECONDS.getValue();
+    }
 
     /**
      * Prefer a single progressive stream that already muxes audio+video and is
@@ -100,7 +102,8 @@ public final class MediaUrlResolver {
                 }
             });
 
-            boolean finished = process.waitFor(YT_DLP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            long timeoutSeconds = getYtDlpTimeoutSeconds();
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 throw new IOException("yt-dlp timed out resolving " + url);

@@ -132,6 +132,7 @@ The mod now features a configurable options menu where you can tailor its behavi
 - **Video Resolution:** Choose the maximum resolution for video playback (from 144p up to 720p).
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF
   frames to optimize memory usage based on your computer's capabilities.
+- **Advanced Limits:** You can also configure the video frame queue capacity, max image cache in megabytes, and yt-dlp timeout. Watch out for red tooltips indicating sensitive settings!
 - All options are saved automatically and persist between sessions.
 
 ---

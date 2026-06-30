@@ -43,5 +43,9 @@
   "config.liasmediaplayer.max_audio_windows": "Max Audio Windows",
   "config.liasmediaplayer.max_gif_frames": "Max GIF Frames",
   "config.liasmediaplayer.max_image_cache_entries": "Max Image Cache Entries",
+  "config.liasmediaplayer.frame_queue_capacity": "Video Frame Queue Capacity",
+  "config.liasmediaplayer.frame_queue_capacity.warning": "Warning: Increasing this value will consume more memory!",
+  "config.liasmediaplayer.max_image_cache_mb": "Max Image Cache (MB)",
+  "config.liasmediaplayer.yt_dlp_timeout": "yt-dlp Timeout (seconds)",
   "error.liasmediaplayer.ytdlp_failed": "No youtube video was foud with this url"
 }

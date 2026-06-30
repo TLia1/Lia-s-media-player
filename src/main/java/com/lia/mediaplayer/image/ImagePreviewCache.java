@@ -43,8 +43,11 @@ public final class ImagePreviewCache {
      * Mirrors ChatComponent.MAX_CHAT_HISTORY.
      */
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-    private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024; // 256 MB
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
+
+    private static long getMaxCacheBytes() {
+        return (long) com.lia.mediaplayer.config.ConfigStore.MAX_IMAGE_CACHE_MEGABYTES.getValue() * 1024 * 1024;
+    }
 
     private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
         @Override
@@ -241,7 +244,8 @@ public final class ImagePreviewCache {
         }
 
         var iterator = CACHE.entrySet().iterator();
-        while (iterator.hasNext() && currentSize > MAX_CACHE_BYTES) {
+        long maxCacheBytes = getMaxCacheBytes();
+        while (iterator.hasNext() && currentSize > maxCacheBytes) {
             Map.Entry<String, Entry> eldest = iterator.next();
             Entry e = eldest.getValue();
             currentSize -= e.estimatedSizeBytes;

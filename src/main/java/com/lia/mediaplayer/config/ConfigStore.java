@@ -37,6 +37,9 @@ public class ConfigStore {
     public static final IntSliderOption MAX_AUDIO_WINDOWS;
     public static final IntSliderOption MAX_GIF_FRAMES;
     public static final IntSliderOption MAX_IMAGE_CACHE_ENTRIES;
+    public static final IntSliderOption FRAME_QUEUE_CAPACITY;
+    public static final IntSliderOption MAX_IMAGE_CACHE_MEGABYTES;
+    public static final IntSliderOption YT_DLP_TIMEOUT_SECONDS;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
@@ -54,6 +57,10 @@ public class ConfigStore {
         MAX_AUDIO_WINDOWS = new IntSliderOption("liasmediaplayer:max_audio_windows", "config.liasmediaplayer.max_audio_windows", 4, 1, 10);
         MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
         MAX_IMAGE_CACHE_ENTRIES = new IntSliderOption("liasmediaplayer:max_image_cache_entries", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100);
+        FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
+                .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
+        MAX_IMAGE_CACHE_MEGABYTES = new IntSliderOption("liasmediaplayer:max_image_cache_mb", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024);
+        YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
     }
 
     public ConfigStore() {
@@ -63,6 +70,9 @@ public class ConfigStore {
         register(MAX_AUDIO_WINDOWS);
         register(MAX_GIF_FRAMES);
         register(MAX_IMAGE_CACHE_ENTRIES);
+        register(FRAME_QUEUE_CAPACITY);
+        register(MAX_IMAGE_CACHE_MEGABYTES);
+        register(YT_DLP_TIMEOUT_SECONDS);
     }
 
     public synchronized void register(ConfigOption<?> option) {

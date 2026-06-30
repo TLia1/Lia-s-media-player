@@ -31,6 +31,12 @@ public class ConfigScreen extends Screen {
         for (ConfigOption<?> option : ctx.getConfigStore().getAllOptions()) {
             AbstractWidget widget = option.createWidget(x, y, w, ctx.getConfigStore()::save);
             if (widget != null) {
+                if (option.getWarningKey() != null) {
+                    widget.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                            Component.translatable(option.getWarningKey())
+                                    .withStyle(net.minecraft.ChatFormatting.RED)
+                    ));
+                }
                 this.addRenderableWidget(widget);
                 y += dy;
             }

@@ -216,7 +216,7 @@ IntSliderOption myOption = new IntSliderOption(
     10,                     // Default value
     1,                      // Min value
     100                     // Max value
-);
+).withWarning("myaddon.custom_limit.warning"); // Optional red tooltip for sensitive settings
 
 // Register it
 LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
