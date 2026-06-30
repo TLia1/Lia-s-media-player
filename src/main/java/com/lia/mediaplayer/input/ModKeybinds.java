@@ -20,7 +20,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
  * lives in {@link KeybindHandler}. Registration happens on the mod event bus via
  * {@link RegisterKeyMappingsEvent}.</p>
  */
-@EventBusSubscriber(modid = LiasMediaPlayer.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class ModKeybinds {
 
     public static final String CATEGORY = "key.categories.liasmediaplayer";

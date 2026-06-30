@@ -11,26 +11,18 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.lwjgl.system.MemoryUtil;
 
 public class VideoRenderer {
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger(0);
-    private static final long NATIVE_IMAGE_PIXELS_OFFSET;
-    private static final long BUFFER_ADDRESS_OFFSET;
-    private static final sun.misc.Unsafe UNSAFE;
+    private static final Field NATIVE_IMAGE_PIXELS_FIELD;
 
     static {
         try {
-            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            UNSAFE = (sun.misc.Unsafe) f.get(null);
-            NATIVE_IMAGE_PIXELS_OFFSET = UNSAFE.objectFieldOffset(
-                    NativeImage.class.getDeclaredField("pixels")
-            );
-            BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(
-                    java.nio.Buffer.class.getDeclaredField("address")
-            );
+            NATIVE_IMAGE_PIXELS_FIELD = NativeImage.class.getDeclaredField("pixels");
+            NATIVE_IMAGE_PIXELS_FIELD.setAccessible(true);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize Unsafe for VideoRenderer", e);
+            throw new RuntimeException("Failed to initialize reflection for VideoRenderer", e);
         }
     }
 
@@ -102,13 +94,14 @@ public class VideoRenderer {
         }
 
         ByteBuffer buffer = frame.rgbaBuffer();
-        long bufferPtr = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET);
-        long pixelsPtr = UNSAFE.getLong(nativeImage, NATIVE_IMAGE_PIXELS_OFFSET);
-        UNSAFE.copyMemory(
-                bufferPtr,
-                pixelsPtr,
-                buffer.capacity()
-        );
+        long bufferPtr = MemoryUtil.memAddress(buffer);
+        long pixelsPtr;
+        try {
+            pixelsPtr = NATIVE_IMAGE_PIXELS_FIELD.getLong(nativeImage);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Failed to access NativeImage pixels", e);
+        }
+        MemoryUtil.memCopy(bufferPtr, pixelsPtr, buffer.capacity());
 
         if (texture != null) {
             texture.upload();

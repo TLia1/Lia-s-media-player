@@ -179,7 +179,7 @@ publishing {
     }
     repositories {
         maven {
-            url "file://${project.projectDir}/repo"
+            url = "file://${project.projectDir}/repo"
         }
     }
 }
@@ -254,3 +254,5 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+
+tasks.withType(JavaCompile) { options.compilerArgs << '-Xlint:deprecation' }
