@@ -2,6 +2,7 @@ package com.lia.mediaplayer.media;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class VolumeTest {
@@ -58,7 +59,7 @@ class VolumeTest {
     @Test
     void toggleMute_RestoresPreviousVolume() {
         volume.set(0.7f);
-        
+
         // Mute
         volume.toggleMute();
         assertEquals(0.0f, volume.level(), 0.001f);
@@ -74,7 +75,7 @@ class VolumeTest {
     void toggleMute_WhenAlreadyMutedManually_RestoresToMax() {
         // If we manually set volume to 0 (without toggling), beforeMute is initially 1.0
         volume.set(0.0f);
-        
+
         volume.toggleMute();
         assertEquals(1.0f, volume.level(), 0.001f);
     }

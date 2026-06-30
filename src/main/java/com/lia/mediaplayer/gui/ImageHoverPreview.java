@@ -1,8 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.image.ImagePreviewCache;
-import com.lia.mediaplayer.source.MediaSources;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.ClickEvent;
@@ -29,7 +27,9 @@ final class ImageHoverPreview {
     private ImageHoverPreview() {
     }
 
-    /** Draws the preview for whatever image label is under the cursor (if any). */
+    /**
+     * Draws the preview for whatever image label is under the cursor (if any).
+     */
     static void render(GuiGraphics guiGraphics, int mouseX, int mouseY,
                        int screenWidth, int screenHeight) {
         Minecraft mc = Minecraft.getInstance();

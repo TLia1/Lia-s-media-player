@@ -3,7 +3,6 @@ package com.lia.mediaplayer.source;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,7 +24,9 @@ import java.util.Optional;
  */
 public class MediaSources {
 
-    /** The registered sources, in match order. Mutable so addons can append. */
+    /**
+     * The registered sources, in match order. Mutable so addons can append.
+     */
     private final List<com.lia.mediaplayer.api.MediaSource> registered = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
@@ -50,7 +51,9 @@ public class MediaSources {
         }
     }
 
-    /** The first source that recognizes {@code url}, if any. */
+    /**
+     * The first source that recognizes {@code url}, if any.
+     */
     public Optional<com.lia.mediaplayer.api.MediaSource> find(String url) {
         for (com.lia.mediaplayer.api.MediaSource source : registered) {
             if (source.matches(url)) {
@@ -60,39 +63,53 @@ public class MediaSources {
         return Optional.empty();
     }
 
-    /** The kind of {@code url}, or {@code null} if no source recognizes it (internal, returns API kind). */
+    /**
+     * The kind of {@code url}, or {@code null} if no source recognizes it (internal, returns API kind).
+     */
     @Nullable
     public com.lia.mediaplayer.api.MediaKind kindOf(String url) {
         return find(url).map(com.lia.mediaplayer.api.MediaSource::kind).orElse(null);
     }
 
-    /** The kind of {@code url}, or {@code null} — for the public API. */
+    /**
+     * The kind of {@code url}, or {@code null} — for the public API.
+     */
     @Nullable
     public com.lia.mediaplayer.api.MediaKind apiKindOf(String url) {
         return kindOf(url);
     }
 
-    /** Whether {@code url} is a recognized image/GIF link. */
+    /**
+     * Whether {@code url} is a recognized image/GIF link.
+     */
     public boolean isImage(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.IMAGE;
     }
 
-    /** Whether {@code url} is a recognized video/stream/YouTube link. */
+    /**
+     * Whether {@code url} is a recognized video/stream/YouTube link.
+     */
     public boolean isVideo(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.VIDEO;
     }
 
-    /** Whether {@code url} is a recognized direct audio file. */
+    /**
+     * Whether {@code url} is a recognized direct audio file.
+     */
     public boolean isAudio(String url) {
         return kindOf(url) == com.lia.mediaplayer.api.MediaKind.AUDIO;
     }
 
-    /** Whether any source recognizes {@code url}. */
+    /**
+     * Whether any source recognizes {@code url}.
+     */
     public boolean isSupported(String url) {
         return find(url).isPresent();
     }
 
-    /** The chat label for {@code url}, or the raw URL text if nothing recognizes it. */
+    /**
+     * The chat label for {@code url}, or the raw URL text if nothing recognizes it.
+     */
     public Component labelFor(String url) {
         return find(url).map(source -> source.label(url)).orElseGet(() -> Component.literal(url));
     }

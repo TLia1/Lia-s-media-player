@@ -1,12 +1,12 @@
 package com.lia.mediaplayer.config;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.StepSliderOption;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class ConfigStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private boolean loaded;
-    
+
     private final Map<String, ConfigOption<?>> registeredOptions = new LinkedHashMap<>();
 
     // Built-in options
@@ -39,7 +39,7 @@ public class ConfigStore {
     public static final IntSliderOption MAX_IMAGE_CACHE_ENTRIES;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
-    public static final Integer[] RESOLUTION_WIDTHS =  {256, 426, 640, 854, 1280};
+    public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
 
     static {
         VIDEO_RESOLUTION = new StepSliderOption<>(

@@ -208,16 +208,16 @@ tasks.register('updateDocs') {
 
     // Capture properties at configuration time so they are available in doLast.
     var capturedProps = [
-        'mod_version'      : project.property('mod_version'),
-        'mod_id'           : project.property('mod_id'),
-        'mod_name'         : project.property('mod_name'),
-        'mod_group_id'     : project.property('mod_group_id'),
-        'mod_license'      : project.property('mod_license'),
-        'neo_version'      : project.property('neo_version'),
-        'minecraft_version': project.property('minecraft_version'),
+            'mod_version'      : project.property('mod_version'),
+            'mod_id'           : project.property('mod_id'),
+            'mod_name'         : project.property('mod_name'),
+            'mod_group_id'     : project.property('mod_group_id'),
+            'mod_license'      : project.property('mod_license'),
+            'neo_version'      : project.property('neo_version'),
+            'minecraft_version': project.property('minecraft_version'),
     ]
     var capturedDocFiles = ['README.md', 'TECHNICAL-DETAILS.md', 'FEATURES.md']
-        .collect { fileName -> layout.projectDirectory.file(fileName).asFile }
+            .collect { fileName -> layout.projectDirectory.file(fileName).asFile }
 
     doLast {
         capturedDocFiles.each { f ->

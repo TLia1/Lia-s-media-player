@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.tools.FFmpegCli;
 import org.jetbrains.annotations.Nullable;
 
@@ -88,7 +87,8 @@ public class AudioOutput {
                 line.stop();
                 line.flush();
                 line.close();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             audioLine = null;
         }
     }
@@ -139,7 +139,8 @@ public class AudioOutput {
         } finally {
             try {
                 in.close();
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
         }
     }
 }

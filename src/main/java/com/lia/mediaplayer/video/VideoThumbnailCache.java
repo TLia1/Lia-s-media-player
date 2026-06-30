@@ -1,22 +1,19 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.image.GifDecoder;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.source.YouTubeSource;
-import com.lia.mediaplayer.image.GifDecoder;
 import com.lia.mediaplayer.tools.FFmpegCli;
-
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
-
 import org.jetbrains.annotations.Nullable;
 
 import javax.imageio.ImageIO;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,7 +42,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the render/main thread. All public methods must be called from the main thread.</p>
  */
 public final class VideoThumbnailCache {
-    /** Thumbnails are scaled to fit this box (16:9-ish), never upscaled. */
+    /**
+     * Thumbnails are scaled to fit this box (16:9-ish), never upscaled.
+     */
     private static final int MAX_W = 160;
     private static final int MAX_H = 90;
     private static final int MAX_ENTRIES = 64;
@@ -65,7 +64,9 @@ public final class VideoThumbnailCache {
     private VideoThumbnailCache() {
     }
 
-    /** Returns the thumbnail for a URL, starting a one-off background load the first time. */
+    /**
+     * Returns the thumbnail for a URL, starting a one-off background load the first time.
+     */
     public static Thumb getOrLoad(String url) {
         Thumb thumb = CACHE.computeIfAbsent(url, u -> new Thumb());
         if (thumb.state == State.IDLE) {
@@ -74,7 +75,9 @@ public final class VideoThumbnailCache {
         return thumb;
     }
 
-    /** Drops every cached thumbnail (e.g. when leaving a server). */
+    /**
+     * Drops every cached thumbnail (e.g. when leaving a server).
+     */
     public static void clear() {
         CACHE.values().forEach(Thumb::release);
         CACHE.clear();
@@ -181,7 +184,9 @@ public final class VideoThumbnailCache {
         return toArgbImage(rgba, w, h);
     }
 
-    /** Builds a TYPE_INT_ARGB image from a packed {@code rgba} frame. */
+    /**
+     * Builds a TYPE_INT_ARGB image from a packed {@code rgba} frame.
+     */
     private static BufferedImage toArgbImage(byte[] rgba, int width, int height) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         int[] argb = new int[width * height];
@@ -197,8 +202,9 @@ public final class VideoThumbnailCache {
     }
 
 
-
-    /** Scales the source to fit the thumbnail box and forces TYPE_INT_ARGB. */
+    /**
+     * Scales the source to fit the thumbnail box and forces TYPE_INT_ARGB.
+     */
     private static BufferedImage scaleToArgb(BufferedImage source) {
         int sw = Math.max(1, source.getWidth());
         int sh = Math.max(1, source.getHeight());
@@ -301,7 +307,9 @@ public final class VideoThumbnailCache {
 
     public enum State {IDLE, LOADING, LOADED, FAILED}
 
-    /** A single queue thumbnail. */
+    /**
+     * A single queue thumbnail.
+     */
     public static final class Thumb {
         public State state = State.IDLE;
         public boolean disposed = false;

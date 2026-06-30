@@ -1,10 +1,11 @@
 package com.lia.mediaplayer.tools;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
 import java.io.IOException;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class BinaryLocatorTest {
 
@@ -26,10 +27,10 @@ class BinaryLocatorTest {
         tempDir.delete();
         tempDir.mkdir();
         tempDir.deleteOnExit();
-        
+
         assertFalse(BinaryLocator.isExecutableFile(tempDir.getAbsolutePath()));
     }
-    
+
     // We cannot easily test isExecutableFile_ValidExecutable_ReturnsTrue without assuming a specific binary on the system or creating one,
     // but the negative tests provide basic coverage for the edge cases.
 }

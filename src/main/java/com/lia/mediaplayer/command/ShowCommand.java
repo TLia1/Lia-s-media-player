@@ -26,21 +26,21 @@ public class ShowCommand {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
         dispatcher.register(
-            net.minecraft.commands.Commands.literal("show")
-                .then(net.minecraft.commands.Commands.argument("type", StringArgumentType.word())
-                    .suggests((context, builder) -> {
-                        List<String> types = Arrays.stream(MediaKind.values())
-                            .map(kind -> kind.name().toLowerCase())
-                            .collect(Collectors.toList());
-                        return SharedSuggestionProvider.suggest(types, builder);
-                    })
-                    .then(net.minecraft.commands.Commands.argument("url", StringArgumentType.string())
-                        .executes(context -> executeShow(context, false))
-                        .then(net.minecraft.commands.Commands.argument("newPlayer", BoolArgumentType.bool())
-                            .executes(context -> executeShow(context, true))
+                net.minecraft.commands.Commands.literal("show")
+                        .then(net.minecraft.commands.Commands.argument("type", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    List<String> types = Arrays.stream(MediaKind.values())
+                                            .map(kind -> kind.name().toLowerCase())
+                                            .collect(Collectors.toList());
+                                    return SharedSuggestionProvider.suggest(types, builder);
+                                })
+                                .then(net.minecraft.commands.Commands.argument("url", StringArgumentType.string())
+                                        .executes(context -> executeShow(context, false))
+                                        .then(net.minecraft.commands.Commands.argument("newPlayer", BoolArgumentType.bool())
+                                                .executes(context -> executeShow(context, true))
+                                        )
+                                )
                         )
-                    )
-                )
         );
     }
 
@@ -48,7 +48,7 @@ public class ShowCommand {
         String typeStr = StringArgumentType.getString(context, "type");
         String url = StringArgumentType.getString(context, "url");
         boolean newPlayer = false;
-        
+
         if (hasNewPlayerArg) {
             newPlayer = BoolArgumentType.getBool(context, "newPlayer");
         }

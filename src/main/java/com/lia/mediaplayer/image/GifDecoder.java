@@ -1,20 +1,19 @@
 package com.lia.mediaplayer.image;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import org.w3c.dom.Node;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.metadata.IIOMetadata;
 import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.ImageInputStream;
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.w3c.dom.Node;
 
 /**
  * Decodes an animated GIF into a sequence of fully-composited (coalesced) frames
@@ -35,11 +34,17 @@ import org.w3c.dom.Node;
 public final class GifDecoder {
     /** Hard cap on frames regardless of size, to bound texture handles. */
 
-    /** Total RGBA pixels kept across every frame (~96 MB of VRAM at 4 bytes). */
+    /**
+     * Total RGBA pixels kept across every frame (~96 MB of VRAM at 4 bytes).
+     */
     private static final long MAX_TOTAL_PIXELS = 24_000_000L;
-    /** GIFs with a 0 (or absent) delay are shown at this rate, like browsers. */
+    /**
+     * GIFs with a 0 (or absent) delay are shown at this rate, like browsers.
+     */
     private static final int DEFAULT_DELAY_MS = 100;
-    /** Never animate faster than this; protects against 0/1-centisecond frames. */
+    /**
+     * Never animate faster than this; protects against 0/1-centisecond frames.
+     */
     private static final int MIN_DELAY_MS = 20;
 
     private GifDecoder() {
@@ -48,7 +53,7 @@ public final class GifDecoder {
     /**
      * Holds the decoded frames and the per-frame display duration in millis.
      */
-        record Result(NativeImage[] frames, int[] delaysMs) {
+    record Result(NativeImage[] frames, int[] delaysMs) {
     }
 
     /**
@@ -146,7 +151,9 @@ public final class GifDecoder {
         return toResult(thinIfNeeded(composited, delays));
     }
 
-    /** Drops frames evenly until the total pixel budget is met. */
+    /**
+     * Drops frames evenly until the total pixel budget is met.
+     */
     private static Frames thinIfNeeded(List<BufferedImage> frames, List<Integer> delays) {
         if (frames.isEmpty()) {
             return new Frames(frames, delays);
@@ -195,7 +202,9 @@ public final class GifDecoder {
         return new Result(images, delays);
     }
 
-    /** Converts an ARGB BufferedImage into Minecraft's ABGR NativeImage. */
+    /**
+     * Converts an ARGB BufferedImage into Minecraft's ABGR NativeImage.
+     */
     public static NativeImage toNativeImage(BufferedImage source) {
         int width = source.getWidth();
         int height = source.getHeight();

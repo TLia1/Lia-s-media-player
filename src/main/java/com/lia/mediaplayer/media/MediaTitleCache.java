@@ -1,11 +1,10 @@
 package com.lia.mediaplayer.media;
 
-import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.source.YouTubeSource;
-
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.YouTubeSource;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 
@@ -40,7 +39,9 @@ import java.util.concurrent.CompletionException;
  */
 public final class MediaTitleCache {
     private static final int MAX_ENTRIES = 128;
-    /** Hard cap on the stored title length so a pathological title can't bloat memory. */
+    /**
+     * Hard cap on the stored title length so a pathological title can't bloat memory.
+     */
     private static final int MAX_TITLE_LEN = 200;
 
     private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
@@ -73,7 +74,9 @@ public final class MediaTitleCache {
         return entry.title;
     }
 
-    /** Drops every cached title (e.g. when leaving a server). */
+    /**
+     * Drops every cached title (e.g. when leaving a server).
+     */
     public static void clear() {
         CACHE.clear();
     }
@@ -153,7 +156,9 @@ public final class MediaTitleCache {
     // Fallback labels (no network)
     // ------------------------------------------------------------------
 
-    /** The label shown before (or instead of) a resolved title. */
+    /**
+     * The label shown before (or instead of) a resolved title.
+     */
     private static String fallbackLabel(String url) {
         if (YouTubeSource.isYouTube(url)) {
             return "YouTube link…";
@@ -162,7 +167,9 @@ public final class MediaTitleCache {
         return name != null ? name : url;
     }
 
-    /** The file name at the end of a direct-link URL path, or {@code null}. */
+    /**
+     * The file name at the end of a direct-link URL path, or {@code null}.
+     */
     private static String fileName(String url) {
         try {
             String path = URI.create(url).getPath();
@@ -185,7 +192,9 @@ public final class MediaTitleCache {
 
     enum State {IDLE, LOADING, LOADED, FAILED}
 
-    /** A single cached title and its load state. */
+    /**
+     * A single cached title and its load state.
+     */
     private static final class Entry {
         State state = State.IDLE;
         String title;

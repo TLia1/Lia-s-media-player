@@ -46,9 +46,13 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class AudioPlayer {
 
-    /** Never seek into the very last slice (ffmpeg can EOF there with nothing to play). */
+    /**
+     * Never seek into the very last slice (ffmpeg can EOF there with nothing to play).
+     */
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
-    /** A pause longer than this may have let a network stream go stale; relaunch on resume. */
+    /**
+     * A pause longer than this may have let a network stream go stale; relaunch on resume.
+     */
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
     private static final int MAX_AUDIO_CHANNELS = 2;
     private static final AtomicInteger TRACK_ID = new AtomicInteger();
@@ -76,7 +80,9 @@ public final class AudioPlayer {
     private volatile Process audioProcess;
     @Nullable
     private volatile Thread audioThread;
-    /** Set by a pump thread when it reaches end-of-stream, so the control thread can react. */
+    /**
+     * Set by a pump thread when it reaches end-of-stream, so the control thread can react.
+     */
     private volatile boolean sessionEnded;
 
     // --- Pause / seek gate (control thread waits here) ----------------------
@@ -127,7 +133,9 @@ public final class AudioPlayer {
         return state == State.PAUSED;
     }
 
-    /** Total length in microseconds, or 0 if unknown (some live streams). */
+    /**
+     * Total length in microseconds, or 0 if unknown (some live streams).
+     */
     public long durationMicros() {
         return durationMicros;
     }
@@ -294,7 +302,9 @@ public final class AudioPlayer {
         }
     }
 
-    /** Wake the pump thread if it is waiting on the pause gate. */
+    /**
+     * Wake the pump thread if it is waiting on the pause gate.
+     */
     private void signalPause() {
         pauseLock.lock();
         try {

@@ -39,7 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * happen on a background IO pool and are published back on the main thread.</p>
  */
 public final class ImagePreviewCache {
-    /** Mirrors ChatComponent.MAX_CHAT_HISTORY. */
+    /**
+     * Mirrors ChatComponent.MAX_CHAT_HISTORY.
+     */
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
     private static final long MAX_CACHE_BYTES = 256L * 1024 * 1024; // 256 MB
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
@@ -58,7 +60,9 @@ public final class ImagePreviewCache {
     private ImagePreviewCache() {
     }
 
-    /** Registers a URL seen in chat so its preview can be loaded lazily later. */
+    /**
+     * Registers a URL seen in chat so its preview can be loaded lazily later.
+     */
     public static void track(String url) {
         Minecraft.getInstance().execute(() -> CACHE.computeIfAbsent(url, u -> new Entry()));
     }
@@ -76,7 +80,9 @@ public final class ImagePreviewCache {
         return entry;
     }
 
-    /** Drops every cached preview (e.g. when leaving a server). */
+    /**
+     * Drops every cached preview (e.g. when leaving a server).
+     */
     public static void clear() {
         CACHE.values().forEach(Entry::releaseTexture);
         CACHE.clear();
@@ -92,7 +98,9 @@ public final class ImagePreviewCache {
                         Minecraft.getInstance());
     }
 
-    /** Runs on the IO pool — never touch GL or the cache from here. */
+    /**
+     * Runs on the IO pool — never touch GL or the cache from here.
+     */
     private static GifDecoder.Result download(String url) {
         try {
             // Tenor share links are HTML pages; resolve them to the real GIF first.
@@ -147,7 +155,9 @@ public final class ImagePreviewCache {
         return new GifDecoder.Result(new NativeImage[]{single}, new int[]{0});
     }
 
-    /** Ensures the image is TYPE_INT_ARGB so getRGB yields packed ARGB ints. */
+    /**
+     * Ensures the image is TYPE_INT_ARGB so getRGB yields packed ARGB ints.
+     */
     private static BufferedImage toArgb(BufferedImage source) {
         if (source.getType() == BufferedImage.TYPE_INT_ARGB) {
             return source;
@@ -170,7 +180,9 @@ public final class ImagePreviewCache {
                 && data[3] == '8' && (data[4] == '7' || data[4] == '9') && data[5] == 'a';
     }
 
-    /** Runs on the main thread — safe to create GL textures and mutate the cache. */
+    /**
+     * Runs on the main thread — safe to create GL textures and mutate the cache.
+     */
     private static void onDownloadComplete(String url, Entry entry, @Nullable GifDecoder.Result decoded,
                                            @Nullable Throwable error) {
         if (error != null || decoded == null || decoded.frames().length == 0) {

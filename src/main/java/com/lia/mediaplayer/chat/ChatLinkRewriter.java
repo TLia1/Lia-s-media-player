@@ -21,10 +21,14 @@ import java.util.regex.Pattern;
  */
 public final class ChatLinkRewriter {
 
-    /** Any {@code http(s)} URL; the {@link LinkRewrite} decides which ones it claims. */
+    /**
+     * Any {@code http(s)} URL; the {@link LinkRewrite} decides which ones it claims.
+     */
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
 
-    /** Punctuation commonly found at the end of a sentence/message that shouldn't be part of the URL. */
+    /**
+     * Punctuation commonly found at the end of a sentence/message that shouldn't be part of the URL.
+     */
     private static final Pattern TRAILING_PUNCTUATION = Pattern.compile("[.,;:!?)>\\]]+$");
 
     private ChatLinkRewriter() {
@@ -36,10 +40,14 @@ public final class ChatLinkRewriter {
      */
     public interface LinkRewrite {
 
-        /** Whether this rule claims {@code url}. */
+        /**
+         * Whether this rule claims {@code url}.
+         */
         boolean matches(String url);
 
-        /** The clickable label to show in place of {@code url}. */
+        /**
+         * The clickable label to show in place of {@code url}.
+         */
         Component label(String url);
 
         /**
@@ -49,7 +57,9 @@ public final class ChatLinkRewriter {
          */
         Style style(Style inherited, String url);
 
-        /** Optional side effect when a URL matches (e.g. warming a preview cache). */
+        /**
+         * Optional side effect when a URL matches (e.g. warming a preview cache).
+         */
         default void onMatch(String url) {
         }
     }

@@ -32,7 +32,9 @@ public final class AudioFileSource implements com.lia.mediaplayer.api.MediaSourc
         return LABEL;
     }
 
-    /** Whether {@code url}'s path ends in a known audio-only extension. */
+    /**
+     * Whether {@code url}'s path ends in a known audio-only extension.
+     */
     public static boolean isAudioFile(String url) {
         String path = Urls.pathLower(url);
         if (path == null) {

@@ -5,7 +5,6 @@ import net.minecraft.sounds.SoundSource;
 
 import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.SourceDataLine;
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,15 +30,21 @@ public class Volume {
 
     private static final float MUTE_THRESHOLD = 0.0001f;
 
-    /** User-controlled level in 0..1, shared by audio and video. */
+    /**
+     * User-controlled level in 0..1, shared by audio and video.
+     */
     private volatile float level = 1.0f;
-    /** The level to restore when un-muting. */
+    /**
+     * The level to restore when un-muting.
+     */
     private volatile float beforeMute = 1.0f;
 
     public Volume() {
     }
 
-    /** The current user-set level in 0..1. */
+    /**
+     * The current user-set level in 0..1.
+     */
     public float level() {
         return level;
     }
@@ -48,7 +53,9 @@ public class Volume {
         return level <= MUTE_THRESHOLD;
     }
 
-    /** Sets the level, clamped to 0..1. */
+    /**
+     * Sets the level, clamped to 0..1.
+     */
     public void set(float value) {
         level = Math.max(0.0f, Math.min(1.0f, value));
         save();
@@ -67,12 +74,16 @@ public class Volume {
         }
     }
 
-    /** The level actually sent to a line: the user setting scaled by the master slider. */
+    /**
+     * The level actually sent to a line: the user setting scaled by the master slider.
+     */
     public float effective() {
         return Math.max(0.0f, Math.min(1.0f, level * master()));
     }
 
-    /** The current Minecraft master-volume slider value (0..1), read live. */
+    /**
+     * The current Minecraft master-volume slider value (0..1), read live.
+     */
     public float master() {
         try {
             return Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MASTER);

@@ -19,7 +19,9 @@ import net.neoforged.fml.common.Mod;
  */
 @Mod(value = LiasMediaPlayerApi.API_ID, dist = Dist.CLIENT)
 public class LiasMediaPlayerApi {
-    /** The mod ID for the API entry in neoforge.mods.toml. */
+    /**
+     * The mod ID for the API entry in neoforge.mods.toml.
+     */
     public static final String API_ID = "liasmediaplayerapi";
 
     private static IMediaPlayerAPI instance;
@@ -30,6 +32,7 @@ public class LiasMediaPlayerApi {
 
     /**
      * Retrieves the active Media Player API instance.
+     *
      * @return the API instance
      * @throws IllegalStateException if called before the mod is fully initialized
      */

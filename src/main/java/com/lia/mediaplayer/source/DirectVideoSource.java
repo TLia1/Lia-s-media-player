@@ -26,7 +26,9 @@ public final class DirectVideoSource implements com.lia.mediaplayer.api.MediaSou
         return LABEL;
     }
 
-    /** Whether {@code url}'s path ends in a known video container extension. */
+    /**
+     * Whether {@code url}'s path ends in a known video container extension.
+     */
     public static boolean isDirectVideo(String url) {
         String path = Urls.pathLower(url);
         if (path == null) {

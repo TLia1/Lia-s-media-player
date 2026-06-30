@@ -1,11 +1,10 @@
 package com.lia.mediaplayer.source;
 
-import org.junit.jupiter.api.Test;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
-
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
@@ -30,7 +29,7 @@ class MediaSourcesTest {
         assertEquals(MediaKind.IMAGE, mediaSources.kindOf("https://tenor.com/view/123"));
         assertNull(mediaSources.kindOf("https://example.com/unknown.txt"));
         assertNull(mediaSources.kindOf(null));
-        
+
         assertEquals(MediaKind.IMAGE, mediaSources.apiKindOf("https://example.com/image.png"));
     }
 
@@ -38,13 +37,13 @@ class MediaSourcesTest {
     void isMethods_WorkCorrectly() {
         assertTrue(mediaSources.isImage("https://example.com/image.png"));
         assertFalse(mediaSources.isVideo("https://example.com/image.png"));
-        
+
         assertTrue(mediaSources.isVideo("https://example.com/video.mp4"));
         assertFalse(mediaSources.isAudio("https://example.com/video.mp4"));
-        
+
         assertTrue(mediaSources.isAudio("https://example.com/audio.mp3"));
         assertFalse(mediaSources.isImage("https://example.com/audio.mp3"));
-        
+
         assertTrue(mediaSources.isSupported("https://example.com/image.png"));
         assertFalse(mediaSources.isSupported("https://example.com/unknown.txt"));
     }
@@ -54,7 +53,7 @@ class MediaSourcesTest {
         Optional<MediaSource> source = mediaSources.find("https://youtube.com/watch?v=123");
         assertTrue(source.isPresent());
         assertTrue(source.get() instanceof YouTubeSource);
-        
+
         assertFalse(mediaSources.find("https://example.com/unknown.txt").isPresent());
     }
 
@@ -72,18 +71,20 @@ class MediaSourcesTest {
             public boolean matches(String url) {
                 return "custom".equals(url);
             }
+
             @Override
             public MediaKind kind() {
                 return MediaKind.AUDIO;
             }
+
             @Override
             public Component label(String url) {
                 return Component.literal("[custom]");
             }
         };
-        
+
         mediaSources.register(customSource);
-        
+
         assertTrue(mediaSources.isSupported("custom"));
         assertEquals(MediaKind.AUDIO, mediaSources.kindOf("custom"));
         assertEquals("[custom]", mediaSources.labelFor("custom").getString());

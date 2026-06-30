@@ -53,7 +53,9 @@ final class BinaryDownloader {
     private BinaryDownloader() {
     }
 
-    /** How long the one-time download of a tool may take before we give up. */
+    /**
+     * How long the one-time download of a tool may take before we give up.
+     */
     private static final Duration DOWNLOAD_TIMEOUT = Duration.ofSeconds(120);
 
     /**
@@ -184,7 +186,9 @@ final class BinaryDownloader {
         return true;
     }
 
-    /** Extracts a {@code .zip} or {@code .tar.xz} archive into {@code destDir}. */
+    /**
+     * Extracts a {@code .zip} or {@code .tar.xz} archive into {@code destDir}.
+     */
     private static void extract(Path archive, Path destDir) throws IOException, InterruptedException {
         String name = archive.getFileName().toString().toLowerCase(Locale.ROOT);
         if (name.endsWith(".zip")) {
@@ -194,7 +198,9 @@ final class BinaryDownloader {
         }
     }
 
-    /** Unpacks a zip using only the JDK (no third-party archive library). */
+    /**
+     * Unpacks a zip using only the JDK (no third-party archive library).
+     */
     private static void extractZip(Path archive, Path destDir) throws IOException {
         try (InputStream fin = Files.newInputStream(archive);
              ZipInputStream zip = new ZipInputStream(fin)) {
@@ -240,7 +246,9 @@ final class BinaryDownloader {
 
     // ---- Filesystem helpers -------------------------------------------------
 
-    /** Downloads a single-binary zip (macOS) and writes the contained file to {@code target}. */
+    /**
+     * Downloads a single-binary zip (macOS) and writes the contained file to {@code target}.
+     */
     private static boolean downloadAndExtractInto(String url, Path target, Path managedDir)
             throws IOException, InterruptedException {
         Path archive = Files.createTempFile(managedDir, target.getFileName().toString(), ".zip");
@@ -261,7 +269,9 @@ final class BinaryDownloader {
         }
     }
 
-    /** Moves the first file named {@code exeName} found under {@code root} to {@code target}. */
+    /**
+     * Moves the first file named {@code exeName} found under {@code root} to {@code target}.
+     */
     private static boolean placeFromTree(Path root, String exeName, Path target) throws IOException {
         Path found = findFile(root, exeName);
         if (found == null) {
@@ -285,7 +295,9 @@ final class BinaryDownloader {
         }
     }
 
-    /** Resolves {@code entryName} under {@code destDir}, rejecting zip-slip escapes. */
+    /**
+     * Resolves {@code entryName} under {@code destDir}, rejecting zip-slip escapes.
+     */
     private static Path safeResolve(Path destDir, String entryName) throws IOException {
         Path resolved = destDir.resolve(entryName).normalize();
         if (!resolved.startsWith(destDir.normalize())) {
@@ -308,7 +320,9 @@ final class BinaryDownloader {
         }
     }
 
-    /** Marks a file owner/group/other-executable on POSIX systems; a no-op on Windows. */
+    /**
+     * Marks a file owner/group/other-executable on POSIX systems; a no-op on Windows.
+     */
     static void makeExecutable(Path file) {
         if (MediaBinaries.WINDOWS) {
             return;
@@ -343,7 +357,9 @@ final class BinaryDownloader {
 
     // ---- Download URLs ------------------------------------------------------
 
-    /** The official single-file yt-dlp release asset for the current OS/arch. */
+    /**
+     * The official single-file yt-dlp release asset for the current OS/arch.
+     */
     private static @NotNull String ytDlpDownloadUrl() {
         String base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
         if (MediaBinaries.WINDOWS) {
@@ -355,7 +371,9 @@ final class BinaryDownloader {
         return base + (MediaBinaries.AARCH64 ? "yt-dlp_linux_aarch64" : "yt-dlp_linux");
     }
 
-    /** The BtbN ffmpeg build archive (Windows zip / Linux tar.xz) for this platform. */
+    /**
+     * The BtbN ffmpeg build archive (Windows zip / Linux tar.xz) for this platform.
+     */
     private static @NotNull String ffmpegArchiveUrl() {
         String base = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/";
         if (MediaBinaries.WINDOWS) {
@@ -366,7 +384,9 @@ final class BinaryDownloader {
                 : "ffmpeg-master-latest-linux64-gpl.tar.xz");
     }
 
-    /** evermeet.cx single-binary zip for macOS (Intel build; runs under Rosetta on ARM). */
+    /**
+     * evermeet.cx single-binary zip for macOS (Intel build; runs under Rosetta on ARM).
+     */
     private static @NotNull String macDownloadUrl(MediaBinaries.Tool tool) {
         return "https://evermeet.cx/ffmpeg/getrelease/" + tool.base + "/zip";
     }

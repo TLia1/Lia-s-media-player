@@ -1,14 +1,11 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.gui.AudioPlayerManager;
-import com.lia.mediaplayer.source.MediaSources;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -29,7 +26,9 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 @EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class AudioChatHandler {
 
-    /** Direct audio links → green underlined {@code [audio]} label. */
+    /**
+     * Direct audio links → green underlined {@code [audio]} label.
+     */
     private static final ChatLinkRewriter.LinkRewrite AUDIO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {

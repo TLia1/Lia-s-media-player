@@ -28,15 +28,21 @@ import static com.lia.mediaplayer.gui.MediaControls.timeText;
 final class AudioWindow extends MediaWindow {
     private static final int CONTROL_BAR_HEIGHT = 16;
     private static final int MIN_SEEK_W = 20;
-    /** Intrinsic bar size; the title fills the content row, the controls sit below. */
+    /**
+     * Intrinsic bar size; the title fills the content row, the controls sit below.
+     */
     private static final int BASE_W = 220;
     private static final int BASE_H = 14;
-    /** How many played tracks to remember for the "previous" control. */
+    /**
+     * How many played tracks to remember for the "previous" control.
+     */
     private static final int MAX_HISTORY = 64;
 
     private AudioPlayer player;
     private final PlayQueue queue = new PlayQueue();
-    /** Previously-played URLs, most recent last (backs the "previous" button). */
+    /**
+     * Previously-played URLs, most recent last (backs the "previous" button).
+     */
     private final List<String> history = new ArrayList<>();
 
     private boolean draggingSeek;
@@ -65,13 +71,17 @@ final class AudioWindow extends MediaWindow {
     // Queue
     // ------------------------------------------------------------------
 
-    /** Appends a URL to this window's play queue. */
+    /**
+     * Appends a URL to this window's play queue.
+     */
     void enqueue(String url) {
         queue.add(url);
         MediaTitleCache.getOrLoad(url); // warm the name so the bar can show it instantly
     }
 
-    /** Appends several URLs (e.g. a whole playlist) in order. */
+    /**
+     * Appends several URLs (e.g. a whole playlist) in order.
+     */
     void enqueueAll(Collection<String> urls) {
         for (String url : urls) {
             enqueue(url);
@@ -117,7 +127,9 @@ final class AudioWindow extends MediaWindow {
         }
     }
 
-    /** Swaps in a new player for the given URL, disposing the current one. */
+    /**
+     * Swaps in a new player for the given URL, disposing the current one.
+     */
     private void playUrl(String url) {
         player.dispose();
         draggingSeek = false;
@@ -125,7 +137,9 @@ final class AudioWindow extends MediaWindow {
         player.start();
     }
 
-    /** Disposes the current player and discards anything still queued. */
+    /**
+     * Disposes the current player and discards anything still queued.
+     */
     void disposeAll() {
         queue.clear();
         history.clear();
@@ -358,7 +372,9 @@ final class AudioWindow extends MediaWindow {
                 && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6);
     }
 
-    /** Plain mouse wheel over the bar changes the volume in 10% steps. */
+    /**
+     * Plain mouse wheel over the bar changes the volume in 10% steps.
+     */
     @Override
     protected boolean onControlScroll(double mouseX, double mouseY, double scrollY) {
         player.changeVolume((float) (scrollY * 0.1));

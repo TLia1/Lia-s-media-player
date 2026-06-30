@@ -113,7 +113,9 @@ public final class PlaylistScreen extends Screen {
         rebuild();
     }
 
-    /** Rebuilds the widgets for the current selection (called on open and after edits). */
+    /**
+     * Rebuilds the widgets for the current selection (called on open and after edits).
+     */
     private void rebuild() {
         clearWidgets();
 
@@ -330,7 +332,7 @@ public final class PlaylistScreen extends Screen {
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
             g.drawString(font, Component.literal(Glyphs.fit(font, label, w - (ROW_EN * 3) - 8)),
                     x + 4, rowY + 4, TEXT);
-            
+
             boolean canUp = index > 0;
             boolean canDown = index < urls.size() - 1;
             Glyphs.arrow(g, upX + 2, rowY + 2, true, canUp ? (overUp ? TEXT : SUBTLE) : 0xFF555555);

@@ -1,10 +1,9 @@
 package com.lia.mediaplayer.playlist;
 
-import com.lia.mediaplayer.LiasMediaPlayer;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import com.lia.mediaplayer.LiasMediaPlayer;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
@@ -38,13 +37,17 @@ public class PlaylistStore {
     public PlaylistStore() {
     }
 
-    /** The live list of playlists (mutating a {@link Playlist} then calling {@link #save()} persists it). */
+    /**
+     * The live list of playlists (mutating a {@link Playlist} then calling {@link #save()} persists it).
+     */
     public synchronized List<Playlist> all() {
         ensureLoaded();
         return playlists;
     }
 
-    /** Creates and saves a new, empty playlist. */
+    /**
+     * Creates and saves a new, empty playlist.
+     */
     public synchronized Playlist create(String name) {
         ensureLoaded();
         Playlist playlist = new Playlist(name == null || name.isBlank() ? "New playlist" : name.strip());
@@ -60,7 +63,9 @@ public class PlaylistStore {
         }
     }
 
-    /** Persists the current playlists to disk. Best-effort: a failure is logged, not thrown. */
+    /**
+     * Persists the current playlists to disk. Best-effort: a failure is logged, not thrown.
+     */
     public synchronized void save() {
         Path path = file();
         if (path == null) {

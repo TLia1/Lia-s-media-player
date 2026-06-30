@@ -2,19 +2,19 @@ package com.lia.mediaplayer.source;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class UrlsTest {
 
     @ParameterizedTest
     @CsvSource(value = {
-        "http://example.com/PATH, /path",
-        "https://example.com/Video.mp4, /video.mp4",
-        "https://example.com/foo/BAR/baz, /foo/bar/baz",
-        "https://example.com/, /"
+            "http://example.com/PATH, /path",
+            "https://example.com/Video.mp4, /video.mp4",
+            "https://example.com/foo/BAR/baz, /foo/bar/baz",
+            "https://example.com/, /"
     }, nullValues = {"null"})
     void pathLower_ValidUrls_ReturnsLowerCasedPath(String url, String expected) {
         assertEquals(expected, Urls.pathLower(url));
@@ -38,11 +38,11 @@ class UrlsTest {
 
     @ParameterizedTest
     @CsvSource(value = {
-        "http://example.com/path, example.com",
-        "https://WWW.EXAMPLE.COM/path, example.com",
-        "https://www.youtube.com/watch, youtube.com",
-        "https://m.youtube.com/watch, m.youtube.com",
-        "https://example.com:8080/path, example.com"
+            "http://example.com/path, example.com",
+            "https://WWW.EXAMPLE.COM/path, example.com",
+            "https://www.youtube.com/watch, youtube.com",
+            "https://m.youtube.com/watch, m.youtube.com",
+            "https://example.com:8080/path, example.com"
     }, nullValues = {"null"})
     void hostLower_ValidUrls_ReturnsLowerCasedHostWithoutWww(String url, String expected) {
         assertEquals(expected, Urls.hostLower(url));

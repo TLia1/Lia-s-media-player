@@ -21,10 +21,13 @@ other players see, and it is **not required by anyone else** on the server.
 
 ## At a glance
 
-- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->`1.4.1`<!-- /mod_version -->
-- **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version --> · **Java:** 21
+- **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->
+  `1.4.1`<!-- /mod_version -->
+- **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->
+  `1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
-- **API mod id:** `liasmediaplayerapi` — ships in the same JAR. The API is licensed under the **MIT License**; other mods can freely depend on the API to register custom media sources, control playback, and receive events.
+- **API mod id:** `liasmediaplayerapi` — ships in the same JAR. The API is licensed under the **MIT License**; other
+  mods can freely depend on the API to register custom media sources, control playback, and receive events.
 - **Dependencies:** NeoForge + Minecraft only. No bundled native libraries — video
   playback uses external `ffmpeg`/`ffprobe` and `yt-dlp` tools that the mod
   downloads automatically into the game folder on first launch.
@@ -33,14 +36,17 @@ other players see, and it is **not required by anyone else** on the server.
 
 - **[FEATURES.md](FEATURES.md)** — a friendly, user-facing tour of everything the
   mod does in-game.
-- **[API-DOCUMENTATION.md](API-DOCUMENTATION.md)** — reference for mod developers: how to depend on the API, register custom sources, control playback, and listen to events.
+- **[API-DOCUMENTATION.md](API-DOCUMENTATION.md)** — reference for mod developers: how to depend on the API, register
+  custom sources, control playback, and listen to events.
 - **[TECHNICAL-DETAILS.md](TECHNICAL-DETAILS.md)** — the technical reference:
   architecture, package layout, threading model, and how each piece works.
 
 ## Installing (for players)
 
-1. Install NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->`1.21.1`<!-- /minecraft_version -->.
-2. Get the mod from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/lias-media-player) or [Modrinth](https://modrinth.com/mod/lias-media-player)
+1. Install NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
+   `1.21.1`<!-- /minecraft_version -->.
+2. Get the mod from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/lias-media-player)
+   or [Modrinth](https://modrinth.com/mod/lias-media-player)
 3. Drop the mod jar into your client's `mods/`
    folder. Do **not** put it on a server — it is client-only and does nothing there.
 4. Launch the game. The first time you play a video, the mod quietly downloads
@@ -100,7 +106,8 @@ Contributions are welcome! Here's how to get started:
 - **No new dependencies** — the mod ships with NeoForge + Minecraft only, no
   extra libraries.
 - **Client-only** — everything runs on `Dist.CLIENT`. Don't add server-side code.
-- **Internationalization (i18n)** — any new UI elements containing text must be internationalized in all supported languages (e.g., `en_us.json` and `fr_fr.json`) using `Component.translatable()`.
+- **Internationalization (i18n)** — any new UI elements containing text must be internationalized in all supported
+  languages (e.g., `en_us.json` and `fr_fr.json`) using `Component.translatable()`.
 - Preserve existing comments and docstrings unless they are directly related to
   your changes.
 - Make unit tests when possible to ensure code is working
@@ -146,4 +153,5 @@ The code is organized into small, single-responsibility packages under
 screen), `image`, `video` and `audio` (the media engines), `media` (their shared volume,
 URL resolver and title cache), `playlist` (saved playlists), `input` (keybinds), and
 `tools` (the external binaries). Teaching the mod a new kind of link is normally just
-one new `MediaSource` class plus one line in the registry. Other mods can integrate through the public API (`com.lia.mediaplayer.api`), which exposes source registration, playback control, volume, playlists, and playback events.
+one new `MediaSource` class plus one line in the registry. Other mods can integrate through the public API (
+`com.lia.mediaplayer.api`), which exposes source registration, playback control, volume, playlists, and playback events.

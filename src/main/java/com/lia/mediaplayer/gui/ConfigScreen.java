@@ -1,14 +1,11 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.api.config.ConfigOption;
-import com.lia.mediaplayer.config.ConfigStore;
-
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-
 import org.jetbrains.annotations.Nullable;
 
 public class ConfigScreen extends Screen {

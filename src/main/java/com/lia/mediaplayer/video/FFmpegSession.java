@@ -59,7 +59,8 @@ public class FFmpegSession {
         if (videoChannel != null) {
             try {
                 videoChannel.close();
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
             videoChannel = null;
         }
         videoIn = null;

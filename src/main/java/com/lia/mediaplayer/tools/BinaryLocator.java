@@ -126,7 +126,9 @@ final class BinaryLocator {
         return out.stream().distinct().toList();
     }
 
-    /** Adds {@code <base>/<Python*>/Scripts/yt-dlp.exe} for each Python install found. */
+    /**
+     * Adds {@code <base>/<Python*>/Scripts/yt-dlp.exe} for each Python install found.
+     */
     private static void addPythonScriptsDirs(List<String> out, String base) {
         Path baseDir = Path.of(base);
         if (!Files.isDirectory(baseDir)) {
@@ -143,7 +145,9 @@ final class BinaryLocator {
 
     // ---- Small helpers -------------------------------------------------------
 
-    /** Returns {@code true} if the path points at an existing executable file. */
+    /**
+     * Returns {@code true} if the path points at an existing executable file.
+     */
     static boolean isExecutableFile(String pathString) {
         try {
             File file = new File(pathString);
@@ -153,7 +157,9 @@ final class BinaryLocator {
         }
     }
 
-    /** Probes a bare command by asking for its version (fast and side-effect free). */
+    /**
+     * Probes a bare command by asking for its version (fast and side-effect free).
+     */
     private static boolean canRun(String executable, String versionFlag) {
         try {
             Process process = new ProcessBuilder(executable, versionFlag)

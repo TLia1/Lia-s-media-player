@@ -1,11 +1,9 @@
 package com.lia.mediaplayer.tools;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -84,7 +82,9 @@ public final class MediaBinaries {
             OS_ARCH.contains("aarch64") || OS_ARCH.contains("arm64");
     private static final String EXE_SUFFIX = WINDOWS ? ".exe" : "";
 
-    /** The external tools the player can manage. */
+    /**
+     * The external tools the player can manage.
+     */
     enum Tool {
         YT_DLP("yt-dlp", "liasmediaplayer.ytdlp", "YT_DLP_PATH", "YTDLP_PATH"),
         FFMPEG("ffmpeg", "liasmediaplayer.ffmpeg", "FFMPEG_PATH"),
@@ -100,19 +100,25 @@ public final class MediaBinaries {
             this.overrideEnv = overrideEnv;
         }
 
-        /** Platform executable name, e.g. {@code yt-dlp.exe} on Windows. */
+        /**
+         * Platform executable name, e.g. {@code yt-dlp.exe} on Windows.
+         */
         String exeName() {
             return base + EXE_SUFFIX;
         }
 
-        /** The flag that makes the tool print its version and exit 0. */
+        /**
+         * The flag that makes the tool print its version and exit 0.
+         */
         String versionFlag() {
             // yt-dlp uses the long form; ffmpeg/ffprobe use a single dash.
             return this == YT_DLP ? "--version" : "-version";
         }
     }
 
-    /** Resolved absolute path per tool, computed lazily and reused. */
+    /**
+     * Resolved absolute path per tool, computed lazily and reused.
+     */
     private static final Map<Tool, String> CACHE = new ConcurrentHashMap<>();
 
     /**
@@ -124,19 +130,25 @@ public final class MediaBinaries {
 
     // ---- Public API ---------------------------------------------------------
 
-    /** Ensures yt-dlp is available and returns its path, or {@code null}. */
+    /**
+     * Ensures yt-dlp is available and returns its path, or {@code null}.
+     */
     @Nullable
     public static String ytDlp() {
         return locate(Tool.YT_DLP);
     }
 
-    /** Ensures ffmpeg is available and returns its path, or {@code null}. */
+    /**
+     * Ensures ffmpeg is available and returns its path, or {@code null}.
+     */
     @Nullable
     public static String ffmpeg() {
         return locate(Tool.FFMPEG);
     }
 
-    /** Ensures ffprobe is available and returns its path, or {@code null}. */
+    /**
+     * Ensures ffprobe is available and returns its path, or {@code null}.
+     */
     @Nullable
     public static String ffprobe() {
         return locate(Tool.FFPROBE);
@@ -157,14 +169,14 @@ public final class MediaBinaries {
             LiasMediaPlayer.LOGGER.info("Media tools ready: yt-dlp={}, ffmpeg={}",
                     ytDlp != null ? ytDlp : "MISSING",
                     ffmpeg != null ? ffmpeg : "MISSING");
-            
+
             if (ytDlp != null && ffmpeg != null) {
                 net.minecraft.client.Minecraft.getInstance().execute(() -> {
                     net.minecraft.client.gui.components.toasts.SystemToast.add(
-                        net.minecraft.client.Minecraft.getInstance().getToasts(),
-                        net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                        net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
-                        net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.downloaded")
+                            net.minecraft.client.Minecraft.getInstance().getToasts(),
+                            net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                            net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
+                            net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.downloaded")
                     );
                 });
             }
@@ -258,7 +270,9 @@ public final class MediaBinaries {
         };
     }
 
-    /** Downloads the single-file yt-dlp release, once per session. */
+    /**
+     * Downloads the single-file yt-dlp release, once per session.
+     */
     @Nullable
     private static synchronized String ensureYtDlp(Path managedDir) {
         Path target = managedDir.resolve(Tool.YT_DLP.exeName());

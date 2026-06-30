@@ -7,7 +7,8 @@ final class MediaControls {
     static final int VOL_BAR_W = 6;
     static final int VOL_BAR_H = 40;
 
-    private MediaControls() {}
+    private MediaControls() {
+    }
 
     static String timeText(long positionMicros, long durationMicros, int queuedSize) {
         String suffix = queuedSize > 0 ? "  +" + queuedSize : "";

@@ -40,7 +40,9 @@ public final class FFmpegCli {
     private FFmpegCli() {
     }
 
-    /** Scales width x height to fit within the max box, keeping even dimensions. */
+    /**
+     * Scales width x height to fit within the max box, keeping even dimensions.
+     */
     public static int[] fitWithin(int width, int height, int maxWidth, int maxHeight) {
         double scale = Math.min(1.0, Math.min(maxWidth / (double) width, maxHeight / (double) height));
         int w = Math.max(2, (int) Math.round(width * scale));
@@ -56,15 +58,19 @@ public final class FFmpegCli {
 
     private static final long PROBE_TIMEOUT_SECONDS = 20;
 
-    /** Stream properties needed to set up playback, gathered from ffprobe. */
+    /**
+     * Stream properties needed to set up playback, gathered from ffprobe.
+     */
     public record MediaInfo(int width, int height, double fps, long durationMicros,
-                     boolean hasAudio, int sampleRate, int channels) {
+                            boolean hasAudio, int sampleRate, int channels) {
 
         public boolean hasVideo() {
             return width > 0 && height > 0;
         }
 
-        /** Microseconds between two consecutive frames at the reported rate. */
+        /**
+         * Microseconds between two consecutive frames at the reported rate.
+         */
         public long frameDurationMicros() {
             double f = fps > 0 ? fps : 30.0;
             return Math.max(1L, Math.round(1_000_000.0 / f));
@@ -75,7 +81,9 @@ public final class FFmpegCli {
     // Probing
     // ------------------------------------------------------------------
 
-    /** Reads stream metadata for {@code url}. Throws if ffprobe is unavailable or fails. */
+    /**
+     * Reads stream metadata for {@code url}. Throws if ffprobe is unavailable or fails.
+     */
     public static MediaInfo probe(String url) throws IOException {
         String ffprobe = MediaBinaries.ffprobe();
         if (ffprobe == null) {

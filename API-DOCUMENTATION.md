@@ -1,16 +1,21 @@
 # Lia's Media Player API Documentation
 
-Lia's Media Player exposes a public API that allows other NeoForge mods to seamlessly integrate with its media playback capabilities.
+Lia's Media Player exposes a public API that allows other NeoForge mods to seamlessly integrate with its media playback
+capabilities.
 
 The project uses a two-mods-in-one-JAR pattern. A single JAR file contains two separate NeoForge mods:
-- `liasmediaplayer`: The main client-side mod.
-- `liasmediaplayerapi`: The API mod, which provides the interfaces, events, and facade class for interacting with the media player.
 
-Both mods appear as separate entries in the Minecraft Mods menu. Other mods should depend **only** on the `liasmediaplayerapi` mod and import classes strictly from the `com.lia.mediaplayer.api` package.
+- `liasmediaplayer`: The main client-side mod.
+- `liasmediaplayerapi`: The API mod, which provides the interfaces, events, and facade class for interacting with the
+  media player.
+
+Both mods appear as separate entries in the Minecraft Mods menu. Other mods should depend **only** on the
+`liasmediaplayerapi` mod and import classes strictly from the `com.lia.mediaplayer.api` package.
 
 ## Getting Started
 
-To use the API in your NeoForge 1.21.1 mod, add the mod JAR as a `compileOnly` dependency in your `build.gradle` (or via a Maven repository if published). 
+To use the API in your NeoForge 1.21.1 mod, add the mod JAR as a `compileOnly` dependency in your `build.gradle` (or via
+a Maven repository if published).
 
 In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dependency on the API mod:
 
@@ -25,9 +30,11 @@ In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dep
 
 ## Core Concepts
 
-All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlayerAPI` interface, obtained via `LiasMediaPlayerApi.getInstance()`, or through NeoForge events.
+All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlayerAPI` interface, obtained via
+`LiasMediaPlayerApi.getInstance()`, or through NeoForge events.
 
 ### Thread Safety
+
 - **Media Queries** (`isSupported`, `kindOf`, volume getters/setters) are thread-safe and can be called from any thread.
 - **Playback Control** (`playVideo`, `playAudio`, `togglePause`, etc.) must be called from the **main/render thread**.
 
@@ -35,9 +42,11 @@ All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlay
 
 ### 1. Registering Custom Media Sources
 
-You can teach the media player how to handle new link formats (e.g., a custom music streaming service) by implementing the `MediaSource` interface. 
+You can teach the media player how to handle new link formats (e.g., a custom music streaming service) by implementing
+the `MediaSource` interface.
 
-The recommended way to register a source is by listening to the `MediaSourceRegistrationEvent` on the **mod event bus** during initialization:
+The recommended way to register a source is by listening to the `MediaSourceRegistrationEvent` on the **mod event bus**
+during initialization:
 
 ```java
 import com.lia.mediaplayer.api.MediaKind;
@@ -76,11 +85,13 @@ class MyCustomAudioSource implements MediaSource {
 }
 ```
 
-Alternatively, you can register a source at any time by calling `LiasMediaPlayerApi.getInstance().registerSource(source)`.
+Alternatively, you can register a source at any time by calling
+`LiasMediaPlayerApi.getInstance().registerSource(source)`.
 
 ### 2. Triggering Playback
 
-You can programmatically trigger media playback from your mod. These methods return a `long` ID which uniquely identifies the player window.
+You can programmatically trigger media playback from your mod. These methods return a `long` ID which uniquely
+identifies the player window.
 
 ```java
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
@@ -103,7 +114,8 @@ long imageId = LiasMediaPlayerApi.getInstance().showImage("https://example.com/i
 
 ### 3. Listening to Playback Events
 
-The mod fires `PlaybackEvent` on the **NeoForge event bus** (`NeoForge.EVENT_BUS`) whenever playback state changes. This is extremely useful for addons that want to synchronize video or audio playback across a server.
+The mod fires `PlaybackEvent` on the **NeoForge event bus** (`NeoForge.EVENT_BUS`) whenever playback state changes. This
+is extremely useful for addons that want to synchronize video or audio playback across a server.
 
 ```java
 import com.lia.mediaplayer.api.event.PlaybackEvent;
@@ -145,7 +157,8 @@ LiasMediaPlayerApi.getInstance().nextAudio();
 LiasMediaPlayerApi.getInstance().seekVideo(0.5);
 ```
 
-You can also use the `long` ID returned by the playback methods to control a specific player directly, regardless of whether it is front-most:
+You can also use the `long` ID returned by the playback methods to control a specific player directly, regardless of
+whether it is front-most:
 
 ```java
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
@@ -188,7 +201,8 @@ LiasMediaPlayerApi.getInstance().addToPlaylist("Server Radio", "https://youtube.
 
 ### 6. Registering Configuration Options
 
-The API provides a way to register custom configuration options that are automatically saved, loaded, and rendered in the mod's Options menu (`ConfigScreen`).
+The API provides a way to register custom configuration options that are automatically saved, loaded, and rendered in
+the mod's Options menu (`ConfigScreen`).
 
 First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption`:
 
@@ -208,7 +222,8 @@ IntSliderOption myOption = new IntSliderOption(
 LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
 ```
 
-Once registered, your option will automatically appear in the Options menu. You can access its current value at any time:
+Once registered, your option will automatically appear in the Options menu. You can access its current value at any
+time:
 
 ```java
 int currentLimit = myOption.getValue();
@@ -218,8 +233,8 @@ int currentLimit = myOption.getValue();
 
 | Class                          | Description                                                                                       |
 |--------------------------------|---------------------------------------------------------------------------------------------------|
-| `LiasMediaPlayerApi`               | The API mod entrypoint. Provides `getInstance()` to retrieve the active `IMediaPlayerAPI`.        |
-| `IMediaPlayerAPI`              | The main interface for controlling playback, volume, playlists, and registering sources/configs.|
+| `LiasMediaPlayerApi`           | The API mod entrypoint. Provides `getInstance()` to retrieve the active `IMediaPlayerAPI`.        |
+| `IMediaPlayerAPI`              | The main interface for controlling playback, volume, playlists, and registering sources/configs.  |
 | `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
 | `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
 | `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |

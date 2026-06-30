@@ -10,14 +10,24 @@ package com.lia.mediaplayer.api;
  * <p>This is part of the <b>public API</b>.</p>
  */
 public enum PlaybackState {
-    /** The player is resolving the URL or buffering the first frames. */
+    /**
+     * The player is resolving the URL or buffering the first frames.
+     */
     LOADING,
-    /** Media is actively playing. */
+    /**
+     * Media is actively playing.
+     */
     PLAYING,
-    /** Playback is temporarily paused by the user. */
+    /**
+     * Playback is temporarily paused by the user.
+     */
     PAUSED,
-    /** The track has reached its natural end. */
+    /**
+     * The track has reached its natural end.
+     */
     ENDED,
-    /** Playback failed (network error, unsupported format, etc.). */
+    /**
+     * Playback failed (network error, unsupported format, etc.).
+     */
     FAILED
 }

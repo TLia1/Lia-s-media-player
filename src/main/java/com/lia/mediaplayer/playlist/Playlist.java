@@ -26,7 +26,9 @@ public final class Playlist {
         this.name = name;
     }
 
-    /** The live, mutable list of URLs in play order. */
+    /**
+     * The live, mutable list of URLs in play order.
+     */
     public List<String> urls() {
         if (urls == null) { // a hand-edited / older JSON file may omit the array
             urls = new ArrayList<>();

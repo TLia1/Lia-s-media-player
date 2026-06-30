@@ -19,7 +19,9 @@ final class Glyphs {
     private Glyphs() {
     }
 
-    /** A play triangle (paused) or two pause bars (playing). */
+    /**
+     * A play triangle (paused) or two pause bars (playing).
+     */
     static void playPause(GuiGraphics g, int x, int y, boolean playing, int color) {
         if (playing) {
             g.fill(x + 1, y, x + 4, y + BUTTON, color);
@@ -33,7 +35,9 @@ final class Glyphs {
         }
     }
 
-    /** A "skip to next" glyph: a right-pointing triangle followed by a vertical bar. */
+    /**
+     * A "skip to next" glyph: a right-pointing triangle followed by a vertical bar.
+     */
     static void next(GuiGraphics g, int x, int y, int color) {
         for (int i = 0; i < BUTTON; i++) {
             int half = Math.min(i, BUTTON - 1 - i);
@@ -43,7 +47,9 @@ final class Glyphs {
         g.fill(x + BUTTON - 3, y, x + BUTTON - 1, y + BUTTON, color);
     }
 
-    /** A "skip to previous" glyph: a vertical bar followed by a left-pointing triangle. */
+    /**
+     * A "skip to previous" glyph: a vertical bar followed by a left-pointing triangle.
+     */
     static void previous(GuiGraphics g, int x, int y, int color) {
         g.fill(x + 2, y, x + 4, y + BUTTON, color);
         for (int i = 0; i < BUTTON; i++) {
@@ -53,7 +59,9 @@ final class Glyphs {
         }
     }
 
-    /** A tiny speaker glyph; crossed out when muted. */
+    /**
+     * A tiny speaker glyph; crossed out when muted.
+     */
     static void speaker(GuiGraphics g, int x, int y, boolean muted, int color) {
         int midY = y + BUTTON / 2;
         g.fill(x + 1, midY - 2, x + 3, midY + 2, color);
@@ -72,7 +80,9 @@ final class Glyphs {
         }
     }
 
-    /** A small music-note glyph (used for the audio bar / playlists button). */
+    /**
+     * A small music-note glyph (used for the audio bar / playlists button).
+     */
     static void note(GuiGraphics g, int x, int y, int color) {
         // Stem + a filled note head at the bottom-left.
         g.fill(x + 6, y + 1, x + 7, y + 8, color);
@@ -80,7 +90,9 @@ final class Glyphs {
         g.fill(x + 3, y + 6, x + 7, y + 9, color);     // head
     }
 
-    /** A small arrow pointing up or down. */
+    /**
+     * A small arrow pointing up or down.
+     */
     static void arrow(GuiGraphics g, int x, int y, boolean up, int color) {
         int tx = x + 3;
         int ty = y + 4;

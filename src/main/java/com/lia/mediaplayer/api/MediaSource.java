@@ -22,10 +22,14 @@ import net.minecraft.network.chat.Component;
  */
 public interface MediaSource {
 
-    /** Whether this source recognizes (and can present) {@code url}. */
+    /**
+     * Whether this source recognizes (and can present) {@code url}.
+     */
     boolean matches(String url);
 
-    /** Which feature handles a matching link — see {@link MediaKind}. */
+    /**
+     * Which feature handles a matching link — see {@link MediaKind}.
+     */
     MediaKind kind();
 
     /**

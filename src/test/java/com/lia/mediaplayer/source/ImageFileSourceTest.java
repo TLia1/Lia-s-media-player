@@ -2,6 +2,7 @@ package com.lia.mediaplayer.source;
 
 import com.lia.mediaplayer.api.MediaKind;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImageFileSourceTest {
@@ -14,7 +15,7 @@ class ImageFileSourceTest {
         assertTrue(source.matches("https://example.com/image.jpeg"));
         assertTrue(source.matches("https://example.com/image.gif"));
         assertTrue(source.matches("https://example.com/image.bmp"));
-        
+
         // With query params or fragments
         assertTrue(source.matches("https://example.com/image.png?width=200&height=100"));
         assertTrue(source.matches("https://example.com/image.png#fragment"));

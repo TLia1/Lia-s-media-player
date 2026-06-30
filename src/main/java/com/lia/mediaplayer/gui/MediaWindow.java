@@ -24,9 +24,13 @@ import net.minecraft.util.Mth;
 abstract class MediaWindow {
     protected static final int PADDING = 3;
     protected static final int BUTTON = 11;
-    /** Size of the square resize grip in the bottom-right corner. */
+    /**
+     * Size of the square resize grip in the bottom-right corner.
+     */
     protected static final int GRIP = 8;
-    /** Smallest the scaled content is allowed to get, in pixels. */
+    /**
+     * Smallest the scaled content is allowed to get, in pixels.
+     */
     protected static final int MIN_CONTENT = 48;
     private static final double MAX_SCALE = 6.0;
 
@@ -42,20 +46,28 @@ abstract class MediaWindow {
 
     enum ClickResult {NONE, HANDLED, CLOSE}
 
-    /** Monotonic counter handing out unique IDs to every window. */
+    /**
+     * Monotonic counter handing out unique IDs to every window.
+     */
     private static long idSeq;
 
-    /** This window's unique ID for API control. */
+    /**
+     * This window's unique ID for API control.
+     */
     private final long id = ++idSeq;
 
     public final long getId() {
         return id;
     }
 
-    /** Monotonic counter handing out stacking order to every window (image or video). */
+    /**
+     * Monotonic counter handing out stacking order to every window (image or video).
+     */
     private static long zSeq;
 
-    /** This window's place in the global stacking order; higher draws on top. */
+    /**
+     * This window's place in the global stacking order; higher draws on top.
+     */
     private long zOrder;
 
     protected boolean visible = true;
@@ -64,12 +76,16 @@ abstract class MediaWindow {
         bringToFront();
     }
 
-    /** Raises this window above all others in the shared image/video stack. */
+    /**
+     * Raises this window above all others in the shared image/video stack.
+     */
     final void bringToFront() {
         zOrder = ++zSeq;
     }
 
-    /** Stacking order; windows are drawn from lowest to highest, so highest is on top. */
+    /**
+     * Stacking order; windows are drawn from lowest to highest, so highest is on top.
+     */
     final long zOrder() {
         return zOrder;
     }
@@ -99,16 +115,24 @@ abstract class MediaWindow {
     // Subclass contract
     // ------------------------------------------------------------------
 
-    /** Intrinsic content width in pixels (e.g. the decoded video/image width). */
+    /**
+     * Intrinsic content width in pixels (e.g. the decoded video/image width).
+     */
     protected abstract int sourceWidth();
 
-    /** Intrinsic content height in pixels. */
+    /**
+     * Intrinsic content height in pixels.
+     */
     protected abstract int sourceHeight();
 
-    /** Default (un-resized) scale that fits the content nicely on screen. */
+    /**
+     * Default (un-resized) scale that fits the content nicely on screen.
+     */
     protected abstract double computeAutoScale(int srcW, int srcH, int screenWidth, int screenHeight);
 
-    /** The source URL, opened in the browser by the link button. */
+    /**
+     * The source URL, opened in the browser by the link button.
+     */
     protected abstract String mediaUrl();
 
     /**
@@ -126,13 +150,19 @@ abstract class MediaWindow {
      */
     protected abstract int anchorGroup();
 
-    /** Sets {@link #boxX}/{@link #boxY} for the default (un-moved) placement. */
+    /**
+     * Sets {@link #boxX}/{@link #boxY} for the default (un-moved) placement.
+     */
     protected abstract void computeAnchor(int screenWidth, int screenHeight, int slot);
 
-    /** Draws the picture itself into the content rect. */
+    /**
+     * Draws the picture itself into the content rect.
+     */
     protected abstract void drawContent(GuiGraphics g, Font font);
 
-    /** Extra vertical space reserved below the content for a control bar. */
+    /**
+     * Extra vertical space reserved below the content for a control bar.
+     */
     protected int controlBarHeight() {
         return 0;
     }
@@ -164,35 +194,49 @@ abstract class MediaWindow {
     protected void constrainPosition(int screenWidth, int screenHeight) {
     }
 
-    /** Whether a hide ("_") button is shown next to the close button. */
+    /**
+     * Whether a hide ("_") button is shown next to the close button.
+     */
     protected boolean hasHideButton() {
         return false;
     }
 
-    /** Lays out the subclass' control bar using the current content rect. */
+    /**
+     * Lays out the subclass' control bar using the current content rect.
+     */
     protected void layoutControls(Font font) {
     }
 
-    /** Renders the subclass' control bar. */
+    /**
+     * Renders the subclass' control bar.
+     */
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
     }
 
-    /** Lets the subclass consume a click on its controls before move/resize. */
+    /**
+     * Lets the subclass consume a click on its controls before move/resize.
+     */
     protected ClickResult onControlClick(double mouseX, double mouseY) {
         return ClickResult.NONE;
     }
 
-    /** Lets the subclass consume a drag on its controls (seek / volume). */
+    /**
+     * Lets the subclass consume a drag on its controls (seek / volume).
+     */
     protected boolean onControlDrag(double mouseX, double mouseY) {
         return false;
     }
 
-    /** Lets the subclass finish a control drag on mouse-up. */
+    /**
+     * Lets the subclass finish a control drag on mouse-up.
+     */
     protected boolean onControlRelease() {
         return false;
     }
 
-    /** Plain (no modifier) wheel over the window; subclass decides what it does. */
+    /**
+     * Plain (no modifier) wheel over the window; subclass decides what it does.
+     */
     protected boolean onControlScroll(double mouseX, double mouseY, double scrollY) {
         return false;
     }
@@ -206,7 +250,9 @@ abstract class MediaWindow {
         return false;
     }
 
-    /** Extra hover area outside the box that still counts as "ours" (e.g. a popup). */
+    /**
+     * Extra hover area outside the box that still counts as "ours" (e.g. a popup).
+     */
     protected boolean overPopup(double mouseX, double mouseY) {
         return false;
     }
@@ -240,7 +286,9 @@ abstract class MediaWindow {
     // Layout
     // ------------------------------------------------------------------
 
-    /** Computes the window geometry for this frame and stores the hit regions. */
+    /**
+     * Computes the window geometry for this frame and stores the hit regions.
+     */
     final void layout(int screenWidth, int screenHeight, int slot) {
         int srcW = Math.max(1, sourceWidth());
         int srcH = Math.max(1, sourceHeight());
@@ -302,7 +350,9 @@ abstract class MediaWindow {
     // Rendering
     // ------------------------------------------------------------------
 
-    /** Draws the window. {@code withControls} is false for the in-world HUD overlay. */
+    /**
+     * Draws the window. {@code withControls} is false for the in-world HUD overlay.
+     */
     final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls) {
         Font font = Minecraft.getInstance().font;
 
@@ -333,7 +383,9 @@ abstract class MediaWindow {
         }
     }
 
-    /** A small "open in browser" arrow (up-and-to-the-right). */
+    /**
+     * A small "open in browser" arrow (up-and-to-the-right).
+     */
     private void drawLinkIcon(GuiGraphics g, int x, int y, int color) {
         // Diagonal shaft from the bottom-left to the top-right.
         for (int i = 0; i < 6; i++) {
@@ -344,7 +396,9 @@ abstract class MediaWindow {
         g.fill(x + 8, y + 2, x + 9, y + 6, color);
     }
 
-    /** A small diagonal grip in the bottom-right corner, highlighted on hover. */
+    /**
+     * A small diagonal grip in the bottom-right corner, highlighted on hover.
+     */
     private void renderGrip(GuiGraphics g, int mouseX, int mouseY) {
         int color = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize ? BTN_HOVER : BTN_COLOR;
         for (int i = 1; i <= 3; i++) {
@@ -454,7 +508,9 @@ abstract class MediaWindow {
         userScale = Mth.clamp(newW / (double) Math.max(1, sourceWidth()), minScale, MAX_SCALE);
     }
 
-    /** Wheel zoom around the current size ({@code steps} = wheel notches). */
+    /**
+     * Wheel zoom around the current size ({@code steps} = wheel notches).
+     */
     protected final void zoom(double steps) {
         pinPosition();
         userSized = true;
@@ -462,7 +518,9 @@ abstract class MediaWindow {
         userScale = Mth.clamp(lastScale * (1.0 + 0.1 * steps), minScale, MAX_SCALE);
     }
 
-    /** Opens the media's source URL in the system browser. */
+    /**
+     * Opens the media's source URL in the system browser.
+     */
     private void openLink() {
         String url = mediaUrl();
         if (url != null && !url.isEmpty()) {
@@ -470,7 +528,9 @@ abstract class MediaWindow {
         }
     }
 
-    /** Freezes the current auto-anchored position so move/resize don't make it jump. */
+    /**
+     * Freezes the current auto-anchored position so move/resize don't make it jump.
+     */
     private void pinPosition() {
         if (!userPlaced) {
             userPlaced = true;

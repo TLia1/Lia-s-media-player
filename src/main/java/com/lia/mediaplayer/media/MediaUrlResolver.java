@@ -30,7 +30,9 @@ import java.util.concurrent.TimeUnit;
  * <p>All methods here run on a background thread (never the render thread).</p>
  */
 public final class MediaUrlResolver {
-    /** yt-dlp can be slow on first call (it sometimes self-updates / probes formats). */
+    /**
+     * yt-dlp can be slow on first call (it sometimes self-updates / probes formats).
+     */
     private static final long YT_DLP_TIMEOUT_SECONDS = 25;
 
     /**
@@ -43,7 +45,9 @@ public final class MediaUrlResolver {
     private MediaUrlResolver() {
     }
 
-    /** Resolves a chat link to a directly-playable media URL. */
+    /**
+     * Resolves a chat link to a directly-playable media URL.
+     */
     public static String resolve(String url) throws IOException {
         if (YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url)) {
             return resolveYtDlp(url);

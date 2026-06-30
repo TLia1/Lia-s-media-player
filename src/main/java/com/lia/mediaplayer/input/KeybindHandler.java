@@ -1,9 +1,7 @@
 package com.lia.mediaplayer.input;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.gui.AudioPlayerManager;
 import com.lia.mediaplayer.gui.PlaylistScreen;
-
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;

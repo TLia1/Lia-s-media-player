@@ -1,10 +1,7 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.gui.ImageWindowManager;
 import com.lia.mediaplayer.image.ImagePreviewCache;
-import com.lia.mediaplayer.source.MediaSources;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -28,7 +25,9 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 @EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class ImageChatHandler {
 
-    /** Image/GIF links → gold {@code [picture]}/{@code [gif]} label; warms the preview cache. */
+    /**
+     * Image/GIF links → gold {@code [picture]}/{@code [gif]} label; warms the preview cache.
+     */
     private static final ChatLinkRewriter.LinkRewrite IMAGE_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {

@@ -1,7 +1,6 @@
 package com.lia.mediaplayer;
 
 import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
-import com.lia.mediaplayer.source.MediaSources;
 import com.lia.mediaplayer.tools.MediaBinaries;
 import com.mojang.logging.LogUtils;
 import net.neoforged.api.distmarker.Dist;

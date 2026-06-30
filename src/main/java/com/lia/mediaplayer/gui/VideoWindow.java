@@ -30,20 +30,30 @@ import java.util.List;
  */
 final class VideoWindow extends MediaWindow {
     private static final int CONTROL_BAR_HEIGHT = 18;
-    /** Smallest seek bar we keep when computing the minimum window width. */
+    /**
+     * Smallest seek bar we keep when computing the minimum window width.
+     */
     private static final int MIN_SEEK_W = 20;
 
-    /** Queue panel geometry. */
+    /**
+     * Queue panel geometry.
+     */
     private static final int ROW_H = 30;
     private static final int THUMB_W = 48;
     private static final int THUMB_H = 27;
     private static final int HEADER_H = 12;
     private static final int PANEL_PAD = 3;
-    /** Fixed width of the side panel and the gap between it and the player. */
+    /**
+     * Fixed width of the side panel and the gap between it and the player.
+     */
     private static final int PANEL_W = 200;
-    /** Compact panel width used next to a small player (thumbnails only, no titles). */
+    /**
+     * Compact panel width used next to a small player (thumbnails only, no titles).
+     */
     private static final int PANEL_W_MINI = 104;
-    /** A player box this wide (or narrower) gets the compact "mini" queue panel. */
+    /**
+     * A player box this wide (or narrower) gets the compact "mini" queue panel.
+     */
     private static final int MINI_PANEL_MAX_BOX_W = 200;
     private static final int PANEL_GAP = 4;
     /**
@@ -54,7 +64,9 @@ final class VideoWindow extends MediaWindow {
      */
     private static final int PANEL_RESERVE = PANEL_W + PANEL_GAP + 2;
     private static final int PANEL_RESERVE_MINI = PANEL_W_MINI + PANEL_GAP + 2;
-    /** Width of the scrollbar drawn when the queue overflows. */
+    /**
+     * Width of the scrollbar drawn when the queue overflows.
+     */
     private static final int SCROLLBAR_W = 3;
     private static final int PANEL_BG = 0xF0141414;
     private static final int PANEL_HEADER_BG = 0xFF1E1E1E;
@@ -64,7 +76,9 @@ final class VideoWindow extends MediaWindow {
     private static final int SCROLL_THUMB_COLOR = 0xFF6A6A6A;
 
     private VideoPlayer player;
-    /** URLs waiting to play in this same window, in play order. */
+    /**
+     * URLs waiting to play in this same window, in play order.
+     */
     private final PlayQueue queue = new PlayQueue();
     private boolean draggingSeek;
     private boolean draggingVolume;
@@ -104,7 +118,9 @@ final class VideoWindow extends MediaWindow {
     // Queue
     // ------------------------------------------------------------------
 
-    /** Appends a URL to this window's play queue (it plays after the current ones). */
+    /**
+     * Appends a URL to this window's play queue (it plays after the current ones).
+     */
     void enqueue(String url) {
         queue.add(url);
         // Warm the thumbnail and title so the panel can show them without a click.
@@ -112,12 +128,16 @@ final class VideoWindow extends MediaWindow {
         MediaTitleCache.getOrLoad(url);
     }
 
-    /** Number of URLs still waiting to play after the current one. */
+    /**
+     * Number of URLs still waiting to play after the current one.
+     */
     int queueSize() {
         return queue.size();
     }
 
-    /** A snapshot of the queued URLs, in play order, for rendering. */
+    /**
+     * A snapshot of the queued URLs, in play order, for rendering.
+     */
     List<String> queuedUrls() {
         return queue.snapshot();
     }
@@ -135,7 +155,9 @@ final class VideoWindow extends MediaWindow {
         return true;
     }
 
-    /** Plays a specific queued entry now (the others keep their order). */
+    /**
+     * Plays a specific queued entry now (the others keep their order).
+     */
     void jumpTo(int index) {
         if (index < 0 || index >= queue.size()) {
             return;
@@ -143,24 +165,32 @@ final class VideoWindow extends MediaWindow {
         playUrl(queue.remove(index));
     }
 
-    /** Removes a queued entry without playing it. */
+    /**
+     * Removes a queued entry without playing it.
+     */
     void removeAt(int index) {
         if (index >= 0 && index < queue.size()) {
             queue.remove(index);
         }
     }
 
-    /** Moves a queued entry one place earlier in the queue. */
+    /**
+     * Moves a queued entry one place earlier in the queue.
+     */
     void moveUp(int index) {
         queue.moveUp(index);
     }
 
-    /** Moves a queued entry one place later in the queue. */
+    /**
+     * Moves a queued entry one place later in the queue.
+     */
     void moveDown(int index) {
         queue.moveDown(index);
     }
 
-    /** Swaps in a new player for the given URL, disposing the current one. */
+    /**
+     * Swaps in a new player for the given URL, disposing the current one.
+     */
     private void playUrl(String url) {
         player.dispose();
         draggingSeek = false;
@@ -169,7 +199,9 @@ final class VideoWindow extends MediaWindow {
         player.start();
     }
 
-    /** Disposes the current player and discards anything still queued. */
+    /**
+     * Disposes the current player and discards anything still queued.
+     */
     void disposeAll() {
         queue.clear();
         player.dispose();
@@ -301,7 +333,9 @@ final class VideoWindow extends MediaWindow {
         }
     }
 
-    /** The panel width that pairs with a player of the given box width. */
+    /**
+     * The panel width that pairs with a player of the given box width.
+     */
     private static int panelWidthFor(int playerBoxW) {
         return playerBoxW <= MINI_PANEL_MAX_BOX_W ? PANEL_W_MINI : PANEL_W;
     }
@@ -446,8 +480,9 @@ final class VideoWindow extends MediaWindow {
     }
 
 
-
-    /** A "playlist" glyph: three stacked lines with a small bar on the left of each. */
+    /**
+     * A "playlist" glyph: three stacked lines with a small bar on the left of each.
+     */
     private void drawQueueIcon(GuiGraphics g, int color) {
         int x = queueBtnX;
         int y = queueBtnY;
@@ -462,7 +497,9 @@ final class VideoWindow extends MediaWindow {
     // Queue panel
     // ------------------------------------------------------------------
 
-    /** Recomputes the panel geometry (cached for input hit-testing). */
+    /**
+     * Recomputes the panel geometry (cached for input hit-testing).
+     */
     private void computePanelLayout() {
         var window = Minecraft.getInstance().getWindow();
         int screenW = window.getGuiScaledWidth();
@@ -494,7 +531,9 @@ final class VideoWindow extends MediaWindow {
         panelRowsTop = panelY + HEADER_H + PANEL_PAD;
     }
 
-    /** Right edge available for row content (excludes the scrollbar gutter). */
+    /**
+     * Right edge available for row content (excludes the scrollbar gutter).
+     */
     private int panelContentRight() {
         return panelX + panelW - (panelScrollable ? SCROLLBAR_W + 2 : 0);
     }
@@ -525,7 +564,9 @@ final class VideoWindow extends MediaWindow {
         }
     }
 
-    /** A thin scrollbar on the right gutter showing the scroll position. */
+    /**
+     * A thin scrollbar on the right gutter showing the scroll position.
+     */
     private void renderScrollbar(GuiGraphics g, int rows) {
         int sbX = panelX + panelW - SCROLLBAR_W - 1;
         int trackTop = panelRowsTop;
@@ -638,7 +679,6 @@ final class VideoWindow extends MediaWindow {
     private int upBtnX() {
         return downBtnX() - BUTTON - 2;
     }
-
 
 
     // ------------------------------------------------------------------

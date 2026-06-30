@@ -13,10 +13,16 @@ package com.lia.mediaplayer.api;
  * custom {@link MediaSource}s and to query media support programmatically.</p>
  */
 public enum MediaKind {
-    /** A still picture or animated GIF, shown as a hover preview / pinned window. */
+    /**
+     * A still picture or animated GIF, shown as a hover preview / pinned window.
+     */
     IMAGE,
-    /** A video, stream or YouTube link, played by the in-game video player. */
+    /**
+     * A video, stream or YouTube link, played by the in-game video player.
+     */
     VIDEO,
-    /** A sound-only file, played by the in-game audio player (a compact bar + queue). */
+    /**
+     * A sound-only file, played by the in-game audio player (a compact bar + queue).
+     */
     AUDIO
 }

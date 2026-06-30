@@ -14,7 +14,9 @@ final class Urls {
     private Urls() {
     }
 
-    /** The lower-cased path component of {@code url}, or {@code null} if it can't be parsed. */
+    /**
+     * The lower-cased path component of {@code url}, or {@code null} if it can't be parsed.
+     */
     static String pathLower(String url) {
         try {
             String path = URI.create(url).getPath();
@@ -24,7 +26,9 @@ final class Urls {
         }
     }
 
-    /** The lower-cased host of {@code url} with a leading {@code www.} stripped, or {@code null}. */
+    /**
+     * The lower-cased host of {@code url} with a leading {@code www.} stripped, or {@code null}.
+     */
     static String hostLower(String url) {
         try {
             String host = URI.create(url).getHost();

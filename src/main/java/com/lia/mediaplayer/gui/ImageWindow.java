@@ -91,7 +91,9 @@ final class ImageWindow extends MediaWindow {
         g.drawString(font, status, tx, ty, TEXT_COLOR);
     }
 
-    /** No control bar, so a plain wheel is free to zoom. */
+    /**
+     * No control bar, so a plain wheel is free to zoom.
+     */
     @Override
     protected boolean onControlScroll(double mouseX, double mouseY, double scrollY) {
         zoom(scrollY);

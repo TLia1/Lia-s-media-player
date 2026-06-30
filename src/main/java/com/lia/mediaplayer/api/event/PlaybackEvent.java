@@ -26,25 +26,43 @@ import net.neoforged.bus.api.Event;
  */
 public class PlaybackEvent extends Event {
 
-    /** The type of playback event. */
+    /**
+     * The type of playback event.
+     */
     public enum Type {
-        /** A new track has started playing. */
+        /**
+         * A new track has started playing.
+         */
         STARTED,
-        /** Playback was paused by the user. */
+        /**
+         * Playback was paused by the user.
+         */
         PAUSED,
-        /** Playback was resumed from a pause. */
+        /**
+         * Playback was resumed from a pause.
+         */
         RESUMED,
-        /** A seek was performed (position changed). */
+        /**
+         * A seek was performed (position changed).
+         */
         SEEKED,
-        /** The track has ended naturally. */
+        /**
+         * The track has ended naturally.
+         */
         ENDED,
-        /** Playback failed with an error. */
+        /**
+         * Playback failed with an error.
+         */
         FAILED,
-        /** The player was closed/disposed. */
+        /**
+         * The player was closed/disposed.
+         */
         STOPPED
     }
 
-    /** The kind of player that fired this event. */
+    /**
+     * The kind of player that fired this event.
+     */
     public enum PlayerKind {
         VIDEO,
         AUDIO
@@ -67,32 +85,44 @@ public class PlaybackEvent extends Event {
         this.durationMicros = durationMicros;
     }
 
-    /** The type of playback event (started, paused, ended, etc.). */
+    /**
+     * The type of playback event (started, paused, ended, etc.).
+     */
     public Type getType() {
         return type;
     }
 
-    /** Whether this event comes from a video or audio player. */
+    /**
+     * Whether this event comes from a video or audio player.
+     */
     public PlayerKind getPlayerKind() {
         return playerKind;
     }
 
-    /** The URL of the media being played. */
+    /**
+     * The URL of the media being played.
+     */
     public String getUrl() {
         return url;
     }
 
-    /** The current state of the player. */
+    /**
+     * The current state of the player.
+     */
     public PlaybackState getState() {
         return state;
     }
 
-    /** The playback position in microseconds at the time of the event. */
+    /**
+     * The playback position in microseconds at the time of the event.
+     */
     public long getPositionMicros() {
         return positionMicros;
     }
 
-    /** The total duration in microseconds, or 0 if unknown (e.g. live streams). */
+    /**
+     * The total duration in microseconds, or 0 if unknown (e.g. live streams).
+     */
     public long getDurationMicros() {
         return durationMicros;
     }

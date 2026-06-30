@@ -6,7 +6,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 /**
  * Represents a single configuration option that can be registered in the
  * Media Player's configuration menu.
- * 
+ *
  * @param <T> the type of value this option stores
  */
 public abstract class ConfigOption<T> {
@@ -22,12 +22,16 @@ public abstract class ConfigOption<T> {
         this.currentValue = defaultValue;
     }
 
-    /** The unique identifier for this option (e.g. "liasmediaplayer:max_video_windows"). */
+    /**
+     * The unique identifier for this option (e.g. "liasmediaplayer:max_video_windows").
+     */
     public String getId() {
         return id;
     }
 
-    /** The localization key used to display the label in the GUI. */
+    /**
+     * The localization key used to display the label in the GUI.
+     */
     public String getTranslationKey() {
         return translationKey;
     }
@@ -45,17 +49,22 @@ public abstract class ConfigOption<T> {
         // Optionally trigger a save, but currently ConfigStore handles save when UI closes or updates
     }
 
-    /** Serializes the current value to a JSON element for storage. */
+    /**
+     * Serializes the current value to a JSON element for storage.
+     */
     public abstract JsonElement serialize();
 
-    /** Deserializes the value from a JSON element loaded from storage. */
+    /**
+     * Deserializes the value from a JSON element loaded from storage.
+     */
     public abstract void deserialize(JsonElement element);
 
-    /** 
+    /**
      * Creates the GUI widget that will be rendered in the configuration screen.
-     * @param x the starting X coordinate
-     * @param y the starting Y coordinate
-     * @param width the width of the widget
+     *
+     * @param x            the starting X coordinate
+     * @param y            the starting Y coordinate
+     * @param width        the width of the widget
      * @param saveCallback a callback that should be invoked when the value changes, to persist the settings
      */
     public abstract AbstractWidget createWidget(int x, int y, int width, Runnable saveCallback);

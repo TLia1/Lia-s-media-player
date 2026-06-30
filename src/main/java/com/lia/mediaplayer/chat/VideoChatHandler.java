@@ -1,16 +1,13 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.gui.VideoPlayerManager;
 import com.lia.mediaplayer.media.MediaTitleCache;
-import com.lia.mediaplayer.source.MediaSources;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -30,7 +27,9 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 @EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class VideoChatHandler {
 
-    /** Video/stream/YouTube links → aqua underlined {@code [video]}/{@code [youtube]} label. */
+    /**
+     * Video/stream/YouTube links → aqua underlined {@code [video]}/{@code [youtube]} label.
+     */
     private static final ChatLinkRewriter.LinkRewrite VIDEO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {

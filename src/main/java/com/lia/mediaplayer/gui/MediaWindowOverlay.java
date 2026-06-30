@@ -2,11 +2,9 @@ package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.api.MediaKind;
-import com.lia.mediaplayer.source.MediaSources;
+import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.video.VideoPlayer;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,14 +19,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Single coordinator that renders and drives <em>all</em> media windows — the
@@ -129,7 +122,7 @@ public final class MediaWindowOverlay {
         boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
-        g.pose().translate(0, 0, 500); 
+        g.pose().translate(0, 0, 500);
         g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? 0xF0303030 : 0xD0181818);
         Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
         g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
@@ -147,16 +140,16 @@ public final class MediaWindowOverlay {
         }
         Font font = Minecraft.getInstance().font;
         Component label = Component.translatable(hidden > 1 ? "gui.liasmediaplayer.hidden_players.plural" : "gui.liasmediaplayer.hidden_players.singular", hidden);
-        int triW = 8; 
+        int triW = 8;
         revealW = triW + font.width(label) + 10;
         revealH = 14;
         revealX = 4;
-        revealY = 22; 
+        revealY = 22;
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
         g.pose().pushPose();
-        g.pose().translate(0, 0, 500); 
+        g.pose().translate(0, 0, 500);
         g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? 0xF0303030 : 0xD0181818);
         int tx = revealX + 5;
         int ty = revealY + 3;

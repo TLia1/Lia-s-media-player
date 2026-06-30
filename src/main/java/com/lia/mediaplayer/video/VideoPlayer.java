@@ -2,11 +2,8 @@ package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.media.MediaUrlResolver;
-import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.tools.FFmpegCli;
-
 import net.minecraft.resources.ResourceLocation;
-
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -197,10 +194,10 @@ public final class VideoPlayer {
         pausedAtNanos = 0;
 
         long resumePos = clock.currentPositionMicros(hasAudio, audioOutput.getLine(), false);
-        
+
         clock.resume(audioOutput.getLine());
         audioOutput.startLine();
-        
+
         state = State.PLAYING;
         if (stale) {
             seekTo(resumePos);

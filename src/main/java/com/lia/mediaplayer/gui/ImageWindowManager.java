@@ -2,11 +2,7 @@ package com.lia.mediaplayer.gui;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Registry of the pinned {@link ImageWindow}s, keyed by source URL.
@@ -19,13 +15,17 @@ import java.util.Map;
  * so no synchronization is needed.</p>
  */
 public class ImageWindowManager {
-    /** Hard cap on simultaneous pinned images; the oldest is dropped past this. */
+    /**
+     * Hard cap on simultaneous pinned images; the oldest is dropped past this.
+     */
     private final LinkedHashMap<String, ImageWindow> windows = new LinkedHashMap<>();
 
     public ImageWindowManager() {
     }
 
-    /** Ensures a (visible) pinned window exists for the URL. */
+    /**
+     * Ensures a (visible) pinned window exists for the URL.
+     */
     public ImageWindow show(String url) {
         ImageWindow window = windows.get(url);
         if (window == null) {
@@ -42,7 +42,9 @@ public class ImageWindowManager {
         return windows.get(url);
     }
 
-    /** A stable snapshot for iterating during render / input handling. */
+    /**
+     * A stable snapshot for iterating during render / input handling.
+     */
     public List<ImageWindow> getWindows() {
         return new ArrayList<>(windows.values());
     }
@@ -59,7 +61,9 @@ public class ImageWindowManager {
         windows.clear();
     }
 
-    /** Public entry point for the API: show/pin an image URL. Returns the window ID. */
+    /**
+     * Public entry point for the API: show/pin an image URL. Returns the window ID.
+     */
     public long showPublic(String url) {
         return show(url).getId();
     }

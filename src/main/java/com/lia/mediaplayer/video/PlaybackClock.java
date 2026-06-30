@@ -1,7 +1,8 @@
 package com.lia.mediaplayer.video;
 
-import javax.sound.sampled.SourceDataLine;
 import org.jetbrains.annotations.Nullable;
+
+import javax.sound.sampled.SourceDataLine;
 
 /**
  * Handles synchronization between video frames and the audio line or wall clock.

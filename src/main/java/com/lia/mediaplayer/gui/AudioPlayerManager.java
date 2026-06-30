@@ -23,13 +23,17 @@ import java.util.List;
  * back the configurable keybinds and act on the front-most bar.</p>
  */
 public class AudioPlayerManager {
-    /** Hard cap on simultaneous bars; the oldest is disposed past this. */
+    /**
+     * Hard cap on simultaneous bars; the oldest is disposed past this.
+     */
     private final List<AudioWindow> windows = new ArrayList<>();
 
     public AudioPlayerManager() {
     }
 
-    /** Creates a brand-new, independent bar playing {@code url} and starts it. */
+    /**
+     * Creates a brand-new, independent bar playing {@code url} and starts it.
+     */
     public AudioWindow open(String url) {
         evictIfFull();
         AudioPlayer player = new AudioPlayer(url);
@@ -119,7 +123,9 @@ public class AudioPlayerManager {
         }
     }
 
-    /** Disposes every bar (e.g. on disconnect). */
+    /**
+     * Disposes every bar (e.g. on disconnect).
+     */
     public void disposeAll() {
         for (AudioWindow window : windows) {
             window.disposeAll();
@@ -131,7 +137,9 @@ public class AudioPlayerManager {
     // Transport helpers for the keybinds (act on the front-most bar)
     // ------------------------------------------------------------------
 
-    /** Whether at least one audio bar exists (so a keybind has something to act on). */
+    /**
+     * Whether at least one audio bar exists (so a keybind has something to act on).
+     */
     public boolean hasAny() {
         return !windows.isEmpty();
     }
@@ -177,7 +185,7 @@ public class AudioPlayerManager {
         return window != null ? window.getId() : -1;
     }
 
-    public long playNewWindowPublic(String url){
+    public long playNewWindowPublic(String url) {
         return open(url).getId();
     }
 
