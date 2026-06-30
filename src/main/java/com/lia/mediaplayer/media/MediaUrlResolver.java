@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.TwitchSource;
 import com.lia.mediaplayer.source.YouTubeSource;
 import com.lia.mediaplayer.tools.MediaBinaries;
 
@@ -44,14 +45,14 @@ public final class MediaUrlResolver {
 
     /** Resolves a chat link to a directly-playable media URL. */
     public static String resolve(String url) throws IOException {
-        if (YouTubeSource.isYouTube(url)) {
-            return resolveYouTube(url);
+        if (YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url)) {
+            return resolveYtDlp(url);
         }
         // Direct files and HLS/DASH manifests are opened by ffmpeg as-is.
         return url;
     }
 
-    private static String resolveYouTube(String url) throws IOException {
+    private static String resolveYtDlp(String url) throws IOException {
         String executable = MediaBinaries.ytDlp();
         if (executable == null) {
             throw new IOException("yt-dlp is required to play YouTube links. It could not be found, "
@@ -116,7 +117,7 @@ public final class MediaUrlResolver {
             String message = net.minecraft.network.chat.Component.translatable("error.liasmediaplayer.ytdlp_failed").getString();
             throw new IOException(message);
         }
-        LiasMediaPlayer.LOGGER.info("Resolved YouTube link {} -> direct stream via {}", url, executable);
+        LiasMediaPlayer.LOGGER.info("Resolved link {} -> direct stream via {}", url, executable);
         return firstLine.trim();
     }
 

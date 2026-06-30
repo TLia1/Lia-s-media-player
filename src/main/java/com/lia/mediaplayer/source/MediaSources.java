@@ -30,6 +30,7 @@ public class MediaSources {
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
             new YouTubeSource(),     // a youtube.com / youtu.be link
+            new TwitchSource(),      // a twitch.tv link
             new StreamSource(),      // an .m3u8 / .mpd manifest
             new DirectVideoSource(), // a direct .mp4/.webm/... file
             new AudioFileSource()    // a direct .mp3/.ogg/.wav/... file

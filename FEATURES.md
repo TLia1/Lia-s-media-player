@@ -12,7 +12,7 @@ When a link to an image or video appears in chat, the mod quietly replaces the r
 
 - A gold **[picture]** for images
 - A gold **[gif]** for Tenor GIFs
-- An aqua, underlined **video label** for videos and YouTube links
+- An aqua, underlined **video label** for videos, YouTube links, and Twitch streams
 - A green, underlined **[audio]** label for audio files
 
 ---
@@ -46,6 +46,7 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 - **Direct video files** shared in chat: MP4, WEBM, MOV, MKV, M4V, AVI, FLV, OGV, and TS
 - **Live/adaptive streams**: HLS (`.m3u8`) and DASH (`.mpd`) manifests
 - **YouTube links**: normal `watch` links, `youtu.be` short links, and Shorts
+- **Twitch streams**: channel and VOD links
 
 **The player window** gives you full controls:
 

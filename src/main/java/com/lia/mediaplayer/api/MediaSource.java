@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
  *
  * <p>This is the mod's main extension point. Teaching the mod about a new media
  * source is a matter of writing one {@code MediaSource} and registering it via
- * the {@link MediaPlayerAPI} or the {@link com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent};
+ * the {@link IMediaPlayerAPI} or the {@link com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent};
  * nothing in the chat handlers, the windows or the playback engine needs to change.</p>
  *
  * <p>Implementations must be stateless and side-effect free so they can be
