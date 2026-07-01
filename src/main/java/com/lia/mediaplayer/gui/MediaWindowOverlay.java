@@ -8,7 +8,9 @@ import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -38,6 +40,17 @@ public final class MediaWindowOverlay {
     private static int plBtnX, plBtnY, plBtnW, plBtnH;
 
     private MediaWindowOverlay() {
+    }
+
+    @SubscribeEvent
+    public static void onScreenInit(ScreenEvent.Init.Post event) {
+        if (event.getScreen() instanceof PauseScreen) {
+            Screen screen = event.getScreen();
+            int screenWidth = screen.width;
+            event.addListener(Button.builder(Component.translatable("gui.liasmediaplayer.config_button"), (button) -> {
+                Minecraft.getInstance().setScreen(new ConfigScreen(screen));
+            }).bounds(screenWidth - 10 - 112, 10, 112, 20).build());
+        }
     }
 
     private static MediaPlayerContext getContext() {

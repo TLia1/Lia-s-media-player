@@ -47,5 +47,6 @@
   "config.liasmediaplayer.frame_queue_capacity.warning": "Attention : Augmenter cette valeur consommera plus de mémoire !",
   "config.liasmediaplayer.max_image_cache_mb": "Cache d'images max (Mo)",
   "config.liasmediaplayer.yt_dlp_timeout": "Délai d'attente yt-dlp (secondes)",
+  "gui.liasmediaplayer.config_button": "Option du lecteur multimédia",
   "error.liasmediaplayer.ytdlp_failed": "Aucune video youtube n'a été trouvé avec cette url"
 }
