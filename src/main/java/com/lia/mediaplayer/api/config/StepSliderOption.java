@@ -12,8 +12,8 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
     private final T[] steps;
     private final Function<T, String> displayFormatter;
 
-    public StepSliderOption(String id, String translationKey, int defaultIndex, T[] steps, Function<T, String> displayFormatter) {
-        super(id, translationKey, defaultIndex);
+    public StepSliderOption(String id, String group, String translationKey, int defaultIndex, T[] steps, Function<T, String> displayFormatter) {
+        super(id, group, translationKey, defaultIndex);
         this.steps = steps;
         this.displayFormatter = displayFormatter;
     }
@@ -63,3 +63,4 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
         return (double) getValue() / (steps.length - 1);
     }
 }
+

@@ -11,13 +11,15 @@ import net.minecraft.client.gui.components.AbstractWidget;
  */
 public abstract class ConfigOption<T> {
     private final String id;
+    private final String group;
     private final String translationKey;
     private final T defaultValue;
     private T currentValue;
     private String warningKey;
 
-    public ConfigOption(String id, String translationKey, T defaultValue) {
+    public ConfigOption(String id, String group, String translationKey, T defaultValue) {
         this.id = id;
+        this.group = group;
         this.translationKey = translationKey;
         this.defaultValue = defaultValue;
         this.currentValue = defaultValue;
@@ -41,6 +43,13 @@ public abstract class ConfigOption<T> {
      */
     public String getId() {
         return id;
+    }
+
+    /**
+     * The group this option belongs to, used for creating sub-menus in the config screen.
+     */
+    public String getGroup() {
+        return group;
     }
 
     /**

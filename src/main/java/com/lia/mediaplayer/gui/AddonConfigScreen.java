@@ -1,42 +1,47 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.config.ConfigOption;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-
-public class ConfigScreen extends Screen {
+public class AddonConfigScreen extends Screen {
 
     @Nullable
     private final Screen lastScreen;
+    private final String group;
 
-    public ConfigScreen(@Nullable Screen lastScreen) {
-        super(Component.translatable("gui.liasmediaplayer.config.title"));
+    public AddonConfigScreen(@Nullable Screen lastScreen, String group) {
+        super(Component.translatable("gui.liasmediaplayer.config.title." + group));
         this.lastScreen = lastScreen;
+        this.group = group;
     }
 
     @Override
     protected void init() {
-        int w = 200;
+        int w = 300;
         int x = (this.width - w) / 2;
         int y = 40;
         int dy = 24;
 
+        // Iterate over all registered options and create their widgets
         com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
         if (ctx == null) return;
-
-        Collection<String> groups = ctx.getConfigStore().getGroups();
-
-        for (String group : groups) {
-            this.addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.config.button." + group), b -> {
-                if (this.minecraft != null) {
-                    this.minecraft.setScreen(new AddonConfigScreen(this, group));
+        for (ConfigOption<?> option : ctx.getConfigStore().getOptionsByGroup(group)) {
+            AbstractWidget widget = option.createWidget(x, y, w, ctx.getConfigStore()::save);
+            if (widget != null) {
+                if (option.getWarningKey() != null) {
+                    widget.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                            Component.translatable(option.getWarningKey())
+                                    .withStyle(net.minecraft.ChatFormatting.RED)
+                    ));
                 }
-            }).bounds(x, y, w, 20).build());
-            y += dy;
+                this.addRenderableWidget(widget);
+                y += dy;
+            }
         }
 
         y += 12;

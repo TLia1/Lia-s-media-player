@@ -10,8 +10,8 @@ public class IntSliderOption extends ConfigOption<Integer> {
     private final int min;
     private final int max;
 
-    public IntSliderOption(String id, String translationKey, int defaultValue, int min, int max) {
-        super(id, translationKey, defaultValue);
+    public IntSliderOption(String id, String group, String translationKey, int defaultValue, int min, int max) {
+        super(id, group, translationKey, defaultValue);
         this.min = min;
         this.max = max;
     }
@@ -57,3 +57,4 @@ public class IntSliderOption extends ConfigOption<Integer> {
         return (double) (getValue() - min) / (max - min);
     }
 }
+

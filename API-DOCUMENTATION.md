@@ -202,16 +202,18 @@ LiasMediaPlayerApi.getInstance().addToPlaylist("Server Radio", "https://youtube.
 ### 6. Registering Configuration Options
 
 The API provides a way to register custom configuration options that are automatically saved, loaded, and rendered in
-the mod's Options menu (`ConfigScreen`).
+the mod's Options menu. The options will be grouped by the `group` parameter in the constructor.
 
-First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption`:
+First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption` and `StepSliderOption`:
 
 ```java
 import com.lia.mediaplayer.api.config.IntSliderOption;
+import com.lia.mediaplayer.api.config.StepSliderOption;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
 IntSliderOption myOption = new IntSliderOption(
     "myaddon:custom_limit", // Unique ID
+    "myaddon",              // Group
     "My Custom Limit",      // Translation key / display name
     10,                     // Default value
     1,                      // Min value
@@ -222,7 +224,7 @@ IntSliderOption myOption = new IntSliderOption(
 LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
 ```
 
-Once registered, your option will automatically appear in the Options menu. You can access its current value at any
+Once registered, your option will automatically appear in the Options menu under the specified group. You can access its current value at any
 time:
 
 ```java
@@ -242,3 +244,4 @@ int currentLimit = myOption.getValue();
 | `PlaybackEvent`                | Game bus event fired on transport changes (started, paused, seeked, ended, etc.).                 |
 | `ConfigOption<T>`              | Base class for an extensible configuration option.                                                |
 | `IntSliderOption`              | A `ConfigOption` implementation for integer values controlled via a slider.                       |
+| `StepSliderOption<T>`          | A `ConfigOption` implementation for values selected from a predefined list of steps.              |

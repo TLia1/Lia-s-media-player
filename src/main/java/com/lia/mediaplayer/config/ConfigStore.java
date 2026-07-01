@@ -47,20 +47,21 @@ public class ConfigStore {
     static {
         VIDEO_RESOLUTION = new StepSliderOption<>(
                 "liasmediaplayer:video_resolution",
+                "liasmediaplayer",
                 "config.liasmediaplayer.video_resolution",
                 3, // default 480p
                 RESOLUTION_HEIGHTS,
                 height -> height + "p"
         );
-        MAX_PINNED_IMAGES = new IntSliderOption("liasmediaplayer:max_pinned_images", "config.liasmediaplayer.max_pinned_images", 6, 1, 20);
-        MAX_VIDEO_WINDOWS = new IntSliderOption("liasmediaplayer:max_video_windows", "config.liasmediaplayer.max_video_windows", 4, 1, 10);
-        MAX_AUDIO_WINDOWS = new IntSliderOption("liasmediaplayer:max_audio_windows", "config.liasmediaplayer.max_audio_windows", 4, 1, 10);
-        MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
-        MAX_IMAGE_CACHE_ENTRIES = new IntSliderOption("liasmediaplayer:max_image_cache_entries", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100);
-        FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
+        MAX_PINNED_IMAGES = new IntSliderOption("liasmediaplayer:max_pinned_images", "liasmediaplayer", "config.liasmediaplayer.max_pinned_images", 6, 1, 20);
+        MAX_VIDEO_WINDOWS = new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10);
+        MAX_AUDIO_WINDOWS = new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10);
+        MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "liasmediaplayer", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
+        MAX_IMAGE_CACHE_ENTRIES = new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100);
+        FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "liasmediaplayer", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
                 .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
-        MAX_IMAGE_CACHE_MEGABYTES = new IntSliderOption("liasmediaplayer:max_image_cache_mb", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024);
-        YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
+        MAX_IMAGE_CACHE_MEGABYTES = new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024);
+        YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
     }
 
     public ConfigStore() {
@@ -90,6 +91,20 @@ public class ConfigStore {
 
     public synchronized Collection<ConfigOption<?>> getAllOptions() {
         return registeredOptions.values();
+    }
+
+    public synchronized Collection<ConfigOption<?>> getOptionsByGroup(String group) {
+        return registeredOptions.values().stream()
+                .filter(o -> o.getGroup().equals(group))
+                .toList();
+    }
+
+    public synchronized Collection<String> getGroups() {
+        return registeredOptions.values().stream()
+                .map(ConfigOption::getGroup)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     public synchronized void ensureLoaded() {
