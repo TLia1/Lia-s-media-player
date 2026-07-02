@@ -204,13 +204,15 @@ LiasMediaPlayerApi.getInstance().addToPlaylist("Server Radio", "https://youtube.
 The API provides a way to register custom configuration options that are automatically saved, loaded, and rendered in
 the mod's Options menu. The options will be grouped by the `group` parameter in the constructor.
 
-First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption` and `StepSliderOption`:
+First, create a `ConfigOption`. The API provides handy subclasses like `IntSliderOption`, `StepSliderOption` and `EnumOption`:
 
 ```java
 import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.StepSliderOption;
+import com.lia.mediaplayer.api.config.EnumOption;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
+// Example of a slider for integer values
 IntSliderOption myOption = new IntSliderOption(
     "myaddon:custom_limit", // Unique ID
     "myaddon",              // Group
@@ -220,8 +222,22 @@ IntSliderOption myOption = new IntSliderOption(
     100                     // Max value
 ).withWarning("myaddon.custom_limit.warning"); // Optional red tooltip for sensitive settings
 
+// Example of a button that cycles through enum values
+public enum MyEnum {
+    LOW, MEDIUM, HIGH
+}
+
+EnumOption<MyEnum> myEnumOption = new EnumOption<>(
+    "myaddon:quality",      // Unique ID
+    "myaddon",              // Group
+    "Quality",              // Translation key / display name
+    MyEnum.MEDIUM           // Default value
+);
+
+
 // Register it
 LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
+LiasMediaPlayerApi.getInstance().registerConfigOption(myEnumOption);
 ```
 
 Once registered, your option will automatically appear in the Options menu under the specified group. You can access its current value at any
@@ -229,6 +245,7 @@ time:
 
 ```java
 int currentLimit = myOption.getValue();
+MyEnum currentQuality = myEnumOption.getValue();
 ```
 
 ## Class Reference
@@ -245,3 +262,4 @@ int currentLimit = myOption.getValue();
 | `ConfigOption<T>`              | Base class for an extensible configuration option.                                                |
 | `IntSliderOption`              | A `ConfigOption` implementation for integer values controlled via a slider.                       |
 | `StepSliderOption<T>`          | A `ConfigOption` implementation for values selected from a predefined list of steps.              |
+| `EnumOption<E>`                | A `ConfigOption` implementation for enum values controlled via a button.                          |
