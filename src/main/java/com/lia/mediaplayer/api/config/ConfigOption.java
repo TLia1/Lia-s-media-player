@@ -16,6 +16,7 @@ public abstract class ConfigOption<T> {
     private final T defaultValue;
     private T currentValue;
     private String warningKey;
+    private OptionWidth width = OptionWidth.FULL;
 
     public ConfigOption(String id, String group, String translationKey, T defaultValue) {
         this.id = id;
@@ -36,6 +37,18 @@ public abstract class ConfigOption<T> {
 
     public String getWarningKey() {
         return warningKey;
+    }
+
+    /**
+     * Sets the width of the option in the config screen.
+     */
+    public ConfigOption<T> withWidth(OptionWidth width) {
+        this.width = width;
+        return this;
+    }
+
+    public OptionWidth getWidth() {
+        return width;
     }
 
     /**

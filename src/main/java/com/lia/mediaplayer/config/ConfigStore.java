@@ -7,6 +7,7 @@ import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.StepSliderOption;
+import com.lia.mediaplayer.api.config.OptionWidth;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
@@ -17,7 +18,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The user's saved configuration, persisted to {@code <gamedir>/liasmediaplayer/config.json}.
@@ -54,25 +57,25 @@ public class ConfigStore {
                 height -> height + "p"
         );
         MAX_PINNED_IMAGES = new IntSliderOption("liasmediaplayer:max_pinned_images", "liasmediaplayer", "config.liasmediaplayer.max_pinned_images", 6, 1, 20);
-        MAX_VIDEO_WINDOWS = new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10);
-        MAX_AUDIO_WINDOWS = new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10);
+        MAX_VIDEO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
+        MAX_AUDIO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
         MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "liasmediaplayer", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
-        MAX_IMAGE_CACHE_ENTRIES = new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100);
+        MAX_IMAGE_CACHE_ENTRIES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100).withWidth(OptionWidth.HALF);
         FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "liasmediaplayer", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
                 .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
-        MAX_IMAGE_CACHE_MEGABYTES = new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024);
+        MAX_IMAGE_CACHE_MEGABYTES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024).withWidth(OptionWidth.HALF);
         YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
     }
 
     public ConfigStore() {
         register(VIDEO_RESOLUTION);
-        register(MAX_PINNED_IMAGES);
         register(MAX_VIDEO_WINDOWS);
         register(MAX_AUDIO_WINDOWS);
-        register(MAX_GIF_FRAMES);
         register(MAX_IMAGE_CACHE_ENTRIES);
-        register(FRAME_QUEUE_CAPACITY);
         register(MAX_IMAGE_CACHE_MEGABYTES);
+        register(MAX_GIF_FRAMES);
+        register(MAX_PINNED_IMAGES);
+        register(FRAME_QUEUE_CAPACITY);
         register(YT_DLP_TIMEOUT_SECONDS);
     }
 
@@ -93,18 +96,18 @@ public class ConfigStore {
         return registeredOptions.values();
     }
 
-    public synchronized Collection<ConfigOption<?>> getOptionsByGroup(String group) {
+    public synchronized List<ConfigOption<?>> getOptionsByGroup(String group) {
         return registeredOptions.values().stream()
                 .filter(o -> o.getGroup().equals(group))
-                .toList();
+                .collect(Collectors.toList());
     }
 
-    public synchronized Collection<String> getGroups() {
+    public synchronized List<String> getGroups() {
         return registeredOptions.values().stream()
                 .map(ConfigOption::getGroup)
                 .distinct()
                 .sorted()
-                .toList();
+                .collect(Collectors.toList());
     }
 
     public synchronized void ensureLoaded() {

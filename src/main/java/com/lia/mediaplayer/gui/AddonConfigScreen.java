@@ -1,18 +1,22 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 public class AddonConfigScreen extends Screen {
 
     @Nullable
     private final Screen lastScreen;
     private final String group;
+    private OptionsList optionsList;
 
     public AddonConfigScreen(@Nullable Screen lastScreen, String group) {
         super(Component.translatable("gui.liasmediaplayer.config.title." + group));
@@ -22,39 +26,28 @@ public class AddonConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        int w = 300;
-        int x = (this.width - w) / 2;
-        int y = 40;
-        int dy = 24;
+        this.optionsList = new OptionsList(this, this.minecraft, this.width, this.height - 64, 32);
+        this.addWidget(this.optionsList);
 
-        // Iterate over all registered options and create their widgets
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
         if (ctx == null) return;
-        for (ConfigOption<?> option : ctx.getConfigStore().getOptionsByGroup(group)) {
-            AbstractWidget widget = option.createWidget(x, y, w, ctx.getConfigStore()::save);
-            if (widget != null) {
-                if (option.getWarningKey() != null) {
-                    widget.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                            Component.translatable(option.getWarningKey())
-                                    .withStyle(net.minecraft.ChatFormatting.RED)
-                    ));
-                }
-                this.addRenderableWidget(widget);
-                y += dy;
-            }
-        }
+        List<ConfigOption<?>> options = ctx.getConfigStore().getOptionsByGroup(group);
+        this.optionsList.addOptions(options);
 
-        y += 12;
-
-        // Done button
         this.addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> this.onClose())
-                .bounds((this.width - 200) / 2, y, 200, 20).build());
+                .bounds((this.width - 200) / 2, this.height - 28, 200, 20).build());
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+    public void render(GuiGraphics pGuiGraphics, int pMouseX, int pMouseY, float pPartialTick) {
+        super.render(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
+        this.optionsList.render(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
+        pGuiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+    }
+
+    @Override
+    public boolean mouseScrolled(double pMouseX, double pMouseY, double pScrollX, double pScrollY) {
+        return this.optionsList.mouseScrolled(pMouseX, pMouseY, pScrollX, pScrollY);
     }
 
     @Override
