@@ -128,6 +128,13 @@ public final class MediaBinaries {
      */
     private static final Set<String> DOWNLOAD_ATTEMPTED = ConcurrentHashMap.newKeySet();
 
+    enum InstallState {
+        FOUND, INSTALLED, REINSTALLED, UNAVAILABLE
+    }
+
+    private static InstallState ytDlpState = InstallState.FOUND;
+    private static InstallState ffmpegState = InstallState.FOUND;
+
     // ---- Public API ---------------------------------------------------------
 
     /**
@@ -170,13 +177,29 @@ public final class MediaBinaries {
                     ytDlp != null ? ytDlp : "MISSING",
                     ffmpeg != null ? ffmpeg : "MISSING");
 
-            if (ytDlp != null && ffmpeg != null) {
+            InstallState combinedState = InstallState.FOUND;
+            if (ytDlpState == InstallState.UNAVAILABLE || ffmpegState == InstallState.UNAVAILABLE) {
+                combinedState = InstallState.UNAVAILABLE;
+            } else if (ytDlpState == InstallState.REINSTALLED || ffmpegState == InstallState.REINSTALLED) {
+                combinedState = InstallState.REINSTALLED;
+            } else if (ytDlpState == InstallState.INSTALLED || ffmpegState == InstallState.INSTALLED) {
+                combinedState = InstallState.INSTALLED;
+            }
+
+            if (combinedState != InstallState.FOUND) {
+                String translationKey = switch (combinedState) {
+                    case UNAVAILABLE -> "gui.liasmediaplayer.toast.unavailable";
+                    case REINSTALLED -> "gui.liasmediaplayer.toast.reinstalled";
+                    case INSTALLED -> "gui.liasmediaplayer.toast.installed";
+                    default -> "gui.liasmediaplayer.toast.installed";
+                };
+
                 net.minecraft.client.Minecraft.getInstance().execute(() -> {
                     net.minecraft.client.gui.components.toasts.SystemToast.add(
                             net.minecraft.client.Minecraft.getInstance().getToasts(),
                             net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                             net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
-                            net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.downloaded")
+                            net.minecraft.network.chat.Component.translatable(translationKey)
                     );
                 });
             }
@@ -276,13 +299,17 @@ public final class MediaBinaries {
     @Nullable
     private static synchronized String ensureYtDlp(Path managedDir) {
         Path target = managedDir.resolve(Tool.YT_DLP.exeName());
-        if (BinaryLocator.isExecutableFile(target.toString())) {
-            return target.toString();
-        }
+        boolean existed = BinaryLocator.isExecutableFile(target.toString());
         if (!DOWNLOAD_ATTEMPTED.add("yt-dlp")) {
             return null; // already tried this session
         }
-        return BinaryDownloader.downloadYtDlp(managedDir);
+        String res = BinaryDownloader.downloadYtDlp(managedDir);
+        if (res != null) {
+            ytDlpState = existed ? InstallState.REINSTALLED : InstallState.INSTALLED;
+        } else {
+            ytDlpState = InstallState.UNAVAILABLE;
+        }
+        return res;
     }
 
     /**
@@ -292,14 +319,20 @@ public final class MediaBinaries {
      */
     private static synchronized boolean ensureFfmpegBundle(Path managedDir) {
         Path ffmpeg = managedDir.resolve(Tool.FFMPEG.exeName());
-        Path ffprobe = managedDir.resolve(Tool.FFPROBE.exeName());
-        if (BinaryLocator.isExecutableFile(ffmpeg.toString())
-                && BinaryLocator.isExecutableFile(ffprobe.toString())) {
-            return true;
-        }
+        boolean existed = BinaryLocator.isExecutableFile(ffmpeg.toString());
         if (!DOWNLOAD_ATTEMPTED.add("ffmpeg")) {
             return false; // already tried this session
         }
-        return BinaryDownloader.downloadFfmpegBundle(managedDir);
+        boolean res = BinaryDownloader.downloadFfmpegBundle(managedDir);
+        if (res) {
+            ffmpegState = existed ? InstallState.REINSTALLED : InstallState.INSTALLED;
+            try {
+                java.nio.file.Files.writeString(managedDir.resolve(".ffmpeg-updated-8.1.2"), "updated");
+            } catch (Exception ignored) {
+            }
+        } else {
+            ffmpegState = InstallState.UNAVAILABLE;
+        }
+        return res;
     }
 }

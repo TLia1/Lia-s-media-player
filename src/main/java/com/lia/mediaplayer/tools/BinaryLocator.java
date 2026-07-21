@@ -51,14 +51,16 @@ final class BinaryLocator {
     @Nullable
     static String find(MediaBinaries.Tool tool, Path managedDir) {
         for (String candidate : candidatePaths(tool, managedDir)) {
-            if (isExecutableFile(candidate)) {
+            if (isUsable(tool, candidate, false)) {
                 return candidate;
             }
         }
 
         // Trust the launcher's PATH with the bare command name.
         if (canRun(tool.exeName(), tool.versionFlag())) {
-            return tool.exeName();
+            if (isUsable(tool, tool.exeName(), true)) {
+                return tool.exeName();
+            }
         }
 
         return null;
@@ -189,5 +191,55 @@ final class BinaryLocator {
             return a;
         }
         return b != null && !b.isBlank() ? b : null;
+    }
+
+    /**
+     * Checks if a binary is usable. For ffmpeg, ensures version >= 8.1.2.
+     */
+    static boolean isUsable(MediaBinaries.Tool tool, String pathString, boolean isBareCommand) {
+        if (!isBareCommand && !isExecutableFile(pathString)) {
+            return false;
+        }
+        if (tool == MediaBinaries.Tool.FFMPEG) {
+            if (!isBareCommand) {
+                Path parent = Path.of(pathString).getParent();
+                if (parent != null) {
+                    Path marker = parent.resolve(".ffmpeg-updated-8.1.2");
+                    if (Files.exists(marker)) {
+                        return true;
+                    }
+                }
+            }
+            return checkFfmpegVersion(pathString);
+        }
+        return true;
+    }
+
+    private static boolean checkFfmpegVersion(String executable) {
+        try {
+            Process process = new ProcessBuilder(executable, "-version")
+                    .redirectErrorStream(true)
+                    .start();
+            String output;
+            try (InputStream in = process.getInputStream()) {
+                output = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+                return false;
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("version\\s+(?:n)?(\\d+)\\.(\\d+)(?:\\.(\\d+))?").matcher(output);
+            if (m.find()) {
+                int major = Integer.parseInt(m.group(1));
+                int minor = Integer.parseInt(m.group(2));
+                int patch = m.group(3) != null ? Integer.parseInt(m.group(3)) : 0;
+                if (major > 8) return true;
+                if (major == 8 && minor > 1) return true;
+                if (major == 8 && minor == 1 && patch >= 2) return true;
+                return false;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
