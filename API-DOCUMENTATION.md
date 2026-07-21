@@ -23,7 +23,7 @@ In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dep
 [[dependencies.yourmodid]]
     modId="liasmediaplayerapi"
     type="required"
-    versionRange="[1.2.0,)"
+    versionRange="[1.3.1,)"
     ordering="AFTER"
     side="CLIENT"
 ```

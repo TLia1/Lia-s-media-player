@@ -128,13 +128,13 @@ Your playlists are **saved to disk**, so they're still there next time you play.
 The mod now features a configurable options menu where you can tailor its behavior to your liking.
 
 - You can access it by clicking the **Options** button in the Playlists menu, or via the **Config** button in the game's
-  Mods list.
+Mods list.
+- **Default Window Position:** Choose where new windows appear by default. Options include `Center`, `Top Left`, `Top Right`, `Bottom Left`, and `Bottom Right`. The default is `Center`, which keeps the classic cascading behavior.
 - **Video Resolution:** Choose the maximum resolution for video playback (from 144p up to 720p).
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF
-  frames to optimize memory usage based on your computer's capabilities.
+frames to optimize memory usage based on your computer's capabilities.
 - **Advanced Limits:** You can also configure the video frame queue capacity, max image cache in megabytes, and yt-dlp timeout. Watch out for red tooltips indicating sensitive settings!
 - All options are saved automatically and persist between sessions.
-
 ---
 
 ## Keybinds

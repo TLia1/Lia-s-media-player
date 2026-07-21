@@ -47,6 +47,7 @@
   "config.liasmediaplayer.frame_queue_capacity.warning": "Attention : Augmenter cette valeur consommera plus de mémoire !",
   "config.liasmediaplayer.max_image_cache_mb": "Cache d'images max (Mo)",
   "config.liasmediaplayer.yt_dlp_timeout": "Délai d'attente yt-dlp (secondes)",
+  "config.liasmediaplayer.default_window_position": "Position par défaut de la fenêtre",
   "gui.liasmediaplayer.config.title.liasmediaplayer": "Lia's Media Player - Général",
   "gui.liasmediaplayer.config.button.liasmediaplayer": "Lia's Media Player",
   "gui.liasmediaplayer.config_button": "Option du lecteur multimédia",

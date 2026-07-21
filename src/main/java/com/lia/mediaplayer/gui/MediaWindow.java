@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -105,6 +107,7 @@ abstract class MediaWindow {
     private boolean userSized;
     private double userScale;
     private double lastScale = 1.0; // effective scale used by the last layout
+    private boolean initialPositionApplied;
 
     // Active drag gestures.
     private boolean draggingMove;
@@ -313,6 +316,11 @@ abstract class MediaWindow {
         boxW = contentW + PADDING * 2;
         boxH = contentH + controlBarHeight() + PADDING * 2;
 
+        if (!userPlaced && !initialPositionApplied) {
+            applyInitialPosition(screenWidth, screenHeight);
+            initialPositionApplied = true;
+        }
+
         if (userPlaced) {
             boxX = Mth.clamp(userX, 2, Math.max(2, screenWidth - boxW - 2));
             boxY = Mth.clamp(userY, 2, Math.max(2, screenHeight - boxH - 2));
@@ -344,6 +352,33 @@ abstract class MediaWindow {
         gripY = boxY + boxH - GRIP;
 
         layoutControls(Minecraft.getInstance().font);
+    }
+
+    private void applyInitialPosition(int screenWidth, int screenHeight) {
+        WindowPosition position = ((MediaPlayerContext) LiasMediaPlayerApi.getInstance()).getConfigStore().defaultWindowPosition();
+        if (position == WindowPosition.CENTER) {
+            // Leave userPlaced as false to allow default cascading behavior
+            return;
+        }
+        userPlaced = true;
+        switch (position) {
+            case TOP_LEFT -> {
+                userX = PADDING;
+                userY = PADDING;
+            }
+            case TOP_RIGHT -> {
+                userX = screenWidth - boxW - PADDING;
+                userY = PADDING;
+            }
+            case BOTTOM_LEFT -> {
+                userX = PADDING;
+                userY = screenHeight - boxH - PADDING;
+            }
+            case BOTTOM_RIGHT -> {
+                userX = screenWidth - boxW - PADDING;
+                userY = screenHeight - boxH - PADDING;
+            }
+        }
     }
 
     // ------------------------------------------------------------------

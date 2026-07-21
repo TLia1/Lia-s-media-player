@@ -5,9 +5,11 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.api.config.ConfigOption;
+import com.lia.mediaplayer.api.config.EnumOption;
 import com.lia.mediaplayer.api.config.IntSliderOption;
-import com.lia.mediaplayer.api.config.StepSliderOption;
 import com.lia.mediaplayer.api.config.OptionWidth;
+import com.lia.mediaplayer.api.config.StepSliderOption;
+import com.lia.mediaplayer.gui.WindowPosition;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
@@ -43,6 +45,7 @@ public class ConfigStore {
     public static final IntSliderOption FRAME_QUEUE_CAPACITY;
     public static final IntSliderOption MAX_IMAGE_CACHE_MEGABYTES;
     public static final IntSliderOption YT_DLP_TIMEOUT_SECONDS;
+    public static final EnumOption<WindowPosition> DEFAULT_WINDOW_POSITION;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
@@ -65,6 +68,12 @@ public class ConfigStore {
                 .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
         MAX_IMAGE_CACHE_MEGABYTES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024).withWidth(OptionWidth.HALF);
         YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
+        DEFAULT_WINDOW_POSITION = new EnumOption<>(
+                "liasmediaplayer:default_window_position",
+                "liasmediaplayer",
+                "config.liasmediaplayer.default_window_position",
+                WindowPosition.CENTER
+        );
     }
 
     public ConfigStore() {
@@ -77,6 +86,7 @@ public class ConfigStore {
         register(MAX_PINNED_IMAGES);
         register(FRAME_QUEUE_CAPACITY);
         register(YT_DLP_TIMEOUT_SECONDS);
+        register(DEFAULT_WINDOW_POSITION);
     }
 
     public synchronized void register(ConfigOption<?> option) {
@@ -177,5 +187,10 @@ public class ConfigStore {
     public int videoMaxHeight() {
         ensureLoaded();
         return RESOLUTION_HEIGHTS[VIDEO_RESOLUTION.getValue()];
+    }
+
+    public WindowPosition defaultWindowPosition() {
+        ensureLoaded();
+        return DEFAULT_WINDOW_POSITION.getValue();
     }
 }
