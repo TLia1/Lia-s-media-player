@@ -13,7 +13,7 @@ audio/YouTube links and play them in order or shuffled, and a set of **configura
 keybinds** drives the active audio player.
 
 - **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->
-  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.4.2`<!-- /mod_version -->
+  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.4.3`<!-- /mod_version -->
 - **Loader:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> · **Minecraft:** <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> · **Java:** 21
 - **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a

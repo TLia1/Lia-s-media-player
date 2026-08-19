@@ -44,6 +44,23 @@ public final class MediaUrlResolver {
     private static final String YT_DLP_FORMAT =
             "best[height<=720][acodec!=none][vcodec!=none]/best[height<=720]/best";
 
+    /**
+     * YouTube player clients yt-dlp is asked to extract from, most-preferred first.
+     *
+     * <p>yt-dlp's own default ({@code android_vr}) hands out {@code googlevideo} URLs that
+     * only serve a couple of megabytes before answering {@code 403 Forbidden}: they are meant
+     * to be fetched in small ranged chunks, which yt-dlp does but ffmpeg does not (ffmpeg opens
+     * a stream with an open-ended {@code Range: bytes=0-}, and that request is refused outright).
+     * The {@code android} client still returns plain, fully streamable URLs, so we ask for it
+     * first and keep yt-dlp's own default as the fallback for videos it cannot extract.</p>
+     *
+     * <p>YouTube changes this often, so the list can be overridden at launch with
+     * {@code -Dliasmediaplayer.ytdlp.clients=...} (a comma-separated yt-dlp client list, or an
+     * empty value to let yt-dlp decide on its own).</p>
+     */
+    private static final String YT_DLP_PLAYER_CLIENTS =
+            System.getProperty("liasmediaplayer.ytdlp.clients", "android,default");
+
     private MediaUrlResolver() {
     }
 
@@ -67,13 +84,19 @@ public final class MediaUrlResolver {
                     + "or launch Minecraft with -Dliasmediaplayer.ytdlp=C:\\\\path\\\\to\\\\yt-dlp.exe");
         }
 
-        List<String> command = List.of(
+        List<String> command = new java.util.ArrayList<>(List.of(
                 executable,
                 "--no-playlist",
                 "--quiet",
-                "--no-warnings",
-                "-f", YT_DLP_FORMAT,
-                "-g", url);
+                "--no-warnings"));
+        if (YouTubeSource.isYouTube(url) && !YT_DLP_PLAYER_CLIENTS.isBlank()) {
+            command.add("--extractor-args");
+            command.add("youtube:player_client=" + YT_DLP_PLAYER_CLIENTS);
+        }
+        command.add("-f");
+        command.add(YT_DLP_FORMAT);
+        command.add("-g");
+        command.add(url);
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.redirectErrorStream(false);

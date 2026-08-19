@@ -100,8 +100,14 @@ public final class FFmpegCli {
         command.add(url);
 
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process process = builder.start();
+
+        // Keep ffprobe's diagnostics: they carry the actual reason (an HTTP 403 on an
+        // expired/refused stream URL, a missing codec, ...) that "exit 1" alone hides.
+        StringBuilder stderr = new StringBuilder();
+        Thread errReader = new Thread(() -> drainStderr(process, stderr), "liasmediaplayer-ffprobe-err");
+        errReader.setDaemon(true);
+        errReader.start();
 
         String json;
         try (InputStream in = process.getInputStream()) {
@@ -118,9 +124,27 @@ public final class FFmpegCli {
         }
 
         if (process.exitValue() != 0 || json.isBlank()) {
-            throw new IOException("ffprobe could not read " + url + " (exit " + process.exitValue() + ")");
+            String detail = stderr.isEmpty() ? "" : " — " + stderr.toString().trim();
+            throw new IOException("ffprobe could not read " + url + " (exit " + process.exitValue() + ")" + detail);
         }
         return parseProbe(json);
+    }
+
+    /**
+     * Reads a process' stderr to the end, capped so a very chatty run cannot grow unbounded.
+     */
+    private static void drainStderr(Process process, StringBuilder sink) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (sink.length() < 2000) {
+                    sink.append(line).append('\n');
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort
+        }
     }
 
     private static MediaInfo parseProbe(String json) throws IOException {
