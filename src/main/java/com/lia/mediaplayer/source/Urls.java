@@ -1,17 +1,59 @@
 package com.lia.mediaplayer.source;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
 
 /**
- * Small URL-parsing helpers shared by the {@link MediaSource} implementations, so
- * the extension-by-file-suffix sources don't each re-implement the same defensive
- * path/host parsing. Package-private: it is an implementation detail of the source
- * registry, not part of the public extension API.
+ * Small URL-parsing helpers shared by the {@link com.lia.mediaplayer.api.MediaSource}
+ * implementations, so the extension-by-file-suffix sources don't each re-implement the
+ * same defensive path/host parsing.
+ *
+ * <p>{@link #isHttp(String)} is the gate every built-in source applies before looking at
+ * a link: media URLs reach {@code ffmpeg}, {@code yt-dlp}, {@link java.net.HttpURLConnection}
+ * and the system browser, and all of those interpret far more than {@code http(s)} —
+ * {@code file:}, {@code concat:}, a custom OS protocol handler, or a string starting with
+ * {@code -} that a command-line tool would read as an option. Chat links can be crafted by
+ * anyone on the server, so the whole pipeline is restricted to real {@code http(s)} URLs
+ * with a host at the point where a link is first recognized.</p>
  */
-final class Urls {
+public final class Urls {
 
     private Urls() {
+    }
+
+    /**
+     * Whether {@code url} is an absolute {@code http} or {@code https} URL with a host.
+     *
+     * <p>This is the only shape the mod is willing to hand to an external tool, so every
+     * built-in source requires it before claiming a link.</p>
+     */
+    public static boolean isHttp(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme();
+            if (scheme == null) {
+                return false;
+            }
+            scheme = scheme.toLowerCase(Locale.ROOT);
+            if (!scheme.equals("http") && !scheme.equals("https")) {
+                return false;
+            }
+            // getHost() is null for hosts URI considers non-compliant (an underscore, for
+            // one), which are unusual but real; the raw authority still tells us a host was
+            // given. What matters here is that there *is* one — "file:///x.mp4" and
+            // "https:///x.mp4" have none, and those are the shapes being kept out.
+            if (uri.getHost() != null && !uri.getHost().isBlank()) {
+                return true;
+            }
+            String authority = uri.getAuthority();
+            return authority != null && !authority.isBlank();
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     /**

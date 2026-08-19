@@ -201,7 +201,9 @@ public final class PlaylistScreen extends Screen {
             return;
         }
         String url = addBox.getValue().strip();
-        if (!url.isBlank()) {
+        // Same rule as importClipboard: only real http(s) links get stored, so a playlist
+        // can never feed something else to the player on a later session.
+        if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
             selected.add(url);
             getContext().getPlaylistStore().save();
             MediaTitleCache.getOrLoad(url); // warm the name for the list

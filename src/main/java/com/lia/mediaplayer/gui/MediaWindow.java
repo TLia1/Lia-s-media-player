@@ -558,7 +558,10 @@ abstract class MediaWindow {
      */
     private void openLink() {
         String url = mediaUrl();
-        if (url != null && !url.isEmpty()) {
+        // openUri hands the string to the OS handler (xdg-open / FileProtocolHandler /
+        // open), which happily launches whatever protocol is registered for it. The URL
+        // originates from a chat component, so only ever pass on a real http(s) link.
+        if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
             Util.getPlatform().openUri(url);
         }
     }

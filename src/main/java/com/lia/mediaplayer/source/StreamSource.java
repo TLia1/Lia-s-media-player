@@ -29,6 +29,9 @@ public final class StreamSource implements com.lia.mediaplayer.api.MediaSource {
      * Whether {@code url} points at an HLS or DASH manifest.
      */
     public static boolean isStream(String url) {
+        if (!Urls.isHttp(url)) {
+            return false;
+        }
         String path = Urls.pathLower(url);
         return path != null && (path.endsWith(".m3u8") || path.endsWith(".mpd"));
     }

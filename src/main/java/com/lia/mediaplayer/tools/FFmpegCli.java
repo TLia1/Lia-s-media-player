@@ -97,6 +97,9 @@ public final class FFmpegCli {
                 "-show_format",
                 "-show_streams"));
         addInputNetworkOptions(command, url);
+        // "-i url" rather than a bare positional argument: a URL that happens to start
+        // with '-' would otherwise be parsed by ffprobe as an option of its own.
+        command.add("-i");
         command.add(url);
 
         ProcessBuilder builder = new ProcessBuilder(command);
@@ -358,6 +361,14 @@ public final class FFmpegCli {
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
             return;
         }
+        // A manifest fetched over the network (HLS/DASH) lists its own segment URLs, and
+        // those are attacker-controlled for any link posted in chat. Current ffmpeg already
+        // defaults to a network-only whitelist for an http input, so this is not closing an
+        // open hole — it states the requirement explicitly instead of inheriting it from
+        // whichever ffmpeg build happens to be on the user's PATH, and narrows it to the
+        // protocols an http(s) stream actually needs.
+        command.add("-protocol_whitelist");
+        command.add("http,https,tcp,tls,crypto,data");
         command.add("-user_agent");
         command.add("Mozilla/5.0 liasmediaplayer video player");
         command.add("-reconnect");

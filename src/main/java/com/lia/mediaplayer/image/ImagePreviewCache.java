@@ -43,6 +43,12 @@ public final class ImagePreviewCache {
      * Mirrors ChatComponent.MAX_CHAT_HISTORY.
      */
     private static final int MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+    /**
+     * Largest decoded still we accept. The byte cap above bounds the download, not the
+     * decoded bitmap: a few kilobytes of PNG can expand to gigabytes of ARGB, and the URL
+     * comes from chat, so the pixel count needs its own limit.
+     */
+    private static final long MAX_IMAGE_PIXELS = 40_000_000L;
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
     private static long getMaxCacheBytes() {
@@ -108,6 +114,9 @@ public final class ImagePreviewCache {
         try {
             // Tenor share links are HTML pages; resolve them to the real GIF first.
             String mediaUrl = TenorSource.isTenorPage(url) ? TenorResolver.resolve(url) : url;
+            if (!com.lia.mediaplayer.source.Urls.isHttp(mediaUrl)) {
+                throw new IOException("Refusing to fetch a non-http(s) image: " + mediaUrl);
+            }
             HttpURLConnection connection = (HttpURLConnection) URI.create(mediaUrl).toURL().openConnection();
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(10000);
@@ -148,10 +157,17 @@ public final class ImagePreviewCache {
         NativeImage single;
         if (isPng(data)) {
             single = NativeImage.read(new ByteArrayInputStream(data));
+            if ((long) single.getWidth() * single.getHeight() > MAX_IMAGE_PIXELS) {
+                single.close();
+                throw new IOException("Image is implausibly large");
+            }
         } else {
             BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(data));
             if (decoded == null) {
                 throw new IOException("Unsupported image format");
+            }
+            if ((long) decoded.getWidth() * decoded.getHeight() > MAX_IMAGE_PIXELS) {
+                throw new IOException("Image is implausibly large");
             }
             single = GifDecoder.toNativeImage(toArgb(decoded));
         }

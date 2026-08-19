@@ -37,7 +37,9 @@ public final class TwitchSource implements com.lia.mediaplayer.api.MediaSource {
      * needs to single out Twitch links for their dedicated resolution paths.
      */
     public static boolean isTwitch(String url) {
-        if (url == null) return false;
+        if (!Urls.isHttp(url)) {
+            return false;
+        }
         try {
             URI uri = new URI(url);
             String host = uri.getHost();

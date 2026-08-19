@@ -282,7 +282,10 @@ public final class MediaBinaries {
     @Nullable
     private static String ensureManaged(Tool tool, Path managedDir) {
         Path target = managedDir.resolve(tool.exeName());
-        if (BinaryLocator.isExecutableFile(target.toString())) {
+        // isUsable, not merely isExecutableFile: BinaryLocator has already rejected this
+        // path once (that is why we are here), so accepting it on "the file exists" would
+        // hand back the very copy that failed the ffmpeg version check and never replace it.
+        if (BinaryLocator.isUsable(tool, target.toString(), false)) {
             return target.toString();
         }
         return switch (tool) {

@@ -92,8 +92,29 @@ public class ConfigStore {
     public synchronized void register(ConfigOption<?> option) {
         registeredOptions.put(option.getId(), option);
         if (loaded) {
-            // Re-load to apply any saved values for newly registered options
-            load();
+            // Apply the saved value for this option alone. Re-running the full load()
+            // would also re-apply the on-disk value of every other option, discarding
+            // any change made since the file was last written.
+            applySavedValue(option);
+        }
+    }
+
+    /**
+     * Reads the config file and applies the stored value of a single option, if present.
+     * Used when an addon registers an option after the initial load.
+     */
+    private void applySavedValue(ConfigOption<?> option) {
+        Path path = file();
+        if (path == null || !Files.isRegularFile(path)) {
+            return;
+        }
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            JsonObject json = GSON.fromJson(reader, JsonObject.class);
+            if (json != null && json.has(option.getId())) {
+                option.deserialize(json.get(option.getId()));
+            }
+        } catch (IOException | RuntimeException e) {
+            LiasMediaPlayer.LOGGER.warn("Could not read config from {}: {}", path, e.toString());
         }
     }
 
@@ -181,12 +202,22 @@ public class ConfigStore {
     // Convenience delegates for the core built-in options
     public int videoMaxWidth() {
         ensureLoaded();
-        return RESOLUTION_WIDTHS[VIDEO_RESOLUTION.getValue()];
+        return RESOLUTION_WIDTHS[resolutionIndex()];
     }
 
     public int videoMaxHeight() {
         ensureLoaded();
-        return RESOLUTION_HEIGHTS[VIDEO_RESOLUTION.getValue()];
+        return RESOLUTION_HEIGHTS[resolutionIndex()];
+    }
+
+    /**
+     * The selected resolution step, clamped to the shorter of the two parallel arrays.
+     * The stored value comes from a JSON file that may have been written by a different
+     * version of the mod, so it is not trusted to be a valid index.
+     */
+    private int resolutionIndex() {
+        int steps = Math.min(RESOLUTION_WIDTHS.length, RESOLUTION_HEIGHTS.length);
+        return Math.max(0, Math.min(steps - 1, VIDEO_RESOLUTION.getValue()));
     }
 
     public WindowPosition defaultWindowPosition() {

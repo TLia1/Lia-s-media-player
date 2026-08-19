@@ -5,7 +5,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UrlsTest {
 
@@ -46,6 +48,40 @@ class UrlsTest {
     }, nullValues = {"null"})
     void hostLower_ValidUrls_ReturnsLowerCasedHostWithoutWww(String url, String expected) {
         assertEquals(expected, Urls.hostLower(url));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "http://example.com/video.mp4",
+            "https://example.com/video.mp4",
+            "HTTPS://EXAMPLE.COM/video.mp4",
+            "https://example.com:8080/video.mp4",
+            "https://my_cdn.example.com/video.mp4"
+    })
+    void isHttp_HttpUrls_ReturnsTrue(String url) {
+        assertTrue(Urls.isHttp(url));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "file:///C:/secret.mp4",
+            "ftp://example.com/video.mp4",
+            "concat:/etc/passwd",
+            "'--config-location=/tmp/evil.mp4'",
+            "'-i /etc/passwd'",
+            "/local/path/video.mp4",
+            "example.com/video.mp4",
+            "'https:///video.mp4'",
+            "'not a url'",
+            "''"
+    })
+    void isHttp_EverythingElse_ReturnsFalse(String url) {
+        assertFalse(Urls.isHttp(url));
+    }
+
+    @Test
+    void isHttp_Null_ReturnsFalse() {
+        assertFalse(Urls.isHttp(null));
     }
 
     @Test

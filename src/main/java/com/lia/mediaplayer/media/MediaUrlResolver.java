@@ -68,6 +68,11 @@ public final class MediaUrlResolver {
      * Resolves a chat link to a directly-playable media URL.
      */
     public static String resolve(String url) throws IOException {
+        // Everything downstream of here is a command line or a socket, so refuse
+        // anything that is not a plain http(s) link before it gets that far.
+        if (!com.lia.mediaplayer.source.Urls.isHttp(url)) {
+            throw new IOException("Refusing to play a non-http(s) link: " + url);
+        }
         if (YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url)) {
             return resolveYtDlp(url);
         }
@@ -96,6 +101,8 @@ public final class MediaUrlResolver {
         command.add("-f");
         command.add(YT_DLP_FORMAT);
         command.add("-g");
+        // End of options: keeps a URL that starts with '-' from being read as a flag.
+        command.add("--");
         command.add(url);
 
         ProcessBuilder builder = new ProcessBuilder(command);

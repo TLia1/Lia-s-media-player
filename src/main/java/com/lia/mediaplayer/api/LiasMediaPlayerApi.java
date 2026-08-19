@@ -24,7 +24,11 @@ public class LiasMediaPlayerApi {
      */
     public static final String API_ID = "liasmediaplayerapi";
 
-    private static IMediaPlayerAPI instance;
+    /**
+     * Written once on the mod-construction thread and read from the render thread,
+     * the decode threads and the IO pool, so it has to be safely published.
+     */
+    private static volatile IMediaPlayerAPI instance;
 
     public LiasMediaPlayerApi(IEventBus modEventBus) {
         // The API mod has no initialization logic of its own.
@@ -37,9 +41,22 @@ public class LiasMediaPlayerApi {
      * @throws IllegalStateException if called before the mod is fully initialized
      */
     public static IMediaPlayerAPI getInstance() {
-        if (instance == null) {
+        IMediaPlayerAPI api = instance;
+        if (api == null) {
             throw new IllegalStateException("Lia's Media Player API is not initialized yet.");
         }
+        return api;
+    }
+
+    /**
+     * The active API instance, or {@code null} if the mod has not finished initializing.
+     *
+     * <p>For code that runs off an event bus — chat, ticks, rendering — where an
+     * {@link IllegalStateException} would surface as a crash in someone else's callback.
+     * Prefer {@link #getInstance()} everywhere the mod is known to be up.</p>
+     */
+    @org.jetbrains.annotations.Nullable
+    public static IMediaPlayerAPI getInstanceOrNull() {
         return instance;
     }
 

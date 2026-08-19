@@ -414,9 +414,14 @@ public final class VideoPlayer {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                break;
             }
         }
+        // A seek (or a dispose) landed while we were waiting for room. The frame is stale
+        // now, but its buffer came out of the fixed freeBuffers pool — dropping it here
+        // would shrink the pool for good, and after enough seeks readVideoFrame would
+        // never find a buffer again and playback would stall.
+        freeBuffers.offer(frame.rgbaBuffer());
     }
 
     private void startSession(double startSeconds) throws IOException {

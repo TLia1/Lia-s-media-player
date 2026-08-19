@@ -25,7 +25,7 @@ public class ConfigScreen extends Screen {
         int y = 40;
         int dy = 24;
 
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx == null) return;
 
         Collection<String> groups = ctx.getConfigStore().getGroups();

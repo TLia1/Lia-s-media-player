@@ -45,7 +45,7 @@ final class ImageHoverPreview {
         }
 
         String url = clickEvent.getValue();
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx == null) return;
 
         if (!ctx.getMediaSources().isImage(url)) {

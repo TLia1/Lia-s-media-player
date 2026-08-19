@@ -37,6 +37,9 @@ public final class TenorSource implements com.lia.mediaplayer.api.MediaSource {
      * The path may carry a locale prefix, e.g. {@code /fr/view/...} or {@code /view/...}.
      */
     public static boolean isTenorPage(String url) {
+        if (!Urls.isHttp(url)) {
+            return false;
+        }
         String host = Urls.hostLower(url);
         String path = Urls.pathLower(url);
         if (host == null || path == null) {

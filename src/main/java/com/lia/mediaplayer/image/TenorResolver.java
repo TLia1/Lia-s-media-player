@@ -57,6 +57,9 @@ final class TenorResolver {
      * pool. Throws if the page can't be fetched or no media URL is found.
      */
     static String resolve(String pageUrl) throws IOException {
+        if (!com.lia.mediaplayer.source.TenorSource.isTenorPage(pageUrl)) {
+            throw new IOException("Not a Tenor page: " + pageUrl);
+        }
         HttpURLConnection connection = (HttpURLConnection) URI.create(pageUrl).toURL().openConnection();
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(10000);

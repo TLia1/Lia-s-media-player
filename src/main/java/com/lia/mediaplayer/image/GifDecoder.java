@@ -32,12 +32,22 @@ import java.util.List;
  * delays are folded into the kept frames so the timing stays correct).</p>
  */
 public final class GifDecoder {
-    /** Hard cap on frames regardless of size, to bound texture handles. */
 
     /**
      * Total RGBA pixels kept across every frame (~96 MB of VRAM at 4 bytes).
      */
     private static final long MAX_TOTAL_PIXELS = 24_000_000L;
+    /**
+     * Largest canvas we are willing to allocate, per side and in total.
+     *
+     * <p>A GIF's logical screen descriptor is two bytes per axis, so a handful of bytes on
+     * the wire can ask for a 65535x65535 canvas — 17 GB of {@code TYPE_INT_ARGB}. Since the
+     * bytes come from a link anyone on the server can post, an unbounded canvas turns a
+     * hover over the chat into an {@code OutOfMemoryError}. Refuse anything implausible
+     * instead of trying to allocate it.</p>
+     */
+    private static final int MAX_CANVAS_SIDE = 8_192;
+    private static final long MAX_CANVAS_PIXELS = 40_000_000L;
     /**
      * GIFs with a 0 (or absent) delay are shown at this rate, like browsers.
      */
@@ -72,6 +82,8 @@ public final class GifDecoder {
             if (frameCount <= 0) {
                 throw new IOException("GIF has no frames");
             }
+            int frameLimit = Math.min(frameCount,
+                    com.lia.mediaplayer.config.ConfigStore.MAX_GIF_FRAMES.getValue());
 
             int[] canvasSize = readLogicalScreenSize(reader);
             int canvasWidth = canvasSize[0];
@@ -83,8 +95,15 @@ public final class GifDecoder {
             int prevX = 0, prevY = 0, prevW = 0, prevH = 0, prevDisposal = 0;
             BufferedImage restorePoint = null;
 
+            // How many composited snapshots we may keep, derived from the canvas size once
+            // it is known. Every source frame is still drawn onto the canvas (that is how
+            // GIF deltas work), but only the kept ones are snapshotted, so the pixel budget
+            // bounds peak memory instead of merely trimming the result afterwards.
+            int maxKept = -1;
+            int pendingDelayMs = 0;
+
             try {
-                for (int i = 0; i < frameCount && composited.size() < com.lia.mediaplayer.config.ConfigStore.MAX_GIF_FRAMES.getValue(); i++) {
+                for (int i = 0; i < frameLimit; i++) {
                     BufferedImage frame = reader.read(i);
                     FrameMeta meta = readFrameMeta(reader, i);
 
@@ -93,8 +112,11 @@ public final class GifDecoder {
                             canvasWidth = Math.max(frame.getWidth(), meta.x + frame.getWidth());
                             canvasHeight = Math.max(frame.getHeight(), meta.y + frame.getHeight());
                         }
+                        requireSaneCanvas(canvasWidth, canvasHeight);
                         canvas = new BufferedImage(canvasWidth, canvasHeight, BufferedImage.TYPE_INT_ARGB);
                         g = canvas.createGraphics();
+                        long pixelsPerFrame = (long) canvasWidth * canvasHeight;
+                        maxKept = (int) Math.max(1, Math.min(frameLimit, MAX_TOTAL_PIXELS / pixelsPerFrame));
                     } else {
                         // Apply the disposal of the frame we drew last time.
                         switch (prevDisposal) {
@@ -109,32 +131,47 @@ public final class GifDecoder {
                     }
 
                     // If this frame asks to be restored later, snapshot the area it covers.
-                    if (meta.disposal == 3) {
-                        restorePoint = canvas.getSubimage(
-                                meta.x, meta.y, frame.getWidth(), frame.getHeight());
+                    // The rectangle comes from the file, so clip it to the canvas: a frame
+                    // placed partly outside the logical screen is malformed but common
+                    // enough that it should degrade, not abort the decode.
+                    java.awt.Rectangle restoreRect = meta.disposal == 3
+                            ? clipToCanvas(meta.x, meta.y, frame.getWidth(), frame.getHeight(), canvasWidth, canvasHeight)
+                            : null;
+                    if (restoreRect != null) {
                         // getSubimage shares the buffer, so copy it before we overwrite.
                         BufferedImage copy = new BufferedImage(
-                                frame.getWidth(), frame.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                                restoreRect.width, restoreRect.height, BufferedImage.TYPE_INT_ARGB);
                         Graphics2D copyG = copy.createGraphics();
-                        copyG.drawImage(restorePoint, 0, 0, null);
+                        copyG.drawImage(canvas.getSubimage(
+                                restoreRect.x, restoreRect.y, restoreRect.width, restoreRect.height), 0, 0, null);
                         copyG.dispose();
                         restorePoint = copy;
+                        prevX = restoreRect.x;
+                        prevY = restoreRect.y;
                     } else {
                         restorePoint = null;
+                        prevX = meta.x;
+                        prevY = meta.y;
                     }
 
                     g.drawImage(frame, meta.x, meta.y, null);
 
-                    BufferedImage snapshot = new BufferedImage(
-                            canvasWidth, canvasHeight, BufferedImage.TYPE_INT_ARGB);
-                    Graphics2D snapG = snapshot.createGraphics();
-                    snapG.drawImage(canvas, 0, 0, null);
-                    snapG.dispose();
-                    composited.add(snapshot);
-                    delays.add(normalizeDelay(meta.delayMs));
+                    pendingDelayMs += normalizeDelay(meta.delayMs);
+                    // Keep frames spread evenly across the animation so the timing of the
+                    // dropped ones is folded into the frame that replaces them.
+                    boolean keep = composited.size() < maxKept
+                            && i >= Math.round(composited.size() * (frameLimit / (double) maxKept));
+                    if (keep) {
+                        BufferedImage snapshot = new BufferedImage(
+                                canvasWidth, canvasHeight, BufferedImage.TYPE_INT_ARGB);
+                        Graphics2D snapG = snapshot.createGraphics();
+                        snapG.drawImage(canvas, 0, 0, null);
+                        snapG.dispose();
+                        composited.add(snapshot);
+                        delays.add(pendingDelayMs);
+                        pendingDelayMs = 0;
+                    }
 
-                    prevX = meta.x;
-                    prevY = meta.y;
                     prevW = frame.getWidth();
                     prevH = frame.getHeight();
                     prevDisposal = meta.disposal;
@@ -144,49 +181,45 @@ public final class GifDecoder {
                     g.dispose();
                 }
             }
+
+            if (composited.isEmpty()) {
+                throw new IOException("GIF produced no usable frames");
+            }
+            if (pendingDelayMs > 0) {
+                // Fold any trailing remainder into the last kept frame.
+                int last = delays.size() - 1;
+                delays.set(last, delays.get(last) + pendingDelayMs);
+            }
         } finally {
             reader.dispose();
         }
 
-        return toResult(thinIfNeeded(composited, delays));
+        return toResult(new Frames(composited, delays));
     }
 
     /**
-     * Drops frames evenly until the total pixel budget is met.
+     * Rejects a canvas too large to be a real image, before any allocation happens.
      */
-    private static Frames thinIfNeeded(List<BufferedImage> frames, List<Integer> delays) {
-        if (frames.isEmpty()) {
-            return new Frames(frames, delays);
+    private static void requireSaneCanvas(int width, int height) throws IOException {
+        if (width <= 0 || height <= 0
+                || width > MAX_CANVAS_SIDE || height > MAX_CANVAS_SIDE
+                || (long) width * height > MAX_CANVAS_PIXELS) {
+            throw new IOException("GIF canvas is implausibly large (" + width + "x" + height + ")");
         }
-        long pixelsPerFrame = (long) frames.getFirst().getWidth() * frames.getFirst().getHeight();
-        if (pixelsPerFrame <= 0) {
-            return new Frames(frames, delays);
-        }
-        long maxFrames = Math.max(1, MAX_TOTAL_PIXELS / pixelsPerFrame);
-        if (frames.size() <= maxFrames) {
-            return new Frames(frames, delays);
-        }
+    }
 
-        List<BufferedImage> keptFrames = new ArrayList<>();
-        List<Integer> keptDelays = new ArrayList<>();
-        double step = frames.size() / (double) maxFrames;
-        int next = 0;
-        int accumulated = 0;
-        for (int i = 0; i < frames.size(); i++) {
-            accumulated += delays.get(i);
-            if (i >= Math.round(next * step) && keptFrames.size() < maxFrames) {
-                keptFrames.add(frames.get(i));
-                keptDelays.add(accumulated);
-                accumulated = 0;
-                next++;
-            }
+    /**
+     * The part of a frame rectangle that actually lies on the canvas, or {@code null} if none does.
+     */
+    private static java.awt.Rectangle clipToCanvas(int x, int y, int w, int h, int canvasW, int canvasH) {
+        int x0 = Math.max(0, x);
+        int y0 = Math.max(0, y);
+        int x1 = Math.min(canvasW, x + w);
+        int y1 = Math.min(canvasH, y + h);
+        if (x1 <= x0 || y1 <= y0) {
+            return null;
         }
-        if (!keptDelays.isEmpty() && accumulated > 0) {
-            // Fold any trailing remainder into the last kept frame.
-            int last = keptDelays.size() - 1;
-            keptDelays.set(last, keptDelays.get(last) + accumulated);
-        }
-        return new Frames(keptFrames, keptDelays);
+        return new java.awt.Rectangle(x0, y0, x1 - x0, y1 - y0);
     }
 
     private record Frames(List<BufferedImage> images, List<Integer> delays) {

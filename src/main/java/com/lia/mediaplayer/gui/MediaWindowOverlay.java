@@ -54,7 +54,7 @@ public final class MediaWindowOverlay {
     }
 
     private static MediaPlayerContext getContext() {
-        return (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        return (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
     }
 
     // ------------------------------------------------------------------

@@ -18,8 +18,17 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
         this.displayFormatter = displayFormatter;
     }
 
+    /**
+     * The value the slider currently points at. The index is clamped because the stored
+     * value comes from a JSON file a user (or an older version of the mod) may have
+     * written with a different set of steps.
+     */
     public T getSelectedStep() {
-        return steps[getValue()];
+        return steps[clampIndex(getValue())];
+    }
+
+    private int clampIndex(int index) {
+        return Math.max(0, Math.min(steps.length - 1, index));
     }
 
     @Override
@@ -54,13 +63,14 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
             }
 
             private int getIntValue() {
-                return (int) Math.round(this.value * (steps.length - 1));
+                return clampIndex((int) Math.round(this.value * (steps.length - 1)));
             }
         };
     }
 
     private double getSliderValue() {
-        return (double) getValue() / (steps.length - 1);
+        int lastIndex = steps.length - 1;
+        return lastIndex <= 0 ? 0.0 : (double) clampIndex(getValue()) / lastIndex;
     }
 }
 

@@ -43,6 +43,10 @@ public final class MediaTitleCache {
      * Hard cap on the stored title length so a pathological title can't bloat memory.
      */
     private static final int MAX_TITLE_LEN = 200;
+    /**
+     * Cap on the oEmbed reply we are willing to buffer.
+     */
+    private static final int MAX_OEMBED_BYTES = 64 * 1024;
 
     private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
         @Override
@@ -113,7 +117,9 @@ public final class MediaTitleCache {
                     throw new IOException("HTTP " + code + " for " + endpoint);
                 }
                 try (InputStream in = connection.getInputStream()) {
-                    String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    // Bounded read: an oEmbed reply is a few hundred bytes, and we should
+                    // not let a misbehaving response size our heap.
+                    String json = new String(in.readNBytes(MAX_OEMBED_BYTES), StandardCharsets.UTF_8);
                     JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
                     JsonElement title = obj.get("title");
                     if (title != null && !title.isJsonNull()) {

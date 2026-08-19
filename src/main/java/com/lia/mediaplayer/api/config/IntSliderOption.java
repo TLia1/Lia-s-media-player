@@ -48,13 +48,14 @@ public class IntSliderOption extends ConfigOption<Integer> {
             }
 
             private int getIntValue() {
-                return (int) Math.round(this.value * (max - min) + min);
+                return Math.max(min, Math.min(max, (int) Math.round(this.value * (max - min) + min)));
             }
         };
     }
 
     private double getSliderValue() {
-        return (double) (getValue() - min) / (max - min);
+        int range = max - min;
+        return range <= 0 ? 0.0 : (double) (getValue() - min) / range;
     }
 }
 

@@ -94,6 +94,16 @@ public class VideoRenderer {
         }
 
         ByteBuffer buffer = frame.rgbaBuffer();
+        // This writes straight into the texture's native pixel block, so the length has to
+        // come from the destination. Trusting the source buffer's capacity would turn any
+        // future mismatch between frame size and texture size into an out-of-bounds write
+        // rather than a visible glitch.
+        long expectedBytes = (long) nativeImage.getWidth() * nativeImage.getHeight() * 4L;
+        if (buffer.capacity() != expectedBytes) {
+            LiasMediaPlayer.LOGGER.warn("Skipping frame: {} bytes for a {}x{} texture",
+                    buffer.capacity(), nativeImage.getWidth(), nativeImage.getHeight());
+            return;
+        }
         long bufferPtr = MemoryUtil.memAddress(buffer);
         long pixelsPtr;
         try {
@@ -101,7 +111,7 @@ public class VideoRenderer {
         } catch (IllegalAccessException e) {
             throw new RuntimeException("Failed to access NativeImage pixels", e);
         }
-        MemoryUtil.memCopy(bufferPtr, pixelsPtr, buffer.capacity());
+        MemoryUtil.memCopy(bufferPtr, pixelsPtr, expectedBytes);
 
         if (texture != null) {
             texture.upload();

@@ -29,7 +29,7 @@ public class AddonConfigScreen extends Screen {
         this.optionsList = new OptionsList(this, this.minecraft, this.width, this.height - 64, 32);
         this.addWidget(this.optionsList);
 
-        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx == null) return;
         List<ConfigOption<?>> options = ctx.getConfigStore().getOptionsByGroup(group);
         this.optionsList.addOptions(options);

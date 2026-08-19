@@ -77,7 +77,7 @@ final class BinaryDownloader {
     @Nullable
     static String downloadYtDlp(Path managedDir) {
         Path target = managedDir.resolve(MediaBinaries.Tool.YT_DLP.exeName());
-        if (BinaryLocator.isExecutableFile(target.toString())) {
+        if (BinaryLocator.isUsable(MediaBinaries.Tool.YT_DLP, target.toString(), false)) {
             return target.toString();
         }
 
@@ -118,7 +118,9 @@ final class BinaryDownloader {
     static boolean downloadFfmpegBundle(Path managedDir) {
         Path ffmpeg = managedDir.resolve(MediaBinaries.Tool.FFMPEG.exeName());
         Path ffprobe = managedDir.resolve(MediaBinaries.Tool.FFPROBE.exeName());
-        if (BinaryLocator.isExecutableFile(ffmpeg.toString())
+        // An existing pair is only good enough if it also passes the version gate;
+        // otherwise an outdated managed ffmpeg would be kept forever.
+        if (BinaryLocator.isUsable(MediaBinaries.Tool.FFMPEG, ffmpeg.toString(), false)
                 && BinaryLocator.isExecutableFile(ffprobe.toString())) {
             return true;
         }

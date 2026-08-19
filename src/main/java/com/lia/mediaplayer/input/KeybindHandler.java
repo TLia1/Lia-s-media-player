@@ -30,7 +30,7 @@ public final class KeybindHandler {
             }
         }
 
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx == null) return;
 
         while (ModKeybinds.PLAY_PAUSE.consumeClick()) {

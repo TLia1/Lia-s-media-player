@@ -131,6 +131,9 @@ public final class VideoThumbnailCache {
     }
 
     private static BufferedImage downloadImage(String imageUrl) throws IOException {
+        if (!com.lia.mediaplayer.source.Urls.isHttp(imageUrl)) {
+            throw new IOException("Refusing to fetch a non-http(s) thumbnail: " + imageUrl);
+        }
         HttpURLConnection connection = (HttpURLConnection) URI.create(imageUrl).toURL().openConnection();
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(10000);
@@ -268,26 +271,26 @@ public final class VideoThumbnailCache {
                 host = host.substring(4);
             }
             if (host.equals("youtu.be")) {
-                return path != null && path.length() > 1 ? firstSegment(path.substring(1)) : null;
+                return path != null && path.length() > 1 ? sanitizeId(firstSegment(path.substring(1))) : null;
             }
-            if (host.endsWith("youtube.com")) {
+            if (host.equals("youtube.com") || host.equals("m.youtube.com") || host.equals("music.youtube.com")) {
                 if (path != null) {
                     String lower = path.toLowerCase(Locale.ROOT);
                     if (lower.startsWith("/shorts/")) {
-                        return firstSegment(path.substring("/shorts/".length()));
+                        return sanitizeId(firstSegment(path.substring("/shorts/".length())));
                     }
                     if (lower.startsWith("/embed/")) {
-                        return firstSegment(path.substring("/embed/".length()));
+                        return sanitizeId(firstSegment(path.substring("/embed/".length())));
                     }
                     if (lower.startsWith("/live/")) {
-                        return firstSegment(path.substring("/live/".length()));
+                        return sanitizeId(firstSegment(path.substring("/live/".length())));
                     }
                 }
                 String query = uri.getQuery();
                 if (query != null) {
                     for (String part : query.split("&")) {
                         if (part.startsWith("v=")) {
-                            return part.substring(2);
+                            return sanitizeId(part.substring(2));
                         }
                     }
                 }
@@ -296,6 +299,27 @@ public final class VideoThumbnailCache {
         } catch (URISyntaxException e) {
             return null;
         }
+    }
+
+    /**
+     * Accepts only the shape of a real YouTube id. The result is pasted straight into the
+     * {@code i.ytimg.com} thumbnail URL, so anything else (path separators, an encoded
+     * query, ".." and friends) would let a chat link steer that request elsewhere.
+     */
+    @Nullable
+    private static String sanitizeId(@Nullable String id) {
+        if (id == null || id.isEmpty() || id.length() > 32) {
+            return null;
+        }
+        for (int i = 0; i < id.length(); i++) {
+            char c = id.charAt(i);
+            boolean allowed = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9') || c == '-' || c == '_';
+            if (!allowed) {
+                return null;
+            }
+        }
+        return id;
     }
 
     private static String firstSegment(String s) {

@@ -30,6 +30,9 @@ public final class ImageFileSource implements com.lia.mediaplayer.api.MediaSourc
      * Whether {@code url}'s path ends in a known image extension.
      */
     public static boolean isImageFile(String url) {
+        if (!Urls.isHttp(url)) {
+            return false;
+        }
         String path = Urls.pathLower(url);
         if (path == null) {
             return false;

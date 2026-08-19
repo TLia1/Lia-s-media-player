@@ -34,6 +34,20 @@ class MediaSourcesTest {
     }
 
     @Test
+    void kindOf_NonHttpUrls_AreNotRecognised() {
+        // These all end in a known extension but must never reach ffmpeg, the browser
+        // or a command line: the scheme (or the lack of one) makes them something else.
+        assertNull(mediaSources.kindOf("file:///C:/Users/me/secret.mp4"));
+        assertNull(mediaSources.kindOf("file:///etc/passwd.mp3"));
+        assertNull(mediaSources.kindOf("ftp://example.com/video.mp4"));
+        assertNull(mediaSources.kindOf("/home/me/holiday.mp4"));
+        assertNull(mediaSources.kindOf("--config-location=/tmp/evil.mp4"));
+        assertNull(mediaSources.kindOf("ftp://youtube.com/watch?v=123"));
+        assertNull(mediaSources.kindOf("file://tenor.com/view/123"));
+        assertFalse(mediaSources.isSupported("file:///C:/secret.png"));
+    }
+
+    @Test
     void isMethods_WorkCorrectly() {
         assertTrue(mediaSources.isImage("https://example.com/image.png"));
         assertFalse(mediaSources.isVideo("https://example.com/image.png"));
