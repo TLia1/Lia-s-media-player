@@ -2,9 +2,7 @@ package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -47,8 +45,8 @@ public final class AudioChatHandler {
             return inherited
                     .withColor(ChatFormatting.GREEN)
                     .withUnderlined(true)
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("gui.liasmediaplayer.tooltip.audio")))
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url));
+                    .withHoverEvent(ChatEvents.showText(Component.translatable("gui.liasmediaplayer.tooltip.audio")))
+                    .withClickEvent(ChatEvents.openUrl(url));
         }
     };
 

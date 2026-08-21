@@ -3,7 +3,6 @@ package com.lia.mediaplayer.chat;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
@@ -45,7 +44,7 @@ public final class ImageChatHandler {
         public Style style(Style inherited, String url) {
             return inherited
                     .withColor(ChatFormatting.GOLD)
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url));
+                    .withClickEvent(ChatEvents.openUrl(url));
         }
 
         @Override

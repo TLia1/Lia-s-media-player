@@ -4,9 +4,7 @@ import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -48,8 +46,8 @@ public final class VideoChatHandler {
             return inherited
                     .withColor(ChatFormatting.AQUA)
                     .withUnderlined(true)
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("gui.liasmediaplayer.tooltip.video")))
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url));
+                    .withHoverEvent(ChatEvents.showText(Component.translatable("gui.liasmediaplayer.tooltip.video")))
+                    .withClickEvent(ChatEvents.openUrl(url));
         }
     };
 

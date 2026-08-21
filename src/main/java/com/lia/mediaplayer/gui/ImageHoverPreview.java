@@ -1,9 +1,9 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.chat.ChatEvents;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
@@ -39,12 +39,11 @@ final class ImageHoverPreview {
             return;
         }
 
-        ClickEvent clickEvent = style.getClickEvent();
-        if (clickEvent == null || clickEvent.getAction() != ClickEvent.Action.OPEN_URL) {
+        String url = ChatEvents.clickedUrl(style);
+        if (url == null) {
             return;
         }
 
-        String url = clickEvent.getValue();
         com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx == null) return;
 

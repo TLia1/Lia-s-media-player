@@ -3,6 +3,7 @@ package com.lia.mediaplayer.gui;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.chat.ChatEvents;
 import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
@@ -12,7 +13,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.neoforged.api.distmarker.Dist;
@@ -345,10 +345,6 @@ public final class MediaWindowOverlay {
         if (style == null) {
             return null;
         }
-        ClickEvent clickEvent = style.getClickEvent();
-        if (clickEvent == null || clickEvent.getAction() != ClickEvent.Action.OPEN_URL) {
-            return null;
-        }
-        return clickEvent.getValue();
+        return ChatEvents.clickedUrl(style);
     }
 }

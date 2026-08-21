@@ -1,43 +1,25 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
-import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
+import com.lia.mediaplayer.gui.TextureBridge;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.lwjgl.system.MemoryUtil;
 
 public class VideoRenderer {
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger(0);
-    private static final Field NATIVE_IMAGE_PIXELS_FIELD;
-
-    static {
-        try {
-            NATIVE_IMAGE_PIXELS_FIELD = NativeImage.class.getDeclaredField("pixels");
-            NATIVE_IMAGE_PIXELS_FIELD.setAccessible(true);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize reflection for VideoRenderer", e);
-        }
-    }
 
     @Nullable
-    private ResourceLocation textureLocation;
-    @Nullable
-    private DynamicTexture texture;
-    @Nullable
-    private NativeImage nativeImage;
+    private TextureBridge.Frame texture;
     @Nullable
     private VideoFrame currentFrame;
 
     @Nullable
     public ResourceLocation getTextureLocation() {
-        return textureLocation;
+        return texture == null ? null : texture.location();
     }
 
     @Nullable
@@ -46,15 +28,10 @@ public class VideoRenderer {
     }
 
     public void releaseTexture() {
-        if (textureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(textureLocation);
-            textureLocation = null;
-        }
         if (texture != null) {
             texture.close();
             texture = null;
         }
-        nativeImage = null;
         currentFrame = null;
     }
 
@@ -79,42 +56,17 @@ public class VideoRenderer {
             currentFrame = chosen;
             uploadFrame(chosen);
         }
-        return textureLocation;
+        return getTextureLocation();
     }
 
     private void uploadFrame(VideoFrame frame) {
-        Minecraft mc = Minecraft.getInstance();
-        if (nativeImage == null || nativeImage.getWidth() != frame.width() || nativeImage.getHeight() != frame.height()) {
+        if (texture == null || texture.width() != frame.width() || texture.height() != frame.height()) {
             releaseTexture();
-            nativeImage = new NativeImage(NativeImage.Format.RGBA, frame.width(), frame.height(), false);
-            texture = new DynamicTexture(nativeImage);
-            textureLocation = ResourceLocation.fromNamespaceAndPath(
-                    LiasMediaPlayer.MODID, "video/" + TEXTURE_ID.getAndIncrement());
-            mc.getTextureManager().register(textureLocation, texture);
+            texture = TextureBridge.Frame.allocate(
+                    ResourceLocation.fromNamespaceAndPath(
+                            LiasMediaPlayer.MODID, "video/" + TEXTURE_ID.getAndIncrement()),
+                    frame.width(), frame.height());
         }
-
-        ByteBuffer buffer = frame.rgbaBuffer();
-        // This writes straight into the texture's native pixel block, so the length has to
-        // come from the destination. Trusting the source buffer's capacity would turn any
-        // future mismatch between frame size and texture size into an out-of-bounds write
-        // rather than a visible glitch.
-        long expectedBytes = (long) nativeImage.getWidth() * nativeImage.getHeight() * 4L;
-        if (buffer.capacity() != expectedBytes) {
-            LiasMediaPlayer.LOGGER.warn("Skipping frame: {} bytes for a {}x{} texture",
-                    buffer.capacity(), nativeImage.getWidth(), nativeImage.getHeight());
-            return;
-        }
-        long bufferPtr = MemoryUtil.memAddress(buffer);
-        long pixelsPtr;
-        try {
-            pixelsPtr = NATIVE_IMAGE_PIXELS_FIELD.getLong(nativeImage);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("Failed to access NativeImage pixels", e);
-        }
-        MemoryUtil.memCopy(bufferPtr, pixelsPtr, expectedBytes);
-
-        if (texture != null) {
-            texture.upload();
-        }
+        texture.upload(frame.rgbaBuffer());
     }
 }

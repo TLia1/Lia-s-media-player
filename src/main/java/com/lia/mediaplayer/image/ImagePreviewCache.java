@@ -1,12 +1,12 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.gui.TextureBridge;
 import com.lia.mediaplayer.source.TenorSource;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
@@ -226,7 +226,7 @@ public final class ImagePreviewCache {
             for (int i = 0; i < images.length; i++) {
                 ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
                         LiasMediaPlayer.MODID, "preview/" + TEXTURE_ID.getAndIncrement());
-                Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(images[i]));
+                TextureBridge.register(location, images[i]);
                 locations[i] = location;
             }
 
@@ -330,7 +330,7 @@ public final class ImagePreviewCache {
             if (frames != null) {
                 for (ResourceLocation location : frames) {
                     if (location != null) {
-                        Minecraft.getInstance().getTextureManager().release(location);
+                        TextureBridge.release(location);
                     }
                 }
                 frames = null;

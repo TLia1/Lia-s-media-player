@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.gui.TextureBridge;
 import com.lia.mediaplayer.image.GifDecoder;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.source.YouTubeSource;
@@ -8,7 +9,6 @@ import com.lia.mediaplayer.tools.FFmpegCli;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       to grab their first decoded frame.</li>
  * </ul>
  *
- * <p>Loading happens on the IO pool; the {@link DynamicTexture} is created back on
+ * <p>Loading happens on the IO pool; the texture is created back on
  * the render/main thread. All public methods must be called from the main thread.</p>
  */
 public final class VideoThumbnailCache {
@@ -242,7 +242,7 @@ public final class VideoThumbnailCache {
             NativeImage native_ = GifDecoder.toNativeImage(image);
             ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
                     LiasMediaPlayer.MODID, "videothumb/" + TEXTURE_ID.getAndIncrement());
-            Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(native_));
+            TextureBridge.register(location, native_);
             thumb.texture = location;
             thumb.width = image.getWidth();
             thumb.height = image.getHeight();
@@ -349,7 +349,7 @@ public final class VideoThumbnailCache {
         void release() {
             disposed = true;
             if (texture != null) {
-                Minecraft.getInstance().getTextureManager().release(texture);
+                TextureBridge.release(texture);
                 texture = null;
             }
             state = State.IDLE;

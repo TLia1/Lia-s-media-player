@@ -18,7 +18,7 @@ rootProject.name = "Lia-s-media-player"
 // and the root src/ tree. See PORTING.md for the target matrix.
 stonecutter {
     create(rootProject) {
-        versions("1.21.1", "1.21.4")
+        versions("1.21.1", "1.21.4", "1.21.5")
         vcsVersion = "1.21.1"
     }
 }
