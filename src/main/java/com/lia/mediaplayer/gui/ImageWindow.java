@@ -77,8 +77,7 @@ final class ImageWindow extends MediaWindow {
         ImagePreviewCache.Entry e = entry();
         ResourceLocation frame = e.state == ImagePreviewCache.State.LOADED ? e.currentFrame() : null;
         if (frame != null) {
-            g.blit(frame, contentX, contentY, contentW, contentH,
-                    0.0f, 0.0f, e.width, e.height, e.width, e.height);
+            Blit.textured(g, frame, contentX, contentY, contentW, contentH, e.width, e.height);
             return;
         }
         g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);

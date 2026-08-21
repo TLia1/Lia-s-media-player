@@ -196,7 +196,11 @@ public final class MediaBinaries {
 
                 net.minecraft.client.Minecraft.getInstance().execute(() -> {
                     net.minecraft.client.gui.components.toasts.SystemToast.add(
+                            //? if <1.21.4 {
                             net.minecraft.client.Minecraft.getInstance().getToasts(),
+                            //?} else {
+                            /*net.minecraft.client.Minecraft.getInstance().getToastManager(),
+                            *///?}
                             net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                             net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
                             net.minecraft.network.chat.Component.translatable(translationKey)

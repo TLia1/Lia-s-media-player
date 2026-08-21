@@ -188,7 +188,7 @@ Resources:
 - `src/main/resources/META-INF/neoforge.mods.toml` — mod metadata. Declares two
   `[[mods]]` entries (`liasmediaplayer` and `liasmediaplayerapi`) and only
   `neoforge` and `minecraft` as required dependencies. The `mod_id`, `mod_name`,
-  `mod_version`, etc. are expanded from `gradle.properties` at build time.
+  `mod_version`, etc. are expanded from `stonecutter.properties.toml` at build time.
   `@EventBusSubscriber` handlers are discovered by annotation scanning regardless of
   which sub-package they live in, so moving them between packages needs no config
   change.
@@ -601,16 +601,18 @@ audio bars fan out without landing on top of one another.
 
 ## Building & installing
 
-This is a standard NeoForge mod built with the **NeoGradle userdev** plugin — no
-Shadow/shading and no bundled natives, so the produced jar is small. From the
-project root:
+This is a NeoForge mod built with **ModDevGradle**, with
+[Stonecutter](https://stonecutter.kikugie.dev) compiling the single `src/` tree
+against every supported Minecraft version — no Shadow/shading and no bundled
+natives, so the produced jar is small. From the project root:
 
 ```
-./gradlew build       # builds the mod jar into build/libs/
-./gradlew runClient   # launches a dev client with the mod
+./gradlew buildAll            # builds every Minecraft version
+./gradlew :1.21.1:build       # builds one version into versions/1.21.1/build/libs/
+./gradlew :1.21.1:runClient   # launches a dev client for that version
 ```
 
-Install by dropping the built jar from `build/libs/` into the **client's** `mods/`
+Install by dropping the built jar from `versions/<version>/build/libs/` into the **client's** `mods/`
 folder (alongside NeoForge `21.1.230` for Minecraft `1.21.1`). It is a client-only
 mod: do not install it on a server, where it does nothing.
 

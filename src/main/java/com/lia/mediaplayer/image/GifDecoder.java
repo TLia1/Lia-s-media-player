@@ -246,10 +246,14 @@ public final class GifDecoder {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int pixel = argb[y * width + x];
+                //? if <1.21.4 {
                 int abgr = (pixel & 0xFF00FF00)
                         | ((pixel & 0x00FF0000) >>> 16)
                         | ((pixel & 0x000000FF) << 16);
                 image.setPixelRGBA(x, y, abgr);
+                //?} else {
+                /*image.setPixel(x, y, pixel);
+                *///?}
             }
         }
         return image;

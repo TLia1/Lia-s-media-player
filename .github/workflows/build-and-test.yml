@@ -27,15 +27,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with Gradle
+      - name: Build every Minecraft version
         run: |
           chmod +x gradlew
-          ./gradlew build test
+          ./gradlew buildAll testAll
 
       - name: Upload build artifacts
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: mod-jar
-          path: build/libs/*.jar
+          name: mod-jars
+          path: versions/*/build/libs/*.jar
           retention-days: 14

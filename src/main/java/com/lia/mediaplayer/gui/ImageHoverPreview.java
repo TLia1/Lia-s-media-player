@@ -104,8 +104,7 @@ final class ImageHoverPreview {
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(0, 0, PREVIEW_Z);
         guiGraphics.fill(x - 2, y - 2, x + width + 2, y + height + 2, BACKGROUND_COLOR);
-        guiGraphics.blit(frame, x, y, width, height,
-                0.0f, 0.0f, entry.width, entry.height, entry.width, entry.height);
+        Blit.textured(guiGraphics, frame, x, y, width, height, entry.width, entry.height);
         guiGraphics.pose().popPose();
     }
 }

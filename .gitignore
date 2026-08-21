@@ -1,6 +1,8 @@
 ### Gradle ###
 .gradle
 build/
+versions/*/build/
+.stonecutter/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/**/build/
 
@@ -34,6 +36,7 @@ bin/
 
 ### Minecraft Modding ###
 run/
+versions/*/run/
 !**/src/**/run/
 **/src/generated/**/.cache/
 repo/

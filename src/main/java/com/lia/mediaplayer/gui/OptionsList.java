@@ -56,10 +56,21 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
         }
     }
 
+    // The scrollbar accessor was renamed when the list widgets were rebuilt on
+    // AbstractScrollArea. Confirmed renamed by 1.21.4; if 1.21.2 or 1.21.3 are
+    // ever added as targets, re-check which of them first dropped
+    // getScrollbarPosition.
+    //? if <1.21.4 {
     @Override
     public int getScrollbarPosition() {
         return this.width / 2 + this.getRowWidth() / 2 + 4;
     }
+    //?} else {
+    /*@Override
+    protected int scrollBarX() {
+        return this.width / 2 + this.getRowWidth() / 2 + 4;
+    }
+    *///?}
 
     @Override
     public int getRowWidth() {

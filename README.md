@@ -71,17 +71,39 @@ video; `yt-dlp` is only needed for YouTube links.
 
 ## Building (for developers)
 
-This is a standard NeoForge mod built with the NeoGradle **userdev** plugin. There
-is no shading and no bundled natives, so the jar stays small. From the project root:
+This is a NeoForge mod built with **ModDevGradle**, with
+[Stonecutter](https://stonecutter.kikugie.dev) building one source tree against
+several Minecraft versions. There is no shading and no bundled natives, so the
+jar stays small. From the project root:
 
 ```
-./gradlew build       # builds the mod jar into build/libs/
-./gradlew test        # runs the unit tests
-./gradlew runClient   # launches a dev client with the mod loaded
+./gradlew buildAll                    # builds every Minecraft version
+./gradlew testAll                     # runs the unit tests against every version
+./gradlew :1.21.1:build               # builds a single version
+./gradlew :1.21.1:runClient           # launches a dev client for that version
 ```
 
-Useful project settings live in `gradle.properties` (`mod_id`, `mod_version`,
-`neo_version`, `minecraft_version`, …) and are expanded into
+Each version is a subproject named after its Minecraft version, sharing the
+single `src/` tree at the project root; jars land in
+`versions/<version>/build/libs/`. Version-specific lines in the source are gated
+behind Stonecutter comments:
+
+```java
+//? if <1.21.4 {
+image.setPixelRGBA(x, y, abgr);
+//?} else {
+/*image.setPixel(x, y, pixel);*/
+//?}
+```
+
+The active version decides which branch of every such comment is live in `src/`.
+Switch with `./gradlew "Set active project to 1.21.4"`, and **run
+`./gradlew "Reset active project"` before committing** so the tree always lands
+on the same version in git.
+
+Project settings live in `stonecutter.properties.toml` — `mod.*` entries are
+shared, and each `["<version>"]` table carries that version's NeoForge, Minecraft
+and Parchment versions. They are expanded into
 `src/main/resources/META-INF/neoforge.mods.toml` at build time.
 
 If you ever hit dependency issues in your IDE, `./gradlew --refresh-dependencies`
@@ -94,9 +116,11 @@ Contributions are welcome! Here's how to get started:
 
 1. **Fork** the repository and create a feature branch from `main`.
 2. Make your changes — keep commits focused and well-described.
-3. Run `./gradlew build test` to make sure everything compiles and all unit tests pass.
-4. Run `./gradlew updateDocs` if you changed any property in `gradle.properties`
-   (version, mod id, etc.) — the CI will reject out-of-sync docs.
+3. Run `./gradlew buildAll testAll` to make sure every version compiles and all
+   unit tests pass, then `./gradlew "Reset active project"` before committing.
+4. Run `./gradlew updateDocs` if you changed any property in
+   `stonecutter.properties.toml` (version, mod id, etc.) — the CI will reject
+   out-of-sync docs.
 5. Open a **pull request** against `main`.
 
 ### Code guidelines
@@ -126,7 +150,7 @@ listen for `MediaSourceRegistrationEvent`. See
 Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md`, `API-DOCUMENTATION.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
 `<!-- mod_version -->1.4.3<!-- /mod_version -->`). **Never edit these values by
-hand** — update `gradle.properties` and run:
+hand** — update `stonecutter.properties.toml` and run:
 
 ```
 ./gradlew updateDocs

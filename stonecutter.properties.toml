@@ -1,0 +1,45 @@
+# Centralised project properties, loaded by Stonecutter into every subproject.
+#
+# Top-level tables are shared by all versions; a table named after a version
+# (e.g. ["1.21.4"]) is only visible to that version's subproject, with the
+# version prefix stripped — `["1.21.4"] deps.neoforge` is read as `deps.neoforge`
+# in versions/1.21.4.
+
+# ---------------------------------------------------------------------------
+# Mod properties — shared by every version
+# ---------------------------------------------------------------------------
+# The unique mod identifier. Must be lowercase in English locale and match the
+# regex [a-z][a-z0-9_]{1,63}, as well as the String constant in the @Mod class.
+mod.id = "liasmediaplayer"
+# The human-readable display name for the mod.
+mod.name = "Lia's Media Player"
+# The group ID for the mod, matching the base package used for the mod sources.
+mod.group = "com.lia.mediaplayer"
+# The mod version. See https://semver.org/
+mod.version = "1.4.3"
+# Version of the public API shipped as a second [[mods]] entry in the same jar.
+mod.api_version = "1.3.1"
+# The license of the mod. Review your options at https://choosealicense.com/.
+mod.license = "All Rights Reserved"
+# The loader version range can only use the major version of FML as bounds.
+mod.loader_version_range = "[1,)"
+
+# ---------------------------------------------------------------------------
+# Per-version dependencies
+# ---------------------------------------------------------------------------
+# The NeoForge version must agree with the Minecraft version to get a valid
+# artifact — see https://projects.neoforged.net/neoforged/neoforge
+# `deps.parchment` is "<minecraftVersion>:<mappingsVersion>"; see
+# https://parchmentmc.org/docs/getting-started
+
+["1.21.1"]
+deps.minecraft = "1.21.1"
+deps.minecraft_range = "[1.21.1]"
+deps.neoforge = "21.1.230"
+deps.parchment = "1.21.1:2024.11.17"
+
+["1.21.4"]
+deps.minecraft = "1.21.4"
+deps.minecraft_range = "[1.21.4]"
+deps.neoforge = "21.4.157"
+deps.parchment = "1.21.4:2025.03.23"

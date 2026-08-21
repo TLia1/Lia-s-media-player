@@ -395,8 +395,7 @@ final class VideoWindow extends MediaWindow {
     protected void drawContent(GuiGraphics g, Font font) {
         ResourceLocation frame = player.prepareFrame();
         if (frame != null) {
-            g.blit(frame, contentX, contentY, contentW, contentH,
-                    0.0f, 0.0f, player.videoWidth(), player.videoHeight(),
+            Blit.textured(g, frame, contentX, contentY, contentW, contentH,
                     player.videoWidth(), player.videoHeight());
         } else {
             g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);
@@ -632,7 +631,7 @@ final class VideoWindow extends MediaWindow {
             int h = Math.max(1, (int) Math.round(th * scale));
             int ox = tx + (THUMB_W - w) / 2;
             int oy = ty + (THUMB_H - h) / 2;
-            g.blit(thumb.texture, ox, oy, w, h, 0.0f, 0.0f, tw, th, tw, th);
+            Blit.textured(g, thumb.texture, ox, oy, w, h, tw, th);
         } else {
             String dots = thumb.state == VideoThumbnailCache.State.FAILED ? "?" : "...";
             g.drawString(font, Component.literal(dots),
