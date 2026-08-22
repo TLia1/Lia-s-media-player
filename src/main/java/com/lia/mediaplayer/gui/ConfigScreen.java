@@ -33,7 +33,7 @@ public class ConfigScreen extends Screen {
         for (String group : groups) {
             this.addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.config.button." + group), b -> {
                 if (this.minecraft != null) {
-                    this.minecraft.setScreen(new AddonConfigScreen(this, group));
+                    Screens.open(new AddonConfigScreen(this, group));
                 }
             }).bounds(x, y, w, 20).build());
             y += dy;
@@ -46,16 +46,27 @@ public class ConfigScreen extends Screen {
                 .bounds((this.width - 200) / 2, y, 200, 20).build());
     }
 
+    // 26.1 stopped drawing the GUI and started extracting it into a render state,
+    // renaming Renderable.render to extractRenderState. Only the name changes —
+    // same parameters, same meaning, same call order.
+    //? if <26.1 {
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
     }
+    //?} else {
+    /*@Override
+    public void extractRenderState(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+    }
+    *///?}
 
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(this.lastScreen);
+            Screens.open(this.lastScreen);
         }
     }
 }

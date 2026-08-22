@@ -48,7 +48,7 @@ public final class MediaWindowOverlay {
             Screen screen = event.getScreen();
             int screenWidth = screen.width;
             event.addListener(Button.builder(Component.translatable("gui.liasmediaplayer.config_button"), (button) -> {
-                Minecraft.getInstance().setScreen(new ConfigScreen(screen));
+                Screens.open(new ConfigScreen(screen));
             }).bounds(screenWidth - 10 - 112, 10, 112, 20).build());
         }
     }
@@ -96,12 +96,10 @@ public final class MediaWindowOverlay {
                 continue;
             }
             int slot = slotByGroup.merge(window.anchorGroup(), 1, Integer::sum) - 1;
-            g.pose().pushPose();
-            g.pose().translate(0, 0, BASE_Z + depth * Z_STEP);
+            GuiLayer.push(g, BASE_Z + depth * Z_STEP);
             window.layout(screenWidth, screenHeight, slot);
             window.render(g, mouseX, mouseY, withControls);
-            g.pose().popPose();
-            g.flush();
+            GuiLayer.popAndFlush(g);
             depth++;
         }
     }
@@ -134,13 +132,11 @@ public final class MediaWindowOverlay {
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
-        g.pose().pushPose();
-        g.pose().translate(0, 0, 500);
+        GuiLayer.push(g, 500);
         g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? 0xF0303030 : 0xD0181818);
         Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
         g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
-        g.pose().popPose();
-        g.flush();
+        GuiLayer.popAndFlush(g);
     }
 
     private static void renderRevealButton(GuiGraphics g, int mouseX, int mouseY) {
@@ -161,8 +157,7 @@ public final class MediaWindowOverlay {
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
-        g.pose().pushPose();
-        g.pose().translate(0, 0, 500);
+        GuiLayer.push(g, 500);
         g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? 0xF0303030 : 0xD0181818);
         int tx = revealX + 5;
         int ty = revealY + 3;
@@ -171,14 +166,13 @@ public final class MediaWindowOverlay {
             g.fill(tx, ty + i, tx + 1 + half, ty + i + 1, fg);
         }
         g.drawString(font, label, revealX + 5 + triW, revealY + 3, fg);
-        g.pose().popPose();
-        g.flush();
+        GuiLayer.popAndFlush(g);
     }
 
     @SubscribeEvent
     public static void onRenderHud(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen != null || noWindows()) {
+        if (Screens.current() != null || noWindows()) {
             return;
         }
         int screenWidth = mc.getWindow().getGuiScaledWidth();
@@ -200,7 +194,7 @@ public final class MediaWindowOverlay {
 
         if (event.getButton() == 0
                 && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
-            Minecraft.getInstance().setScreen(new PlaylistScreen());
+            Screens.open(new PlaylistScreen());
             event.setCanceled(true);
             return;
         }
@@ -237,20 +231,20 @@ public final class MediaWindowOverlay {
             }
             MediaKind kind = ctx.getMediaSources().kindOf(url);
             if (kind == MediaKind.VIDEO) {
-                if (Screen.hasAltDown()) {
-                    if (Screen.hasShiftDown()) {
+                if (Keys.altDown()) {
+                    if (Keys.shiftDown()) {
                         ctx.getAudioManager().open(url).bringToFront();
                     } else {
                         ctx.getAudioManager().enqueue(url);
                     }
-                } else if (Screen.hasShiftDown()) {
+                } else if (Keys.shiftDown()) {
                     ctx.getVideoManager().open(url).bringToFront();
                 } else {
                     ctx.getVideoManager().enqueue(url);
                 }
                 event.setCanceled(true);
             } else if (kind == MediaKind.AUDIO) {
-                if (Screen.hasShiftDown()) {
+                if (Keys.shiftDown()) {
                     ctx.getAudioManager().open(url).bringToFront();
                 } else {
                     ctx.getAudioManager().enqueue(url);
@@ -340,8 +334,7 @@ public final class MediaWindowOverlay {
 
     @Nullable
     private static String hoveredUrl(double mouseX, double mouseY) {
-        Minecraft mc = Minecraft.getInstance();
-        Style style = mc.gui.getChat().getClickedComponentStyleAt(mouseX, mouseY);
+        Style style = ChatHitTest.hoveredStyle(mouseX, mouseY);
         if (style == null) {
             return null;
         }

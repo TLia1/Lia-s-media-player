@@ -34,6 +34,8 @@ val loaderVersionRange = prop("mod.loader_version_range")
 val minecraftVersion = prop("deps.minecraft")
 val minecraftVersionRange = prop("deps.minecraft_range")
 val neoVersion = prop("deps.neoforge")
+val javaVersion = prop("deps.java")
+// Empty for a Minecraft version Parchment has not published mappings for.
 val parchmentVersion = prop("deps.parchment")
 
 version = modVersion
@@ -62,8 +64,10 @@ repositories {
     }
 }
 
-// Mojang ships Java 21 to end users across this whole version range.
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// Per-version: Mojang shipped Java 21 for 1.21.1-1.21.11 and moved to Java 25
+// in 26.1. Gradle provisions whichever toolchain is missing through the foojay
+// resolver applied in settings.gradle.kts.
+java.toolchain.languageVersion = JavaLanguageVersion.of(javaVersion.toInt())
 
 // ---------------------------------------------------------------------------
 // ModDevGradle
@@ -75,9 +79,12 @@ val runsRoot = layout.projectDirectory.dir("run")
 neoForge {
     version = neoVersion
 
-    parchment {
-        minecraftVersion = parchmentVersion.substringBefore(':')
-        mappingsVersion = parchmentVersion.substringAfter(':')
+    // Parchment stops at 1.21.11; 26.x builds against NeoForge's mappings alone.
+    if (parchmentVersion.isNotEmpty()) {
+        parchment {
+            minecraftVersion = parchmentVersion.substringBefore(':')
+            mappingsVersion = parchmentVersion.substringAfter(':')
+        }
     }
 
     //accessTransformers.from("src/main/resources/META-INF/accesstransformer.cfg")
@@ -138,6 +145,56 @@ neoForge {
                 "--existing", file("src/main/resources/").absolutePath,
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Token replacements
+// ---------------------------------------------------------------------------
+// 1.21.11 moved to Mojang's official names. Two of those renames are pure
+// token substitutions with no semantics at all — ResourceLocation alone is 7
+// imports and ~30 usages across 9 files — so they are rewritten at generation
+// time instead of being guarded by hand, exactly as PORTING.md §4.7 planned.
+//
+// The boolean is the *direction*: true rewrites the left token into the right
+// one, false rewrites it back. The shared src/ tree therefore round-trips —
+// switching the active version to 1.21.11 rewrites it to the new names, and
+// switching back restores the old ones.
+//
+// Only add renames here that are unambiguous substrings project-wide. Anything
+// that changes a signature or a call shape belongs in a //? guard.
+stonecutter.replacements {
+    string(stonecutter.eval(stonecutter.current.version, ">=1.21.11")) {
+        // net.minecraft.resources.ResourceLocation -> .resources.Identifier
+        replace("ResourceLocation", "Identifier")
+        // net.minecraft.Util -> net.minecraft.util.Util (same class, new package)
+        replace("net.minecraft.Util", "net.minecraft.util.Util")
+    }
+
+    // 26.1 renamed the GUI drawing API wholesale: the GUI is no longer drawn but
+    // *extracted* into a render state, so GuiGraphics became GuiGraphicsExtractor
+    // and its draw methods were renamed to match. The three below are exact
+    // one-for-one renames with identical signatures, over 14 files and ~80 call
+    // sites. Everything else 26.1 changed needed a real guard instead.
+    //
+    // The leading dot and open paren matter: they keep the *reverse* direction
+    // honest. Replacing a bare "text" back into "drawString" would rewrite the
+    // word wherever it appeared; ".text(" only ever appears as this call.
+    string(stonecutter.eval(stonecutter.current.version, ">=26.1")) {
+        replace(".drawString(", ".text(")
+        replace(".drawCenteredString(", ".centeredText(")
+    }
+
+    // The type rename needs a regex rather than a plain substring, because
+    // NeoForge kept ScreenEvent.Render.getGuiGraphics() under its old name while
+    // changing what it returns. A blanket substring swap rewrites that call site
+    // into getGuiGraphicsExtractor(), which does not exist. The lookbehind says
+    // what is actually meant: rename the type, never the getter.
+    regex(stonecutter.eval(stonecutter.current.version, ">=26.1")) {
+        replace(
+            "(?<!get)GuiGraphics", "GuiGraphicsExtractor",
+            "GuiGraphicsExtractor", "GuiGraphics",
+        )
     }
 }
 

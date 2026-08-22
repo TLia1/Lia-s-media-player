@@ -6,7 +6,6 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
@@ -513,7 +512,7 @@ abstract class MediaWindow {
                 || !(containsMouse(mouseX, mouseY) || overPopup(mouseX, mouseY) || overExtraRegion(mouseX, mouseY))) {
             return false;
         }
-        if (Screen.hasControlDown()) {
+        if (Keys.controlDown()) {
             zoom(scrollY);
             return true;
         }

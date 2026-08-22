@@ -38,12 +38,23 @@ public class AddonConfigScreen extends Screen {
                 .bounds((this.width - 200) / 2, this.height - 28, 200, 20).build());
     }
 
+    // See the note in ConfigScreen: 26.1 renamed Renderable.render to
+    // extractRenderState, which the list widget below inherits too.
+    //? if <26.1 {
     @Override
     public void render(GuiGraphics pGuiGraphics, int pMouseX, int pMouseY, float pPartialTick) {
         super.render(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
         this.optionsList.render(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
         pGuiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
     }
+    //?} else {
+    /*@Override
+    public void extractRenderState(GuiGraphics pGuiGraphics, int pMouseX, int pMouseY, float pPartialTick) {
+        super.extractRenderState(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
+        this.optionsList.extractRenderState(pGuiGraphics, pMouseX, pMouseY, pPartialTick);
+        pGuiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+    }
+    *///?}
 
     @Override
     public boolean mouseScrolled(double pMouseX, double pMouseY, double pScrollX, double pScrollY) {
@@ -53,7 +64,7 @@ public class AddonConfigScreen extends Screen {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(this.lastScreen);
+            Screens.open(this.lastScreen);
         }
     }
 }

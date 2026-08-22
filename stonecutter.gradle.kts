@@ -40,10 +40,28 @@ tasks.register("updateDocs") {
     description = "Updates version numbers and mod properties in markdown documentation files."
 
     val docsVersion = stonecutter.vcsVersion.project
-    fun versioned(vararg path: String): String =
-        stonecutter.properties.raw(docsVersion, *path).asPrimitive().toString()
+    fun versionedFor(version: String, vararg path: String): String =
+        stonecutter.properties.raw(version, *path).asPrimitive().toString()
+    fun versioned(vararg path: String): String = versionedFor(docsVersion, *path)
+
+    // The supported-version table is generated rather than hand-written: with
+    // seven targets a hand-maintained copy drifts the moment one is added or a
+    // NeoForge build is bumped, and the docs-check workflow would not catch it
+    // because it only verifies that updateDocs changes nothing. Generating it
+    // makes that check meaningful for the table too.
+    val supportedVersions = stonecutter.versions.joinToString(
+        separator = "\n",
+        prefix = "| Minecraft | NeoForge | Java |\n|---|---|---|\n",
+    ) { node ->
+        val v = node.project
+        val primary = if (v == docsVersion) " *(primary)*" else ""
+        "| `${versionedFor(v, "deps", "minecraft")}`$primary" +
+            " | `${versionedFor(v, "deps", "neoforge")}`" +
+            " | ${versionedFor(v, "deps", "java")} |"
+    }
 
     val capturedProps = mapOf(
+        "supported_versions" to supportedVersions,
         "mod_version" to project.property("mod.version").toString(),
         "mod_id" to project.property("mod.id").toString(),
         "mod_name" to project.property("mod.name").toString(),
@@ -88,5 +106,21 @@ tasks.register("updateDocs") {
                 log.lifecycle("updateDocs: ${f.name} is already up to date")
             }
         }
+    }
+}
+
+if (System.getProperty("idea.sync.active").toBoolean()) {
+    val buildRootDir = rootProject.projectDir
+
+    gradle.projectsEvaluated {
+        val startParameter = gradle.startParameter
+        startParameter.setTaskRequests(startParameter.taskRequests.map { request ->
+            if (request.rootDir == null || request.rootDir == buildRootDir) request
+            else object : org.gradle.TaskExecutionRequest {
+                override fun getArgs(): List<String> = request.args
+                override fun getProjectPath(): String? = null
+                override fun getRootDir(): File? = null
+            }
+        })
     }
 }

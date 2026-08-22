@@ -196,10 +196,15 @@ public final class MediaBinaries {
 
                 net.minecraft.client.Minecraft.getInstance().execute(() -> {
                     net.minecraft.client.gui.components.toasts.SystemToast.add(
+                            // ToastComponent became ToastManager in 1.21.4, and 26.2
+                            // moved its owner from Minecraft onto Minecraft.gui along
+                            // with the screen stack (see gui/Screens).
                             //? if <1.21.4 {
                             net.minecraft.client.Minecraft.getInstance().getToasts(),
-                            //?} else {
+                            //?} elif <26.2 {
                             /*net.minecraft.client.Minecraft.getInstance().getToastManager(),
+                            *///?} else {
+                            /*net.minecraft.client.Minecraft.getInstance().gui.toastManager(),
                             *///?}
                             net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                             net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),

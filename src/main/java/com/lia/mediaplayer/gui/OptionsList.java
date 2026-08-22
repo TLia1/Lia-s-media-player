@@ -95,12 +95,34 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
             }
         }
 
+        // The list widgets were rebuilt somewhere in 1.21.9-1.21.11: entries now
+        // carry their own position (Entry.getX()/getY(), which the list sets to
+        // getRowLeft() and the row top — exactly the `left`/`top` the old
+        // callback was handed), so the render callback lost every geometry
+        // parameter and was renamed. Threshold unbisected: 1.21.9 and 1.21.10
+        // are not targets, so this could equally be <1.21.9 or <1.21.10.
+        //? if <1.21.11 {
         @Override
         public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isMouseOver, float partialTick) {
             this.widget.setX(left);
             this.widget.setY(top);
             this.widget.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+        //?} elif <26.1 {
+        /*@Override
+        public void renderContent(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, boolean isHovering, float partialTick) {
+            this.widget.setX(this.getX());
+            this.widget.setY(this.getY());
+            this.widget.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        *///?} else {
+        /*@Override
+        public void extractContent(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, boolean isHovering, float partialTick) {
+            this.widget.setX(this.getX());
+            this.widget.setY(this.getY());
+            this.widget.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        *///?}
 
         @Override
         public @NotNull List<? extends GuiEventListener> children() {
@@ -135,6 +157,8 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
             }
         }
 
+        // See the note on SingleEntry.
+        //? if <1.21.11 {
         @Override
         public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isMouseOver, float partialTick) {
             this.widget1.setX(left);
@@ -145,6 +169,29 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
             this.widget2.setY(top);
             this.widget2.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+        //?} elif <26.1 {
+        /*@Override
+        public void renderContent(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, boolean isHovering, float partialTick) {
+            this.widget1.setX(this.getX());
+            this.widget1.setY(this.getY());
+            this.widget1.render(guiGraphics, mouseX, mouseY, partialTick);
+
+            this.widget2.setX(this.getX() + 152);
+            this.widget2.setY(this.getY());
+            this.widget2.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        *///?} else {
+        /*@Override
+        public void extractContent(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, boolean isHovering, float partialTick) {
+            this.widget1.setX(this.getX());
+            this.widget1.setY(this.getY());
+            this.widget1.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+
+            this.widget2.setX(this.getX() + 152);
+            this.widget2.setY(this.getY());
+            this.widget2.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        *///?}
 
         @Override
         public @NotNull List<? extends GuiEventListener> children() {

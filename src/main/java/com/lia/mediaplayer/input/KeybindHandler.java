@@ -25,8 +25,8 @@ public final class KeybindHandler {
         Minecraft mc = Minecraft.getInstance();
 
         while (ModKeybinds.OPEN_PLAYLISTS.consumeClick()) {
-            if (mc.screen == null) {
-                mc.setScreen(new PlaylistScreen());
+            if (com.lia.mediaplayer.gui.Screens.current() == null) {
+                com.lia.mediaplayer.gui.Screens.open(new PlaylistScreen());
             }
         }
 

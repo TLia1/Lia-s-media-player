@@ -10,32 +10,74 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build & Verify
+  # The version list lives in settings.gradle.kts and nowhere else. Parsing it
+  # here keeps the matrix from silently drifting out of date — a target added to
+  # Stonecutter but forgotten here would just stop being built, with a green
+  # tick. This runs without Gradle, so it costs seconds rather than a minute.
+  targets:
+    name: Collect targets
     runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.parse.outputs.versions }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Parse the Stonecutter version list
+        id: parse
+        run: |
+          versions=$(sed -n 's/.*versions(\(.*\)).*/\1/p' settings.gradle.kts \
+            | tr -d ' "' | tr ',' '\n' | grep . | jq -R . | jq -sc .)
+          if [ "$versions" = "[]" ] || [ -z "$versions" ]; then
+            echo "::error::Could not parse the version list from settings.gradle.kts"
+            exit 1
+          fi
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          echo "Building: $versions"
+
+  build:
+    name: Build ${{ matrix.version }}
+    needs: targets
+    runs-on: ubuntu-latest
+    strategy:
+      # One target failing should not hide the state of the others.
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.targets.outputs.versions) }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 21
+      # Two toolchains, because the range spans two of them: Minecraft 1.21.1
+      # through 1.21.11 ship Java 21 to players and 26.1 moved to Java 25 (see
+      # deps.java in stonecutter.properties.toml). 21 is listed last so it wins
+      # JAVA_HOME and runs Gradle itself; the compile toolchain is picked per
+      # version from the JAVA_HOME_*_X64 variables wired up below.
+      - name: Setup Java 21 and 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: |
+            25
+            21
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build every Minecraft version
+      # Gradle does not look at setup-java's install locations on its own, so
+      # point it at both explicitly. Without this it would fall back to
+      # downloading a toolchain through the foojay resolver on every 26.x job.
+      - name: Build and test ${{ matrix.version }}
         run: |
           chmod +x gradlew
-          ./gradlew buildAll testAll
+          ./gradlew ":${{ matrix.version }}:build" ":${{ matrix.version }}:test" \
+            -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
-      - name: Upload build artifacts
+      - name: Upload ${{ matrix.version }} jar
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: mod-jars
-          path: versions/*/build/libs/*.jar
+          name: mod-jar-${{ matrix.version }}
+          path: versions/${{ matrix.version }}/build/libs/*.jar
           retention-days: 14

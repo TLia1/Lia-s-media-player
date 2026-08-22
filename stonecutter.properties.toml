@@ -31,21 +31,60 @@ mod.loader_version_range = "[1,)"
 # artifact — see https://projects.neoforged.net/neoforged/neoforge
 # `deps.parchment` is "<minecraftVersion>:<mappingsVersion>"; see
 # https://parchmentmc.org/docs/getting-started
+# Leave `deps.parchment` empty for a version Parchment has not published — the
+# build simply skips the mappings rather than failing to resolve them.
+#
+# `deps.java` is the Java release Mojang ships to players for that Minecraft
+# version, read from the version manifest's `javaVersion.majorVersion`. It is
+# per-version because 26.1 moved from Java 21 to Java 25.
 
 ["1.21.1"]
 deps.minecraft = "1.21.1"
 deps.minecraft_range = "[1.21.1]"
 deps.neoforge = "21.1.230"
 deps.parchment = "1.21.1:2024.11.17"
+deps.java = 21
 
 ["1.21.4"]
 deps.minecraft = "1.21.4"
 deps.minecraft_range = "[1.21.4]"
 deps.neoforge = "21.4.157"
 deps.parchment = "1.21.4:2025.03.23"
+deps.java = 21
 
 ["1.21.5"]
 deps.minecraft = "1.21.5"
 deps.minecraft_range = "[1.21.5]"
 deps.neoforge = "21.5.98"
 deps.parchment = "1.21.5:2025.06.15"
+deps.java = 21
+
+["1.21.8"]
+deps.minecraft = "1.21.8"
+deps.minecraft_range = "[1.21.8]"
+deps.neoforge = "21.8.54"
+deps.parchment = "1.21.8:2025.09.14"
+deps.java = 21
+
+["1.21.11"]
+deps.minecraft = "1.21.11"
+deps.minecraft_range = "[1.21.11]"
+deps.neoforge = "21.11.45"
+deps.parchment = "1.21.11:2025.12.20"
+deps.java = 21
+
+# 26.1 is the first Minecraft version to require Java 25, and the first for
+# which Parchment publishes nothing — org.parchmentmc.data stops at 1.21.11.
+["26.1.2"]
+deps.minecraft = "26.1.2"
+deps.minecraft_range = "[26.1.2]"
+deps.neoforge = "26.1.2.97"
+deps.parchment = ""
+deps.java = 25
+
+["26.2"]
+deps.minecraft = "26.2"
+deps.minecraft_range = "[26.2,)"
+deps.neoforge = "26.2.0.64"
+deps.parchment = ""
+deps.java = 25

@@ -11,6 +11,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
+//? if >=1.21.11
+/*import net.minecraft.client.input.MouseButtonEvent;*/
+
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -258,9 +261,24 @@ public final class PlaylistScreen extends Screen {
     // Rendering
     // ------------------------------------------------------------------
 
+    // See the note in ConfigScreen: 26.1 renamed Renderable.render to
+    // extractRenderState. Only the override wrapper differs, so the drawing below
+    // stays in one place.
+    //? if <26.1 {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick); // background + widgets
+        draw(g, mouseX, mouseY);
+    }
+    //?} else {
+    /*@Override
+    public void extractRenderState(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        super.extractRenderState(g, mouseX, mouseY, partialTick); // background + widgets
+        draw(g, mouseX, mouseY);
+    }
+    *///?}
+
+    private void draw(GuiGraphics g, int mouseX, int mouseY) {
 
         g.drawCenteredString(font, title, width / 2, 14, TEXT);
 
@@ -345,11 +363,31 @@ public final class PlaylistScreen extends Screen {
     // Input
     // ------------------------------------------------------------------
 
+    // The mouse callbacks were folded into input event records: 1.21.11 passes a
+    // MouseButtonEvent (gui-scaled x/y plus the button and its modifiers) and a
+    // double-click flag instead of three loose arguments. Only the override
+    // wrapper differs, so the hit testing below stays in one place and each
+    // version's signature just unpacks its own arguments into it. Threshold
+    // unbisected: 1.21.9 and 1.21.10 are not targets.
+    //? if <1.21.11 {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
+        return onClick(mouseX, mouseY, button);
+    }
+    //?} else {
+    /*@Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (super.mouseClicked(event, doubleClick)) {
+            return true;
+        }
+        return onClick(event.x(), event.y(), event.button());
+    }
+    *///?}
+
+    private boolean onClick(double mouseX, double mouseY, int button) {
         if (button != 0) {
             return false;
         }
