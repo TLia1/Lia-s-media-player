@@ -9,21 +9,20 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 import static com.lia.mediaplayer.gui.MediaControls.timeText;
 
 /**
  * The on-screen window for a single {@link AudioPlayer}: a compact bar showing the
- * track name plus a control row (play/pause, previous, next, a speaker toggle and a
- * seek bar with elapsed/total time). It is deliberately small — no video picture — so
+ * track name plus a control row (play/pause, previous, next, loop, shuffle, a speaker
+ * toggle and a seek bar with elapsed/total time). It is deliberately small — no video picture — so
  * it sits unobtrusively while you listen.
  *
  * <p>Movement, resizing, the corner buttons and the shared z-order all come from
  * {@link MediaWindow}; the play queue is the shared {@link PlayQueue} (same model the
- * video player uses), and a short history list backs the "previous" control.</p>
+ * video player uses), which also holds the history behind the "previous" control and
+ * the loop / shuffle modes the two right-hand toggles drive.</p>
  */
 final class AudioWindow extends MediaWindow {
     private static final int CONTROL_BAR_HEIGHT = 16;
@@ -31,19 +30,15 @@ final class AudioWindow extends MediaWindow {
     /**
      * Intrinsic bar size; the title fills the content row, the controls sit below.
      */
-    private static final int BASE_W = 220;
+    private static final int BASE_W = 254;
     private static final int BASE_H = 14;
     /**
-     * How many played tracks to remember for the "previous" control.
+     * How many entries of a bulk enqueue get their title fetched up front.
      */
-    private static final int MAX_HISTORY = 64;
+    private static final int WARM_AHEAD = 10;
 
     private AudioPlayer player;
     private final PlayQueue queue = new PlayQueue();
-    /**
-     * Previously-played URLs, most recent last (backs the "previous" button).
-     */
-    private final List<String> history = new ArrayList<>();
 
     private boolean draggingSeek;
     private boolean draggingVolume;
@@ -53,6 +48,8 @@ final class AudioWindow extends MediaWindow {
     private int playBtnX, playBtnY;
     private int prevBtnX, prevBtnY;
     private int nextBtnX, nextBtnY;
+    private int loopBtnX, loopBtnY;
+    private int shuffleBtnX, shuffleBtnY;
     private int volBtnX, volBtnY;
     private boolean showVolumePopup;
     private int volBarX, volBarY;
@@ -81,10 +78,19 @@ final class AudioWindow extends MediaWindow {
 
     /**
      * Appends several URLs (e.g. a whole playlist) in order.
+     *
+     * <p>Only the first few names are warmed: the title cache is a small LRU backed by
+     * a network call per entry, so eagerly resolving a few hundred of them would thrash
+     * it for names the bar will not show for the next hour.</p>
      */
     void enqueueAll(Collection<String> urls) {
+        int warmed = 0;
         for (String url : urls) {
-            enqueue(url);
+            if (warmed++ < WARM_AHEAD) {
+                enqueue(url);
+            } else {
+                queue.add(url);
+            }
         }
     }
 
@@ -93,16 +99,34 @@ final class AudioWindow extends MediaWindow {
     }
 
     /**
-     * Disposes the current player and starts the next queued URL in the same window.
-     * Returns {@code false} (leaving the current player untouched) when the queue is
-     * empty, so callers can close the window instead.
+     * Sets how this bar loops (see {@link RepeatMode}); used when a saved playlist is
+     * started with looping already on.
+     */
+    void setRepeat(RepeatMode mode) {
+        queue.setRepeat(mode);
+    }
+
+    /**
+     * Keeps shuffle on for this bar, so every looped round is reshuffled rather than
+     * replaying the order the first round happened to get.
+     */
+    void setShuffle(boolean value) {
+        queue.setShuffle(value);
+    }
+
+    /**
+     * Disposes the current player and starts the next track in the same window — the
+     * head of the queue, the current track again under {@link RepeatMode#ONE}, or the
+     * start of a fresh round under {@link RepeatMode#ALL}. Returns {@code false}
+     * (leaving the current player untouched) when there is nothing left to play, so
+     * callers can close the window instead.
      */
     boolean advance() {
-        if (queue.isEmpty()) {
+        String next = queue.next(player.url());
+        if (next == null) {
             return false;
         }
-        pushHistory(player.url());
-        playUrl(queue.removeFirst());
+        playUrl(next);
         return true;
     }
 
@@ -111,20 +135,12 @@ final class AudioWindow extends MediaWindow {
      * so "next" returns to it. Returns {@code false} when there is no history.
      */
     boolean previous() {
-        if (history.isEmpty()) {
+        String prev = queue.previous(player.url());
+        if (prev == null) {
             return false;
         }
-        queue.addFirst(player.url());
-        String prev = history.remove(history.size() - 1);
         playUrl(prev);
         return true;
-    }
-
-    private void pushHistory(String url) {
-        history.add(url);
-        while (history.size() > MAX_HISTORY) {
-            history.remove(0);
-        }
     }
 
     /**
@@ -142,7 +158,6 @@ final class AudioWindow extends MediaWindow {
      */
     void disposeAll() {
         queue.clear();
-        history.clear();
         player.dispose();
     }
 
@@ -199,7 +214,7 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected int minContentWidth() {
         Font font = Minecraft.getInstance().font;
-        int buttons = 4; // play, prev, next, speaker
+        int buttons = 6; // play, prev, next, loop, shuffle, speaker
         int buttonsW = buttons * (BUTTON + 4);
         int timeW = font.width(timeText(player.positionMicros(), player.durationMicros(), queueSize()));
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
@@ -222,12 +237,16 @@ final class AudioWindow extends MediaWindow {
         playBtnY = barTop + (CONTROL_BAR_HEIGHT - BUTTON) / 2;
         prevBtnY = playBtnY;
         nextBtnY = playBtnY;
+        loopBtnY = playBtnY;
+        shuffleBtnY = playBtnY;
         volBtnY = playBtnY;
 
         playBtnX = contentX;
         prevBtnX = playBtnX + BUTTON + 4;
         nextBtnX = prevBtnX + BUTTON + 4;
-        volBtnX = nextBtnX + BUTTON + 4;
+        loopBtnX = nextBtnX + BUTTON + 4;
+        shuffleBtnX = loopBtnX + BUTTON + 4;
+        volBtnX = shuffleBtnX + BUTTON + 4;
 
         // The slider pops up vertically above the speaker button.
         volBarX = volBtnX + (BUTTON - MediaControls.VOL_BAR_W) / 2;
@@ -275,13 +294,21 @@ final class AudioWindow extends MediaWindow {
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
         Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? BTN_HOVER : BTN_COLOR);
 
-        boolean canPrev = !history.isEmpty();
+        boolean canPrev = queue.hasPrevious();
         boolean overPrev = inRect(mouseX, mouseY, prevBtnX, prevBtnY, BUTTON, BUTTON);
         Glyphs.previous(g, prevBtnX, prevBtnY, canPrev ? (overPrev ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
 
-        boolean canNext = !queue.isEmpty();
+        boolean canNext = queue.hasNext();
         boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
         Glyphs.next(g, nextBtnX, nextBtnY, canNext ? (overNext ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
+
+        RepeatMode repeat = queue.repeat();
+        boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
+        Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE,
+                toggleColor(!repeat.isOff(), overLoop));
+
+        boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
+        Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
 
         boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
         Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
@@ -320,6 +347,14 @@ final class AudioWindow extends MediaWindow {
         }
         if (inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON)) {
             advance();
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON)) {
+            queue.cycleRepeat();
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON)) {
+            queue.toggleShuffle();
             return ClickResult.HANDLED;
         }
         if (inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON)) {

@@ -15,9 +15,9 @@ import java.util.List;
 
 /**
  * The on-screen window for a single {@link VideoPlayer}: the video image plus a
- * control bar (play/pause, an optional "next" button, a speaker toggle and a
- * pop-up volume slider, and a seek bar with elapsed/total time) and two corner
- * buttons (hide, close).
+ * control bar (play/pause, an optional "next" button, the loop and shuffle
+ * toggles, a speaker toggle and a pop-up volume slider, and a seek bar with
+ * elapsed/total time) and two corner buttons (hide, close).
  *
  * <p>Movement and resizing are inherited from {@link MediaWindow}. Visibility
  * and playback are independent: a hidden window keeps its player decoding and
@@ -34,6 +34,10 @@ final class VideoWindow extends MediaWindow {
      * Smallest seek bar we keep when computing the minimum window width.
      */
     private static final int MIN_SEEK_W = 20;
+    /**
+     * How many entries of a bulk enqueue get their thumbnail/title fetched up front.
+     */
+    private static final int WARM_AHEAD = 10;
 
     /**
      * Queue panel geometry.
@@ -88,6 +92,9 @@ final class VideoWindow extends MediaWindow {
     private int playBtnX, playBtnY;
     private boolean showNext;
     private int nextBtnX, nextBtnY;
+    private int loopBtnX, loopBtnY;
+    private boolean showShuffle;
+    private int shuffleBtnX, shuffleBtnY;
     private boolean showVolume;
     private boolean showVolumePopup;
     private int volBtnX, volBtnY;
@@ -129,6 +136,25 @@ final class VideoWindow extends MediaWindow {
     }
 
     /**
+     * Appends several URLs in order — an expanded YouTube playlist, typically.
+     *
+     * <p>Only the first few are warmed: both caches are small LRUs backed by a network
+     * (or ffmpeg) call per entry, so eagerly warming hundreds of them would thrash the
+     * cache and fire hundreds of requests for rows nobody has scrolled to. The panel
+     * loads the rest as it draws them.</p>
+     */
+    void enqueueAll(java.util.Collection<String> urls) {
+        int warmed = 0;
+        for (String url : urls) {
+            if (warmed++ < WARM_AHEAD) {
+                enqueue(url);
+            } else {
+                queue.add(url);
+            }
+        }
+    }
+
+    /**
      * Number of URLs still waiting to play after the current one.
      */
     int queueSize() {
@@ -143,16 +169,33 @@ final class VideoWindow extends MediaWindow {
     }
 
     /**
-     * Disposes the current player and starts the next queued URL in the same
-     * window. Returns {@code false} (and leaves the current player untouched) when
-     * the queue is empty, so callers can close the window instead.
+     * Disposes the current player and starts the next video in the same window — the
+     * head of the queue, the current video again under {@link RepeatMode#ONE}, or the
+     * start of a fresh round under {@link RepeatMode#ALL}. Returns {@code false} (and
+     * leaves the current player untouched) when there is nothing left to play, so
+     * callers can close the window instead.
      */
     boolean advance() {
-        if (queue.isEmpty()) {
+        String next = queue.next(player.url());
+        if (next == null) {
             return false;
         }
-        playUrl(queue.removeFirst());
+        playUrl(next);
         return true;
+    }
+
+    /**
+     * Sets how this window loops (see {@link RepeatMode}).
+     */
+    void setRepeat(RepeatMode mode) {
+        queue.setRepeat(mode);
+    }
+
+    /**
+     * Keeps shuffle on for this window, so every looped round is reshuffled.
+     */
+    void setShuffle(boolean value) {
+        queue.setShuffle(value);
     }
 
     /**
@@ -272,9 +315,12 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected int minContentWidth() {
         Font font = Minecraft.getInstance().font;
-        int buttons = 1;                       // play/pause is always shown
+        int buttons = 2;                       // play/pause and loop are always shown
+        if (queue.hasNext()) {
+            buttons += 1;                      // next
+        }
         if (!queue.isEmpty()) {
-            buttons += 2;                      // next + queue
+            buttons += 2;                      // queue panel + shuffle
         }
         if (player.hasAudio()) {
             buttons += 1;                      // speaker
@@ -353,8 +399,9 @@ final class VideoWindow extends MediaWindow {
 
         int cursor = playBtnX + BUTTON + 4;
 
-        // "Next" and "queue" buttons: only while something is queued.
-        showNext = !queue.isEmpty();
+        // "Next" and "queue" buttons: only while something is queued (or a loop mode
+        // will bring the round back around).
+        showNext = queue.hasNext();
         if (showNext) {
             nextBtnX = cursor;
             nextBtnY = playBtnY;
@@ -367,6 +414,17 @@ final class VideoWindow extends MediaWindow {
             cursor = queueBtnX + BUTTON + 4;
         } else {
             queueOpen = false; // nothing left to show
+        }
+
+        // Loop applies to a lone video too; shuffle only means something with a queue.
+        loopBtnX = cursor;
+        loopBtnY = playBtnY;
+        cursor = loopBtnX + BUTTON + 4;
+        showShuffle = !queue.isEmpty();
+        if (showShuffle) {
+            shuffleBtnX = cursor;
+            shuffleBtnY = playBtnY;
+            cursor = shuffleBtnX + BUTTON + 4;
         }
 
         showVolume = player.hasAudio();
@@ -444,6 +502,15 @@ final class VideoWindow extends MediaWindow {
         if (showQueueBtn) {
             boolean overQueue = inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON);
             drawQueueIcon(g, (overQueue || queueOpen) ? BTN_HOVER : BTN_COLOR);
+        }
+
+        // Loop / shuffle toggles.
+        RepeatMode repeat = queue.repeat();
+        boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
+        Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE, toggleColor(!repeat.isOff(), overLoop));
+        if (showShuffle) {
+            boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
+            Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
         }
 
         // Volume: a speaker/mute button with a pop-up vertical slider on hover.
@@ -692,6 +759,14 @@ final class VideoWindow extends MediaWindow {
         }
         if (showNext && inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON)) {
             advance();
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON)) {
+            queue.cycleRepeat();
+            return ClickResult.HANDLED;
+        }
+        if (showShuffle && inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON)) {
+            queue.toggleShuffle();
             return ClickResult.HANDLED;
         }
         if (showQueueBtn && inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON)) {

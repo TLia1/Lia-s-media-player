@@ -4,6 +4,7 @@ import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.chat.ChatEvents;
+import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
@@ -229,6 +230,13 @@ public final class MediaWindowOverlay {
             if (url == null) {
                 return;
             }
+            // A playlist page is not a media item: expand it first (a yt-dlp round-trip
+            // on a background thread), then queue everything it contains.
+            if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+                playYouTubePlaylist(url, Keys.altDown());
+                event.setCanceled(true);
+                return;
+            }
             MediaKind kind = ctx.getMediaSources().kindOf(url);
             if (kind == MediaKind.VIDEO) {
                 if (Keys.altDown()) {
@@ -331,6 +339,29 @@ public final class MediaWindowOverlay {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * Expands a YouTube playlist link and plays the whole thing in one fresh window —
+     * as video, or as sound only when alt is held (the same modifier a single YouTube
+     * link uses). The expansion is a background yt-dlp call, so the player gets a
+     * "loading" line first and the queue appears when it comes back.
+     */
+    private static void playYouTubePlaylist(String url, boolean audioOnly) {
+        YouTubePlaylistResolver.tellPlayer(Component.translatable("chat.liasmediaplayer.playlist.loading"));
+        YouTubePlaylistResolver.loadAsync(url, result -> {
+            MediaPlayerContext ctx = getContext();
+            if (result == null || ctx == null) {
+                return; // loadAsync has already told the player what went wrong
+            }
+            if (audioOnly) {
+                ctx.getAudioManager().playAll(result.urls(), false, RepeatMode.OFF);
+            } else {
+                ctx.getVideoManager().playAll(result.urls(), false, RepeatMode.OFF);
+            }
+            YouTubePlaylistResolver.tellPlayer(Component.translatable(
+                    "chat.liasmediaplayer.playlist.loaded", result.urls().size()));
+        });
+    }
 
     @Nullable
     private static String hoveredUrl(double mouseX, double mouseY) {

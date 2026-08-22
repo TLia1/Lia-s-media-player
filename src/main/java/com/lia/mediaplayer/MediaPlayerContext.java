@@ -110,12 +110,46 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     @Override
     public long playVideo(String url) {
+        if (isYouTubePlaylist(url)) {
+            return playYouTubePlaylist(url, false);
+        }
         return videoManager.enqueuePublic(url);
     }
 
     @Override
     public long playVideoNewWindow(String url) {
+        if (isYouTubePlaylist(url)) {
+            return playYouTubePlaylist(url, false);
+        }
         return videoManager.openPublic(url);
+    }
+
+    /**
+     * Whether {@code url} is a YouTube playlist page rather than a single media item.
+     * Those cannot be handed to the players as-is: they have to be expanded into their
+     * videos first, which is a background {@code yt-dlp} call.
+     */
+    private static boolean isYouTubePlaylist(String url) {
+        return com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url);
+    }
+
+    /**
+     * Expands a YouTube playlist and plays all of it in a fresh window. The expansion
+     * is asynchronous, so there is no window to return an ID for yet: this always
+     * returns {@code -1}.
+     */
+    private long playYouTubePlaylist(String url, boolean asAudio) {
+        com.lia.mediaplayer.media.YouTubePlaylistResolver.loadAsync(url, result -> {
+            if (result == null) {
+                return; // the resolver has already reported why
+            }
+            if (asAudio) {
+                audioManager.playAll(result.urls(), false);
+            } else {
+                videoManager.playAll(result.urls(), false);
+            }
+        });
+        return -1;
     }
 
     // ====================================================================
@@ -124,11 +158,17 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     @Override
     public long playAudio(String url) {
+        if (isYouTubePlaylist(url)) {
+            return playYouTubePlaylist(url, true);
+        }
         return audioManager.enqueuePublic(url);
     }
 
     @Override
     public long playAudioNewWindow(String url) {
+        if (isYouTubePlaylist(url)) {
+            return playYouTubePlaylist(url, true);
+        }
         return audioManager.playNewWindowPublic(url);
     }
 

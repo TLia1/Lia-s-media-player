@@ -30,6 +30,7 @@ public class MediaSources {
     private final List<com.lia.mediaplayer.api.MediaSource> registered = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
+            new YouTubePlaylistSource(), // a youtube.com/playlist page (expanded on click)
             new YouTubeSource(),     // a youtube.com / youtu.be link
             new TwitchSource(),      // a twitch.tv link
             new StreamSource(),      // an .m3u8 / .mpd manifest

@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 
@@ -42,6 +43,17 @@ public final class PlaylistScreen extends Screen {
     private Playlist selected;
     private int playlistScroll;
     private int entryScroll;
+    /**
+     * Whether the "Play" / "Shuffle" buttons start the playlist looping. Shuffle stays
+     * on for the player, so a looping shuffled playlist is reshuffled every round.
+     */
+    private boolean loopOnPlay;
+    /**
+     * YouTube playlist expansions still in flight (each one is a background yt-dlp
+     * call), so the screen can say it is working instead of looking like it ignored
+     * the link.
+     */
+    private int pendingImports;
 
     @Nullable
     private EditBox newNameBox;
@@ -156,7 +168,7 @@ public final class PlaylistScreen extends Screen {
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.add"), b -> addEntry())
                     .bounds(rx + rw - 56, height - 82, 56, 18).build());
 
-            int bw = (rw - 12) / 4;
+            int bw = (rw - 16) / 5;
             int by = height - 58;
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.play"),
                             b -> play(false))
@@ -164,14 +176,21 @@ public final class PlaylistScreen extends Screen {
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.shuffle"),
                             b -> play(true))
                     .bounds(rx + bw + 4, by, bw, 20).build());
+            addRenderableWidget(Button.builder(loopLabel(), b -> {
+                        loopOnPlay = !loopOnPlay;
+                        b.setMessage(loopLabel());
+                    })
+                    .bounds(rx + (bw + 4) * 2, by, bw, 20)
+                    .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.loop")))
+                    .build());
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.export"),
                             b -> exportClipboard())
-                    .bounds(rx + (bw + 4) * 2, by, bw, 20)
+                    .bounds(rx + (bw + 4) * 3, by, bw, 20)
                     .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.export")))
                     .build());
             addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.delete"),
                             b -> deleteSelected())
-                    .bounds(rx + (bw + 4) * 3, by, rw - (bw + 4) * 3, 20).build());
+                    .bounds(rx + (bw + 4) * 4, by, rw - (bw + 4) * 4, 20).build());
         } else {
             nameBox = null;
             addBox = null;
@@ -204,6 +223,13 @@ public final class PlaylistScreen extends Screen {
             return;
         }
         String url = addBox.getValue().strip();
+        // A YouTube playlist link stands for all of its videos, so it is expanded into
+        // the entries instead of being stored as one unplayable page link.
+        if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+            importYouTubePlaylist(selected, url, false);
+            addBox.setValue("");
+            return;
+        }
         // Same rule as importClipboard: only real http(s) links get stored, so a playlist
         // can never feed something else to the player on a later session.
         if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
@@ -215,9 +241,43 @@ public final class PlaylistScreen extends Screen {
         }
     }
 
+    /**
+     * Appends every video of a YouTube playlist to {@code target}, in the background.
+     * With {@code renameIfDefault} the freshly created playlist also takes the name it
+     * has on YouTube, which is nicer than "Imported Playlist".
+     */
+    private void importYouTubePlaylist(Playlist target, String url, boolean renameIfDefault) {
+        pendingImports++;
+        String defaultName = target.name();
+        YouTubePlaylistResolver.loadAsync(url, result -> {
+            pendingImports--;
+            if (result == null) {
+                return; // the resolver has already said why in chat
+            }
+            for (String entry : result.urls()) {
+                target.add(entry);
+                MediaTitleCache.getOrLoad(entry); // warm the names for the list
+            }
+            if (renameIfDefault && !result.title().isBlank() && target.name().equals(defaultName)) {
+                target.setName(result.title());
+            }
+            getContext().getPlaylistStore().save();
+            if (Screens.current() == this) {
+                rebuild(); // the screen may well have been closed while we waited
+            }
+        });
+    }
+
+    private Component loopLabel() {
+        return Component.translatable(loopOnPlay
+                ? "gui.liasmediaplayer.playlists.loop.on"
+                : "gui.liasmediaplayer.playlists.loop.off");
+    }
+
     private void play(boolean shuffle) {
         if (selected != null && !selected.isEmpty()) {
-            getContext().getAudioManager().playAll(selected.urls(), shuffle);
+            getContext().getAudioManager().playAll(selected.urls(), shuffle,
+                    loopOnPlay ? RepeatMode.ALL : RepeatMode.OFF);
             onClose();
         }
     }
@@ -239,21 +299,34 @@ public final class PlaylistScreen extends Screen {
 
     private void importClipboard() {
         String in = minecraft.keyboardHandler.getClipboard();
-        if (in != null && !in.isBlank()) {
-            Playlist pl = getContext().getPlaylistStore().create(Component.translatable("gui.liasmediaplayer.playlists.imported").getString());
-            for (String line : in.split("\n")) {
-                String url = line.strip();
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    pl.add(url);
-                }
+        if (in == null || in.isBlank()) {
+            return;
+        }
+        List<String> direct = new java.util.ArrayList<>();
+        List<String> youtubePlaylists = new java.util.ArrayList<>();
+        for (String line : in.split("\n")) {
+            String url = line.strip();
+            if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+                youtubePlaylists.add(url);
+            } else if (url.startsWith("http://") || url.startsWith("https://")) {
+                direct.add(url);
             }
-            if (pl.isEmpty()) {
-                getContext().getPlaylistStore().delete(pl);
-            } else {
-                getContext().getPlaylistStore().save();
-                selected = pl;
-                rebuild();
-            }
+        }
+        Playlist pl = getContext().getPlaylistStore().create(Component.translatable("gui.liasmediaplayer.playlists.imported").getString());
+        if (direct.isEmpty() && youtubePlaylists.isEmpty()) {
+            getContext().getPlaylistStore().delete(pl); // nothing usable on the clipboard
+            return;
+        }
+        for (String url : direct) {
+            pl.add(url);
+        }
+        getContext().getPlaylistStore().save();
+        selected = pl;
+        rebuild();
+        // A single pasted YouTube playlist also names the new playlist after it.
+        boolean rename = direct.isEmpty() && youtubePlaylists.size() == 1;
+        for (String url : youtubePlaylists) {
+            importYouTubePlaylist(pl, url, rename);
         }
     }
 
@@ -283,6 +356,11 @@ public final class PlaylistScreen extends Screen {
         g.drawCenteredString(font, title, width / 2, 14, TEXT);
 
         renderPlaylistList(g, mouseX, mouseY);
+
+        if (pendingImports > 0) {
+            g.drawCenteredString(font, Component.translatable("gui.liasmediaplayer.playlists.importing"),
+                    width / 2, height - 70, SUBTLE);
+        }
 
         if (selected != null) {
             g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.entries", selected.size()),

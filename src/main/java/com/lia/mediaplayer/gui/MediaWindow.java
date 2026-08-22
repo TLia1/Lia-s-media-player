@@ -43,6 +43,11 @@ abstract class MediaWindow {
     protected static final int TEXT_COLOR = 0xFFFFFFFF;
     protected static final int BTN_COLOR = 0xFFE0E0E0;
     protected static final int BTN_HOVER = 0xFFFFD23F;
+    /**
+     * Colour of a toggle button whose mode is on (loop, shuffle) — distinct from
+     * {@link #BTN_HOVER} so "active" and "hovered" never read as the same state.
+     */
+    protected static final int BTN_ACTIVE = 0xFF4CA6FF;
     protected static final int PLACEHOLDER = 0xFF000000;
 
     enum ClickResult {NONE, HANDLED, CLOSE}
@@ -574,6 +579,17 @@ abstract class MediaWindow {
             userX = boxX;
             userY = boxY;
         }
+    }
+
+    /**
+     * Colour for a toggle button (loop, shuffle) in each of its four states, so both
+     * player windows draw their toggles the same way.
+     */
+    protected static int toggleColor(boolean active, boolean hovered) {
+        if (active) {
+            return hovered ? BTN_HOVER : BTN_ACTIVE;
+        }
+        return hovered ? BTN_HOVER : 0xFF8A8A8A;
     }
 
     static boolean inRect(double mx, double my, int x, int y, int w, int h) {

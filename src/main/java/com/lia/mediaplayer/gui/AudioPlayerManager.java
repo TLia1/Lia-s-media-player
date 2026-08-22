@@ -60,12 +60,23 @@ public class AudioPlayerManager {
     }
 
     /**
-     * Plays a whole list of URLs in a fresh bar: the first track starts immediately and
-     * the rest queue behind it. When {@code shuffle} is set the order is randomised once,
-     * up front. Returns {@code null} for an empty list.
+     * Plays a whole list of URLs in a fresh bar, without looping.
      */
     @Nullable
     public AudioWindow playAll(List<String> urls, boolean shuffle) {
+        return playAll(urls, shuffle, RepeatMode.OFF);
+    }
+
+    /**
+     * Plays a whole list of URLs in a fresh bar: the first track starts immediately and
+     * the rest queue behind it. Returns {@code null} for an empty list.
+     *
+     * <p>{@code shuffle} randomises the order and <em>stays on</em> for the bar, so a
+     * looping playlist is reshuffled at the start of every round instead of repeating
+     * the first round's order. {@code repeat} is the bar's initial loop mode.</p>
+     */
+    @Nullable
+    public AudioWindow playAll(List<String> urls, boolean shuffle, RepeatMode repeat) {
         if (urls == null || urls.isEmpty()) {
             return null;
         }
@@ -77,6 +88,8 @@ public class AudioPlayerManager {
         if (order.size() > 1) {
             window.enqueueAll(order.subList(1, order.size()));
         }
+        window.setShuffle(shuffle);
+        window.setRepeat(repeat);
         window.bringToFront();
         return window;
     }

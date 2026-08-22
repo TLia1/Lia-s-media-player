@@ -13,7 +13,7 @@ When a link to an image or video appears in chat, the mod quietly replaces the r
 
 - A gold **[picture]** for images
 - A gold **[gif]** for Tenor GIFs
-- An aqua, underlined **video label** for videos, YouTube links, and Twitch streams
+- An aqua, underlined **video label** for videos, YouTube links, YouTube playlists, and Twitch streams
 - A green, underlined **[audio]** label for audio files
 
 ---
@@ -53,6 +53,7 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 - **Direct video files** shared in chat: MP4, WEBM, MOV, MKV, M4V, AVI, FLV, OGV, and TS
 - **Live/adaptive streams**: HLS (`.m3u8`) and DASH (`.mpd`) manifests
 - **YouTube links**: normal `watch` links, `youtu.be` short links, and Shorts
+- **YouTube playlists**: a `youtube.com/playlist?list=...` page — clicking it queues the whole list
 - **Twitch streams**: channel and VOD links
 
 **The player window** gives you full controls:
@@ -61,6 +62,8 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 - A **seek bar** with elapsed and total time, so you can scrub to any point
 - A **speaker toggle** and a pop-up **volume slider**
 - A **next** button when more than one video is lined up
+- A **loop** button that cycles through *off → loop the queue → loop this video*
+- A **shuffle** button (while a queue exists) that mixes up what is coming
 - **Move, resize, and zoom** the window exactly like a pinned image
 
 **A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the
@@ -68,11 +71,15 @@ current player's queue. When one finishes (or you press next), the window automa
 place. The queue panel shows each entry's thumbnail and its real video name (the actual YouTube title, or the file
 name), so you can tell what's coming up at a glance.
 
+**Whole YouTube playlists.** Click a **[youtube playlist]** label and the mod reads the playlist (it takes a moment)
+and queues every video in it, in order — alt-click to listen to it as audio only. Turn on **loop** and it plays
+forever; turn on **shuffle** as well and each new round is **reshuffled**, so you never get the same order twice.
+
 **In-Game Playlists GUI** (`/liasmediaplayer playlists`)
 
 - Create, manage, and rename multiple personal playlists.
 - Reorder tracks effortlessly (click the up/down arrows or use the swap buttons next to tracks).
-- One-click shuffle play.
+- One-click shuffle play, and a loop toggle for endless playback.
 - Import playlists directly from your clipboard (lines of URLs) and export playlists to your clipboard for easy sharing.
 
 **Keeps playing in the background.** Hide a player, and it keeps running — audio and all — so you can listen while you
@@ -98,6 +105,8 @@ can listen without a big window in the way. Hovering over an audio label will pr
 **The bar gives you:**
 
 - **Play / pause**, **previous** and **next**
+- A **loop** button that cycles through *off → loop the whole queue → loop this track*
+- A **shuffle** button — with loop on, every round is reshuffled instead of repeating the same order
 - A **seek bar** with elapsed and total time
 - A **speaker toggle**, plus scroll the mouse wheel over the bar to change the volume
 
@@ -116,8 +125,12 @@ Open the **Playlists** button in the top-left of your chat (or bind a key for it
 
 - **Create** a playlist and give it a name.
 - **Add** tracks by pasting a link — a direct audio file *or* a YouTube video (only the sound is played).
+- **Import a whole YouTube playlist** by pasting its `playlist?list=...` link into the same box: every video in it is
+  added as a track. Pasting one on the clipboard **In** button creates a new playlist named after the YouTube one.
 - **Rename**, **reorder tracks** (with the up/down arrows), **remove tracks**, or **delete** a playlist.
 - **Play** it in order, or **Shuffle** it for a random order.
+- Toggle **Loop** before pressing Play or Shuffle to start the playlist looping — with Shuffle, each round comes back
+  in a new random order. The loop and shuffle buttons on the player itself change this while it plays.
 
 Your playlists are **saved to disk**, so they're still there next time you play.
 

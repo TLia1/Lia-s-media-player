@@ -10,6 +10,10 @@ listenable) media — without ever leaving the game.
   a seek bar, a play queue and background playback.
 - Click an **[audio]** label to open a compact audio bar with its own queue, or build
   named **playlists** of audio/YouTube links and play them in order or shuffled.
+- Click a **[youtube playlist]** label to queue a whole YouTube playlist at once, or
+  import it into one of your saved playlists.
+- **Loop** a queue or a single track, with every looped round reshuffled while
+  shuffle is on.
 - Drive the audio player with **configurable keybinds** (play/pause, next, previous,
   open playlists).
 - Supports direct image, video and audio files, animated Tenor GIFs, HLS/DASH streams
@@ -22,7 +26,7 @@ other players see, and it is **not required by anyone else** on the server.
 ## At a glance
 
 - **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->
-  `1.4.3`<!-- /mod_version -->
+  `1.5.0`<!-- /mod_version -->
 - **Primary target:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions) for the full list
 - **Side:** client-only (`@Mod(dist = Dist.CLIENT)`)
@@ -181,7 +185,7 @@ listen for `MediaSourceRegistrationEvent`. See
 
 Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md`, `API-DOCUMENTATION.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
-`<!-- mod_version -->1.4.3<!-- /mod_version -->`). **Never edit these values by
+`<!-- mod_version -->1.5.0<!-- /mod_version -->`). **Never edit these values by
 hand** — update `stonecutter.properties.toml` and run:
 
 ```

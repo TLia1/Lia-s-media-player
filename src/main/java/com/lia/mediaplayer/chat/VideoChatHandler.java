@@ -13,8 +13,8 @@ import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 /**
- * Rewrites incoming chat so video, stream and YouTube links become an aqua,
- * underlined {@code [video]} / {@code [youtube]} label. Clicking the label is handled
+ * Rewrites incoming chat so video, stream and YouTube links (including a YouTube
+ * playlist page) become an aqua, underlined {@code [video]} / {@code [youtube]} label. Clicking the label is handled
  * by {@link com.lia.mediaplayer.gui.MediaWindowOverlay}, which spawns or queues the
  * in-game player; this class only does the chat rewrite and the disconnect cleanup.
  *
@@ -43,10 +43,15 @@ public final class VideoChatHandler {
 
         @Override
         public Style style(Style inherited, String url) {
+            // A playlist page clicks through to the whole list rather than one video,
+            // so it gets its own tooltip.
+            String tooltip = com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)
+                    ? "gui.liasmediaplayer.tooltip.youtube_playlist"
+                    : "gui.liasmediaplayer.tooltip.video";
             return inherited
                     .withColor(ChatFormatting.AQUA)
                     .withUnderlined(true)
-                    .withHoverEvent(ChatEvents.showText(Component.translatable("gui.liasmediaplayer.tooltip.video")))
+                    .withHoverEvent(ChatEvents.showText(Component.translatable(tooltip)))
                     .withClickEvent(ChatEvents.openUrl(url));
         }
     };

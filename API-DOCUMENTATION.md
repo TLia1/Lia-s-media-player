@@ -23,7 +23,7 @@ In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dep
 [[dependencies.yourmodid]]
     modId="liasmediaplayerapi"
     type="required"
-    versionRange="[1.3.1,)"
+    versionRange="[1.4.0,)"
     ordering="AFTER"
     side="CLIENT"
 ```
@@ -107,6 +107,11 @@ long audioId = LiasMediaPlayerApi.getInstance().playAudio("https://example.com/s
 
 // Play a full playlist of audio tracks (starts immediately, queues the rest)
 long playlistId = LiasMediaPlayerApi.getInstance().playAudioAll(List.of("url1", "url2", "url3"), true /* shuffle */);
+
+// A YouTube playlist page is expanded first (a background yt-dlp call), then played in
+// a fresh window — so playVideo/playAudio accept one, but return -1 instead of an ID
+// because the window does not exist yet.
+LiasMediaPlayerApi.getInstance().playVideo("https://www.youtube.com/playlist?list=...");
 
 // Pin an image window
 long imageId = LiasMediaPlayerApi.getInstance().showImage("https://example.com/image.png");

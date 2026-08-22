@@ -81,6 +81,50 @@ final class Glyphs {
     }
 
     /**
+     * A "repeat" glyph: two bars running in opposite directions, each turning at one
+     * end and tipped with an arrow head at the other, plus a "1" between them when only
+     * the current track repeats ({@link RepeatMode#ONE}).
+     *
+     * <p>The art is 10×10 and is inset one pixel from the left, so it lines up with the
+     * neighbouring glyphs (which run from {@code x + 1} to {@code x + 10}).</p>
+     */
+    static void loop(GuiGraphics g, int x, int y, boolean single, int color) {
+        // Top bar, travelling right and turning down at its end...
+        g.fill(x + 1, y + 1, x + 11, y + 2, color);
+        g.fill(x + 10, y + 2, x + 11, y + 3, color);
+        // ...with the arrow head it points at on the left.
+        g.fill(x + 2, y, x + 3, y + 1, color);
+        g.fill(x + 2, y + 2, x + 3, y + 3, color);
+
+        // Bottom bar, the same the other way round.
+        g.fill(x + 1, y + 8, x + 11, y + 9, color);
+        g.fill(x + 1, y + 7, x + 2, y + 8, color);
+        g.fill(x + 9, y + 7, x + 10, y + 8, color);
+        g.fill(x + 9, y + 9, x + 10, y + 10, color);
+
+        if (single) {
+            // A "1" in the middle: the stroke plus its flag.
+            g.fill(x + 6, y + 3, x + 7, y + 7, color);
+            g.fill(x + 5, y + 4, x + 6, y + 5, color);
+        }
+    }
+
+    /**
+     * A "shuffle" glyph: two crossing paths, each ending in an arrow head.
+     */
+    static void shuffle(GuiGraphics g, int x, int y, int color) {
+        for (int i = 0; i < 7; i++) {
+            g.fill(x + 1 + i, y + 2 + i, x + 2 + i, y + 3 + i, color); // top-left → bottom-right
+            g.fill(x + 1 + i, y + 8 - i, x + 2 + i, y + 9 - i, color); // bottom-left → top-right
+        }
+        // Arrow heads on the two right-hand ends.
+        g.fill(x + 6, y + 1, x + 10, y + 2, color);
+        g.fill(x + 9, y + 1, x + 10, y + 4, color);
+        g.fill(x + 6, y + 9, x + 10, y + 10, color);
+        g.fill(x + 9, y + 7, x + 10, y + 10, color);
+    }
+
+    /**
      * A small music-note glyph (used for the audio bar / playlists button).
      */
     static void note(GuiGraphics g, int x, int y, int color) {

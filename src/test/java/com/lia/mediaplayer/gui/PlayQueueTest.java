@@ -3,6 +3,7 @@ package com.lia.mediaplayer.gui;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -137,5 +138,150 @@ class PlayQueueTest {
 
         assertEquals("url1", queue.get(0));
         assertEquals("url2", queue.get(1));
+    }
+
+    // ------------------------------------------------------------------
+    // Repeat / shuffle
+    // ------------------------------------------------------------------
+
+    @Test
+    void next_WithoutRepeat_WalksTheQueueThenStops() {
+        queue.addAll(List.of("b", "c"));
+
+        assertEquals("b", queue.next("a"));
+        assertEquals("c", queue.next("b"));
+        assertNull(queue.next("c"));
+        assertTrue(queue.isEmpty());
+    }
+
+    @Test
+    void next_RepeatOne_ReplaysTheCurrentTrackAndLeavesTheQueueAlone() {
+        queue.setRepeat(RepeatMode.ONE);
+        queue.add("b");
+
+        assertEquals("a", queue.next("a"));
+        assertEquals("a", queue.next("a"));
+        assertEquals(1, queue.size());
+        assertFalse(queue.hasPrevious());
+    }
+
+    @Test
+    void next_RepeatOne_OnAnEmptyQueue_StillLoops() {
+        queue.setRepeat(RepeatMode.ONE);
+        assertEquals("a", queue.next("a"));
+    }
+
+    @Test
+    void next_RepeatAll_ReplaysTheWholeRoundInOrder() {
+        queue.setRepeat(RepeatMode.ALL);
+        queue.addAll(List.of("b", "c"));
+
+        assertEquals("b", queue.next("a"));
+        assertEquals("c", queue.next("b"));
+        // The round is over: it starts again from the top, current track included.
+        assertEquals("a", queue.next("c"));
+        assertEquals("b", queue.next("a"));
+        assertEquals("c", queue.next("b"));
+        assertEquals("a", queue.next("c"));
+    }
+
+    @Test
+    void next_RepeatAll_DoesNotDuplicateTracksAcrossRounds() {
+        queue.setRepeat(RepeatMode.ALL);
+        queue.addAll(List.of("b", "c"));
+
+        List<String> played = new ArrayList<>();
+        String current = "a";
+        for (int i = 0; i < 6; i++) {
+            current = queue.next(current);
+            played.add(current);
+        }
+        assertEquals(List.of("b", "c", "a", "b", "c", "a"), played);
+    }
+
+    @Test
+    void next_RepeatAll_WithASingleTrack_LoopsThatTrack() {
+        queue.setRepeat(RepeatMode.ALL);
+        assertEquals("a", queue.next("a"));
+        assertEquals("a", queue.next("a"));
+    }
+
+    @Test
+    void next_RepeatAllShuffled_ReplaysTheSameTracksInSomeOrder() {
+        queue.setRepeat(RepeatMode.ALL);
+        queue.setShuffle(true);
+        queue.addAll(List.of("b", "c", "d"));
+
+        // Drain the first round, then collect the reshuffled second one.
+        String current = "a";
+        for (int i = 0; i < 3; i++) {
+            current = queue.next(current);
+        }
+        List<String> round = new ArrayList<>();
+        round.add(queue.next(current)); // the track that opens the new round
+        round.addAll(queue.snapshot());
+
+        assertEquals(4, round.size());
+        assertEquals(List.of("a", "b", "c", "d"), round.stream().sorted().toList());
+    }
+
+    @Test
+    void setShuffle_KeepsEveryQueuedTrack() {
+        queue.addAll(List.of("a", "b", "c", "d", "e"));
+        queue.setShuffle(true);
+
+        assertTrue(queue.shuffle());
+        assertEquals(List.of("a", "b", "c", "d", "e"), queue.snapshot().stream().sorted().toList());
+    }
+
+    @Test
+    void toggleShuffle_FlipsTheFlag() {
+        assertTrue(queue.toggleShuffle());
+        assertFalse(queue.toggleShuffle());
+    }
+
+    @Test
+    void cycleRepeat_StepsThroughEveryMode() {
+        assertEquals(RepeatMode.OFF, queue.repeat());
+        assertEquals(RepeatMode.ALL, queue.cycleRepeat());
+        assertEquals(RepeatMode.ONE, queue.cycleRepeat());
+        assertEquals(RepeatMode.OFF, queue.cycleRepeat());
+    }
+
+    @Test
+    void hasNext_IsTrueWhileSomethingCanStillPlay() {
+        assertFalse(queue.hasNext());
+
+        queue.add("b");
+        assertTrue(queue.hasNext());
+
+        queue.removeFirst();
+        queue.setRepeat(RepeatMode.ALL);
+        assertTrue(queue.hasNext()); // an empty queue still loops back around
+    }
+
+    @Test
+    void previous_GoesBackAndRequeuesTheCurrentTrack() {
+        queue.addAll(List.of("b", "c"));
+        assertFalse(queue.hasPrevious());
+        assertNull(queue.previous("a"));
+
+        assertEquals("b", queue.next("a"));
+        assertTrue(queue.hasPrevious());
+        assertEquals("a", queue.previous("b"));
+        // "b" went back to the front of the queue, so "next" returns to it.
+        assertEquals("b", queue.get(0));
+        assertFalse(queue.hasPrevious());
+    }
+
+    @Test
+    void clear_AlsoForgetsTheHistory() {
+        queue.add("b");
+        queue.next("a");
+        assertTrue(queue.hasPrevious());
+
+        queue.clear();
+        assertFalse(queue.hasPrevious());
+        assertNull(queue.previous("b"));
     }
 }

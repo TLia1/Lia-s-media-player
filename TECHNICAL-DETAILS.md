@@ -11,11 +11,12 @@ clicking it pins the image as a movable, resizable window. Clicking a video labe
 opens a fully-featured **in-game video player** (with sound, a seek bar and a play
 queue); clicking an audio label opens a compact **audio bar** with its own queue. A
 **playlist manager** (a chat button or a keybind) lets you save named playlists of
-audio/YouTube links and play them in order or shuffled, and a set of **configurable
-keybinds** drives the active audio player.
+audio/YouTube links — a whole YouTube playlist can be imported into one — and play them
+in order, shuffled or looping, and a set of **configurable keybinds** drives the active
+audio player.
 
 - **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->
-  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.4.3`<!-- /mod_version -->
+  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.5.0`<!-- /mod_version -->
 - **Primary target:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions)
 - **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a
@@ -129,12 +130,13 @@ public entry point.
 | **`source/`**                                                                               |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `MediaSources.java`                                                                         | The registry of all sources and the single place the rest of the mod asks "what is this link?" (`find`/`kindOf`/`isImage`/`isVideo`/`isAudio`/`labelFor`).                                                                                                                                                                                                                                                                    |
 | `ImageFileSource.java` · `TenorSource.java`                                                 | The two `IMAGE` sources (direct image files; Tenor share pages). `TenorSource.isTenorPage` is reused by the image download path.                                                                                                                                                                                                                                                                                              |
-| `DirectVideoSource.java` · `StreamSource.java` · `YouTubeSource.java` · `TwitchSource.java` | The four `VIDEO` sources. `YouTubeSource.isYouTube` and `TwitchSource.isTwitch` are reused by the playback engines for their dedicated resolution paths.                                                                                                                                                                                                                                                                      |
+| `DirectVideoSource.java` · `StreamSource.java` · `YouTubeSource.java` · `YouTubePlaylistSource.java` · `TwitchSource.java` | The five `VIDEO` sources. `YouTubePlaylistSource` claims a `youtube.com/playlist?list=…` page (expanded into its videos on click, never played as-is) and stays disjoint from `YouTubeSource`, which keeps a `watch?v=…&list=…` link as the single video it opens. `YouTubeSource.isYouTube` and `TwitchSource.isTwitch` are reused by the playback engines for their dedicated resolution paths.                                                                                                                                                                                                                                                                      |
 | `AudioFileSource.java`                                                                      | The `AUDIO` source: a direct audio file (`AudioFileSource.isAudioFile`).                                                                                                                                                                                                                                                                                                                                                      |
 | `Urls.java`                                                                                 | Package-private URL path/host parsing shared by the sources.                                                                                                                                                                                                                                                                                                                                                                  |
 | **`media/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `Volume.java`                                                                               | The single, shared playback level (0..1) used by both engines, plus the dB-gain math that applies it to a `SourceDataLine` (master-volume-scaled).                                                                                                                                                                                                                                                                            |
 | `MediaUrlResolver.java`                                                                     | Turns a chat link into something ffmpeg can open (direct/streams pass through; YouTube resolves via `yt-dlp -g`). Shared by both engines. Reads output asynchronously with strict timeouts to prevent deadlocks.                                                                                                                                                                                                              |
+| `YouTubePlaylistResolver.java`                                                              | Expands a YouTube playlist page into its watch links via `yt-dlp --flat-playlist` (one index request, no per-video work), with the same strict timeout/stderr-drain handling as `MediaUrlResolver`. `loadAsync` runs it on the IO pool and calls back on the main thread. |
 | `MediaTitleCache.java`                                                                      | Resolves and caches a human-readable title per URL (YouTube oEmbed, or the file name) for the queue/playlist panels. Shared by both engines.                                                                                                                                                                                                                                                                                  |
 | **`chat/`**                                                                                 |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ChatLinkRewriter.java`                                                                     | The shared chat-rewrite engine: walks a message component-by-component (preserving inherited styles) and replaces each URL claimed by a `LinkRewrite` rule with its label. Both handlers reuse this, so the walk lives in exactly one place.                                                                                                                                                                                  |
@@ -147,14 +149,15 @@ public entry point.
 | `ImageWindow.java`                                                                          | A pinned image/GIF preview drawn as a movable + resizable window (extends `MediaWindow`). Owns no textures of its own — it draws the current frame from `ImagePreviewCache`.                                                                                                                                                                                                                                                  |
 | `ImageWindowManager.java`                                                                   | Registry of pinned image windows keyed by URL; shows/closes them and caps how many are alive (6). Closing is just a map removal (textures live in the cache).                                                                                                                                                                                                                                                                 |
 | `ImageHoverPreview.java`                                                                    | Draws the floating image/GIF preview shown when hovering an image label in chat (loading/failed/loaded states). Invoked by the overlay after the pinned windows so it always sits on top.                                                                                                                                                                                                                                     |
-| `VideoWindow.java`                                                                          | The on-screen player UI (extends `MediaWindow`): the video image, a control bar (play/pause, next, queue, speaker/volume pop-up, seek bar + time) and the per-window **play queue** (a shared `PlayQueue`) with a reorderable playlist panel. Shares layout math with `AudioWindow` via `MediaControls` and `Glyphs`.                                                                                                         |
+| `VideoWindow.java`                                                                          | The on-screen player UI (extends `MediaWindow`): the video image, a control bar (play/pause, next, queue, loop, shuffle, speaker/volume pop-up, seek bar + time) and the per-window **play queue** (a shared `PlayQueue`) with a reorderable playlist panel. Shares layout math with `AudioWindow` via `MediaControls` and `Glyphs`.                                                                                                         |
 | `VideoPlayerManager.java`                                                                   | Registry of active video windows. Default behaviour is to **queue** a link into the front-most player; an independent window is only created on demand (shift-click) or when none exists. Caps the number alive (4) and disposes everything on disconnect.                                                                                                                                                                    |
-| `AudioWindow.java`                                                                          | The compact audio **bar** (extends `MediaWindow`): a music note + the track name, and a control row (play/pause, previous, next, speaker, seek + time). No picture; backed by an `AudioPlayer`, a shared `PlayQueue` and a short play history for "previous".                                                                                                                                                                 |
-| `AudioPlayerManager.java`                                                                   | Registry of active audio bars. Same queue-into-front-most default as video, plus `playAll(urls, shuffle)` to start a whole playlist and the transport helpers the keybinds call (`togglePauseFrontMost`/`nextFrontMost`/`previousFrontMost`).                                                                                                                                                                                 |
-| `PlayQueue.java`                                                                            | The ordered URL queue model (append/jump/remove/reorder) shared by `VideoWindow` and `AudioWindow`, so the queue mechanics live in one place.                                                                                                                                                                                                                                                                                 |
-| `Glyphs.java`                                                                               | Shared pixel-art control glyphs (play/pause, next, previous, speaker, note) and a text-ellipsis helper, drawn with plain rectangles (no textures).                                                                                                                                                                                                                                                                            |
+| `AudioWindow.java`                                                                          | The compact audio **bar** (extends `MediaWindow`): a music note + the track name, and a control row (play/pause, previous, next, loop, shuffle, speaker, seek + time). No picture; backed by an `AudioPlayer` and a shared `PlayQueue` (which also holds the history behind "previous").                                                                                                                                                                 |
+| `AudioPlayerManager.java`                                                                   | Registry of active audio bars. Same queue-into-front-most default as video, plus `playAll(urls, shuffle[, repeat])` to start a whole playlist and the transport helpers the keybinds call (`togglePauseFrontMost`/`nextFrontMost`/`previousFrontMost`).                                                                                                                                                                                 |
+| `PlayQueue.java`                                                                            | The ordered URL queue model (append/jump/remove/reorder) shared by `VideoWindow` and `AudioWindow`, so the queue mechanics live in one place. Also owns the play history and the two playback modes that need it: `next(current)`/`previous(current)` apply the `RepeatMode` and the sticky shuffle flag, so the windows only ever swap their player. |
+| `RepeatMode.java`                                                                           | `OFF` / `ALL` / `ONE` — what the queue does when a track ends, cycled by the loop button.                                                                                                                                                                                                                                                                                 |
+| `Glyphs.java`                                                                               | Shared pixel-art control glyphs (play/pause, next, previous, loop, shuffle, speaker, note) and a text-ellipsis helper, drawn with plain rectangles (no textures).                                                                                                                                                                                                                                                                            |
 | `MediaControls.java`                                                                        | Shared control logic and utilities (time formatting, volume and seek math, volume pop-up rendering) used by `VideoWindow` and `AudioWindow`.                                                                                                                                                                                                                                                                                  |
-| `PlaylistScreen.java`                                                                       | The playlist manager screen: a list of saved playlists on the left (select / create), the selected playlist's entries on the right (rename, add a link, remove, play in order, play shuffled, delete). Persists via `PlaylistStore`.                                                                                                                                                                                          |
+| `PlaylistScreen.java`                                                                       | The playlist manager screen: a list of saved playlists on the left (select / create), the selected playlist's entries on the right (rename, add a link or expand a YouTube playlist into tracks, remove, play in order, play shuffled, loop, delete). Persists via `PlaylistStore`.                                                                                                                                                                                          |
 | `ConfigScreen.java`                                                                         | The main configuration hub screen. Displays a list of buttons for each registered config group (e.g. "Lia's Media Player").                                                                                                                                                                                                                                   |
 | `AddonConfigScreen.java`                                                                    | The specific configuration screen for a given group. Renders the widgets for all `ConfigOption`s registered to that group.                                                                                                                                                                                                                                    |
 | **`image/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -345,7 +348,25 @@ sources:
 - **YouTube** (`YouTubeSource`) — `youtube.com/watch`, `/shorts/`, `/embed/`,
   `/live/`, the mobile/music hosts, or a `youtu.be/...` short link.
 
-The chat label is `[youtube]` for YouTube links and `[video]` otherwise.
+The chat label is `[youtube]` for YouTube links, `[youtube playlist]` for a playlist
+page and `[video]` otherwise.
+
+### YouTube playlists (`source/YouTubePlaylistSource`, `media/YouTubePlaylistResolver`)
+
+A `youtube.com/playlist?list=…` page is the one recognized link that is **not** a media
+item, so it never reaches ffmpeg: clicking it calls `YouTubePlaylistResolver.loadAsync`,
+which runs `yt-dlp --flat-playlist --print "%(playlist_title|)s\t%(url)s"` on the IO pool
+(one index request — the individual videos are only resolved later, when each plays) and
+hands the entries back on the main thread, capped at 500. They are then started with
+`VideoPlayerManager.playAll` — or `AudioPlayerManager.playAll` when alt is held, matching
+the modifier a single YouTube link uses. Every entry goes through the same `Urls.isHttp`
+gate a chat link does. A `watch?v=…&list=…` link stays a single video (that is what the
+link itself opens), which keeps the two YouTube sources disjoint.
+
+The same expansion backs the playlist editor's **Add** box and the clipboard import, and
+`MediaPlayerContext.playVideo`/`playAudio` route a playlist link through it too, so the
+public API cannot hand a playlist page to a player as if it were a stream (it returns
+`-1`, since the window does not exist yet).
 
 ### URL resolution (`media/MediaUrlResolver`)
 
@@ -463,7 +484,8 @@ and releases the texture.
 The window is anchored bottom-right by default (so it never covers the left-aligned
 chat link), scaled to about a third of the screen. Its control bar carries: a
 play/pause button; a **next** button and a **queue** (playlist) button when
-something is queued; a **speaker/mute** button with a vertical **volume slider that
+something is queued; a **loop** button (always shown — a lone video can repeat too)
+and a **shuffle** toggle beside it while a queue exists; a **speaker/mute** button with a vertical **volume slider that
 pops up above it** on hover (shown only when the video has sound); and a draggable
 seek bar with a knob plus an elapsed `/` total time read-out (`LIVE` when the
 duration is unknown, with a `+N` suffix showing how many videos are queued). The
@@ -539,17 +561,35 @@ The audio bar is a `MediaWindow` (anchor group 2, so audio bars cascade independ
 images and videos), anchored bottom-right and stacked upward. Its content row is just a
 music-note glyph and the **track name** (from `media.MediaTitleCache`), so on the HUD —
 where windows draw "picture only" — it stays a tidy bar with the name. Its control row
-carries play/pause, **previous**, **next**, a speaker/mute toggle and a seek bar with an
+carries play/pause, **previous**, **next**, **loop**, **shuffle**, a speaker/mute toggle and a seek bar with an
 elapsed `/` total read-out (a `+N` suffix shows how many tracks are queued). The mouse
 wheel over the bar changes the (shared) volume.
 
-The bar owns a shared `PlayQueue` (the same model the video window uses) plus a short
-**history** list: `advance()` plays the next queued URL (pushing the current one onto the
-history) and `previous()` re-queues the current URL at the front and replays the last
-history entry. `AudioPlayerManager` is the registry — queue-into-front-most by default,
-shift-click for a separate bar, `playAll(urls, shuffle)` to start a whole playlist, plus
-the transport helpers the keybinds call. When a track ends with nothing queued, the
-overlay's tick closes the bar (exactly as it does for finished videos).
+The bar owns a shared `PlayQueue` (the same model the video window uses), which also
+keeps the play **history**: `advance()` plays whatever `PlayQueue.next(current)` returns
+and `previous()` re-queues the current URL at the front and replays the last history
+entry. `AudioPlayerManager` is the registry — queue-into-front-most by default,
+shift-click for a separate bar, `playAll(urls, shuffle[, repeat])` to start a whole
+playlist, plus the transport helpers the keybinds call. When a track ends and
+`next` has nothing to return, the overlay's tick closes the bar (exactly as it does for
+finished videos).
+
+### Looping and shuffle (`gui/PlayQueue`, `gui/RepeatMode`)
+
+Both windows delegate "what plays next" to the queue, so the two modes are implemented
+once:
+
+- **`RepeatMode.ONE`** returns the current URL again; the queue is untouched.
+- **`RepeatMode.ALL`** refills the queue from the history once the last entry has played
+  — the finished track is pushed onto the history *before* the round is recycled, so it
+  takes its place in the next round exactly once and no track is ever duplicated.
+- **Shuffle is a sticky flag**, not a one-off reorder: turning it on reorders what is
+  already queued, and every `ALL` round is **reshuffled** as it starts (rotating away a
+  first pick that repeats the track just heard). This is why `playAll` records the flag on
+  the window instead of only shuffling the list it is given.
+
+The loop button cycles `OFF → ALL → ONE`, and both toggles are drawn in
+`MediaWindow.BTN_ACTIVE` while on, so "active" never reads as "hovered".
 
 ## Playlists (`playlist/`, `gui/PlaylistScreen`)
 
@@ -563,9 +603,15 @@ store, which saves immediately.
 vanilla `Screen`: the left column lists saved playlists (click to select; an edit box +
 `+` button creates one), and the right column edits the selected playlist — rename it,
 paste a link to **add** an entry, remove entries, and **Play** (in order) or **Shuffle**
-(randomised once, up front). Play hands the URLs to `AudioPlayerManager.playAll`, which
-opens a fresh bar playing the first track with the rest queued behind it. Entry names in
-the list come from the shared `MediaTitleCache` (real YouTube titles, or file names).
+(randomised, and left on for the bar). Play hands the URLs to `AudioPlayerManager.playAll`,
+which opens a fresh bar playing the first track with the rest queued behind it. A **Loop**
+toggle beside them decides whether that bar starts in `RepeatMode.ALL`. Entry names in the
+list come from the shared `MediaTitleCache` (real YouTube titles, or file names).
+
+Pasting a **YouTube playlist** link into the add box (or onto the clipboard **In** button)
+expands it into its videos through `YouTubePlaylistResolver` instead of storing the page
+link; the screen counts the in-flight expansions so it can say it is working, and a
+clipboard import of a single playlist also takes its name from YouTube.
 
 ## Keybinds (`input/`)
 
@@ -671,8 +717,12 @@ for what the mod does in-game.
   Put anything they both need in `media`, not in one engine. The audio engine is the
   simpler one (no frame queue / texture); its seek/pause model mirrors the video player's.
 - **Shared queue.** `gui/PlayQueue` is the one queue model for both player windows; the
-  video window adds a reorderable panel on top of it, the audio bar uses it plus a short
-  history for "previous".
+  video window adds a reorderable panel on top of it, the audio bar adds "previous". It
+  also owns the history, the `RepeatMode` and the shuffle flag — put any new "what plays
+  next" rule there rather than in a window, so both players get it.
+- **Playlist pages are not media.** A YouTube playlist link must be expanded by
+  `media/YouTubePlaylistResolver` before it reaches a player; nothing may hand it to
+  ffmpeg or to `MediaUrlResolver` (which runs with `--no-playlist`).
 - **Playlists.** `PlaylistStore` is the only thing that touches `playlists.json`; mutate
   a `Playlist` then call `PlaylistStore.save()`. The JSON schema is the `Playlist` field
   names (`name`, `urls`) — keep them stable or migrate.

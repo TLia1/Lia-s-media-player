@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class VideoPlayer {
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
-    private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
+    private static final long STALE_PAUSE_NANOS = 500_000_000L; // 0.5s
     private static final AtomicInteger PLAYER_ID = new AtomicInteger(0);
 
     public enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}

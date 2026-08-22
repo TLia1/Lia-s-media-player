@@ -62,6 +62,39 @@ public class VideoPlayerManager {
     }
 
     /**
+     * Plays a whole list of URLs in a fresh window: the first video starts immediately
+     * and the rest queue behind it (this is how an expanded YouTube playlist is
+     * played). {@code shuffle} stays on for the window, so a looping playlist is
+     * reshuffled every round. Returns {@code null} for an empty list.
+     */
+    @Nullable
+    public VideoWindow playAll(List<String> urls, boolean shuffle) {
+        return playAll(urls, shuffle, RepeatMode.OFF);
+    }
+
+    /**
+     * Plays a whole list of URLs in a fresh window, with an initial loop mode.
+     */
+    @Nullable
+    public VideoWindow playAll(List<String> urls, boolean shuffle, RepeatMode repeat) {
+        if (urls == null || urls.isEmpty()) {
+            return null;
+        }
+        List<String> order = new ArrayList<>(urls);
+        if (shuffle) {
+            java.util.Collections.shuffle(order);
+        }
+        VideoWindow window = open(order.getFirst());
+        if (order.size() > 1) {
+            window.enqueueAll(order.subList(1, order.size()));
+        }
+        window.setShuffle(shuffle);
+        window.setRepeat(repeat);
+        window.bringToFront();
+        return window;
+    }
+
+    /**
      * The visible-or-hidden window with the highest stacking order, or {@code null}.
      */
     @Nullable
