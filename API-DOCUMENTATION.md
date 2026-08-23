@@ -1,37 +1,64 @@
 # Lia's Media Player API Documentation
 
-Lia's Media Player exposes a public API that allows other NeoForge mods to seamlessly integrate with its media playback
-capabilities.
+Lia's Media Player exposes a public API that allows other mods — on **NeoForge or Fabric** — to seamlessly integrate
+with its media playback capabilities.
 
-The project uses a two-mods-in-one-JAR pattern. A single JAR file contains two separate NeoForge mods:
+The API ships inside the same JAR as the mod, under the id `liasmediaplayerapi`:
 
 - `liasmediaplayer`: The main client-side mod.
-- `liasmediaplayerapi`: The API mod, which provides the interfaces, events, and facade class for interacting with the
-  media player.
+- `liasmediaplayerapi`: The API, which provides the interfaces, extension points, and facade class for interacting with
+  the media player. On NeoForge it is a second `[[mods]]` entry and appears as its own line in the Mods menu; on Fabric
+  it is a `provides` id, resolvable by dependants without a separate entry in the mod list.
 
-Both mods appear as separate entries in the Minecraft Mods menu. Other mods should depend **only** on the
-`liasmediaplayerapi` mod and import classes strictly from the `com.lia.mediaplayer.api` package.
+Other mods should depend **only** on the `liasmediaplayerapi` id and import classes strictly from the
+`com.lia.mediaplayer.api` package.
+
+**Nothing in `com.lia.mediaplayer.api` imports a mod loader.** The same addon code compiles and runs on both — see
+[Migrating to API 2.0.0](#migrating-to-api-200) if you wrote against API 1.x.
 
 ## Getting Started
 
-To use the API in your NeoForge 1.21.1 mod, add the mod JAR as a `compileOnly` dependency in your `build.gradle` (or via
-a Maven repository if published).
+Add the mod JAR as a `compileOnly` dependency in your build (or via a Maven repository if published), then declare the
+dependency in your loader's metadata.
 
-In your `src/main/resources/META-INF/neoforge.mods.toml`, declare a required dependency on the API mod:
+NeoForge — `src/main/resources/META-INF/neoforge.mods.toml`:
 
 ```toml
 [[dependencies.yourmodid]]
     modId="liasmediaplayerapi"
     type="required"
-    versionRange="[1.4.0,)"
+    versionRange="[2.0.0,)"
     ordering="AFTER"
     side="CLIENT"
 ```
 
+Fabric — `src/main/resources/fabric.mod.json`:
+
+```json
+"depends": {
+  "liasmediaplayerapi": "*"
+}
+```
+
+(The Fabric `provides` id carries the mod's own version, not the API version, so pin it with `"*"` and check
+compatibility through the API classes you use.)
+
+## Migrating to API 2.0.0
+
+API 2.0.0 removed every NeoForge type from the `com.lia.mediaplayer.api` package so that one addon can target both
+loaders. Two things changed, both mechanical:
+
+| API 1.x | API 2.0.0 |
+|---|---|
+| `MediaSourceRegistrationEvent extends Event implements IModBusEvent`, listened to on the mod bus | Plain object, handed to a `MediaSourceProvider` you register with `LiasMediaPlayerApi.registerSourceProvider(...)` |
+| `PlaybackEvent extends Event`, listened to on `NeoForge.EVENT_BUS` | Plain object, dispatched to a `PlaybackListener` you register with `PlaybackEvents.register(...)` |
+
+`MediaSource`, `MediaKind`, `PlaybackState`, `IMediaPlayerAPI` and `ConfigOption` are unchanged.
+
 ## Core Concepts
 
 All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlayerAPI` interface, obtained via
-`LiasMediaPlayerApi.getInstance()`, or through NeoForge events.
+`LiasMediaPlayerApi.getInstance()`, or through the two extension points on `LiasMediaPlayerApi` and `PlaybackEvents`.
 
 ### Thread Safety
 
@@ -45,25 +72,37 @@ All interactions with the API go through the `com.lia.mediaplayer.api.IMediaPlay
 You can teach the media player how to handle new link formats (e.g., a custom music streaming service) by implementing
 the `MediaSource` interface.
 
-The recommended way to register a source is by listening to the `MediaSourceRegistrationEvent` on the **mod event bus**
-during initialization:
+The recommended way is to implement `MediaSourceProvider` and register it from your mod's entry point. This is
+identical on both loaders — the provider is called once during client setup, after every mod has been constructed:
 
 ```java
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.api.MediaSourceProvider;
 import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
 import net.minecraft.network.chat.Component;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
 
+public class MySources implements MediaSourceProvider {
+    @Override
+    public void registerSources(MediaSourceRegistrationEvent event) {
+        event.register(new MyCustomAudioSource());
+    }
+}
+
+// NeoForge
 @Mod("myaddon")
 public class MyAddon {
     public MyAddon(IEventBus modBus) {
-        modBus.addListener(this::onRegisterSources);
+        LiasMediaPlayerApi.registerSourceProvider(new MySources());
     }
+}
 
-    private void onRegisterSources(MediaSourceRegistrationEvent event) {
-        event.register(new MyCustomAudioSource());
+// Fabric
+public class MyAddon implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+        LiasMediaPlayerApi.registerSourceProvider(new MySources());
     }
 }
 
@@ -85,7 +124,16 @@ class MyCustomAudioSource implements MediaSource {
 }
 ```
 
-Alternatively, you can register a source at any time by calling
+On **Fabric** you may instead declare the provider as a custom entrypoint, which frees you from caring whether your
+initializer happens to run before Lia's Media Player's:
+
+```json
+"entrypoints": {
+  "liasmediaplayer:sources": ["com.example.addon.MySources"]
+}
+```
+
+Either way, you can also register a source at any time by calling
 `LiasMediaPlayerApi.getInstance().registerSource(source)`.
 
 ### 2. Triggering Playback
@@ -119,31 +167,36 @@ long imageId = LiasMediaPlayerApi.getInstance().showImage("https://example.com/i
 
 ### 3. Listening to Playback Events
 
-The mod fires `PlaybackEvent` on the **NeoForge event bus** (`NeoForge.EVENT_BUS`) whenever playback state changes. This
-is extremely useful for addons that want to synchronize video or audio playback across a server.
+The mod dispatches `PlaybackEvent` through `PlaybackEvents` whenever playback state changes. This is extremely useful
+for addons that want to synchronize video or audio playback across a server. Registration is the same on both loaders —
+there is no bus involved, because Fabric has none.
 
 ```java
 import com.lia.mediaplayer.api.event.PlaybackEvent;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.common.NeoForge;
+import com.lia.mediaplayer.api.event.PlaybackEvents;
 
-@EventBusSubscriber(modid = "myaddon", bus = EventBusSubscriber.Bus.GAME)
-public class SyncListener {
+public final class SyncListener {
 
-    @SubscribeEvent
-    public static void onPlaybackChanged(PlaybackEvent event) {
-        if (event.getPlayerKind() == PlaybackEvent.PlayerKind.VIDEO) {
+    public static void install() {
+        PlaybackEvents.register(event -> {
+            if (event.getPlayerKind() != PlaybackEvent.PlayerKind.VIDEO) {
+                return;
+            }
             switch (event.getType()) {
                 case STARTED -> System.out.println("Video started: " + event.getUrl());
                 case PAUSED -> System.out.println("Video paused at " + event.getPositionMicros() + " us");
                 case SEEKED -> System.out.println("Video seeked to " + event.getPositionMicros() + " us");
                 case ENDED -> System.out.println("Video finished");
+                default -> {
+                }
             }
-        }
+        });
     }
 }
 ```
+
+Listeners are called on the thread that caused the change — usually the render thread, but a decode thread for `ENDED`
+and `FAILED`. Do not block in one.
 
 ### 4. Controlling Playback Programmatically
 
@@ -257,13 +310,16 @@ MyEnum currentQuality = myEnumOption.getValue();
 
 | Class                          | Description                                                                                       |
 |--------------------------------|---------------------------------------------------------------------------------------------------|
-| `LiasMediaPlayerApi`           | The API mod entrypoint. Provides `getInstance()` to retrieve the active `IMediaPlayerAPI`.        |
+| `LiasMediaPlayerApi`           | The API front door. `getInstance()` retrieves the active `IMediaPlayerAPI`; `registerSourceProvider()` is the loader-neutral extension point. |
 | `IMediaPlayerAPI`              | The main interface for controlling playback, volume, playlists, and registering sources/configs.  |
 | `MediaSource`                  | Interface to implement to define a new recognized link format.                                    |
+| `MediaSourceProvider`          | Interface an addon implements to contribute `MediaSource`s. Registered via `LiasMediaPlayerApi` on either loader, or the `liasmediaplayer:sources` entrypoint on Fabric. |
 | `MediaKind`                    | Enum (`IMAGE`, `VIDEO`, `AUDIO`) returned by `MediaSource.kind()`.                                |
 | `PlaybackState`                | Enum (`LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`) representing current player state.       |
-| `MediaSourceRegistrationEvent` | Mod bus event fired during `FMLClientSetupEvent` to collect custom `MediaSource` implementations. |
-| `PlaybackEvent`                | Game bus event fired on transport changes (started, paused, seeked, ended, etc.).                 |
+| `MediaSourceRegistrationEvent` | Passed to every `MediaSourceProvider` during client setup, to collect custom `MediaSource` implementations. |
+| `PlaybackEvent`                | Describes a transport change (started, paused, seeked, ended, etc.).                              |
+| `PlaybackEvents`               | The dispatcher for `PlaybackEvent`: `register()` / `unregister()` a `PlaybackListener`.           |
+| `PlaybackListener`             | Functional interface receiving `PlaybackEvent`s.                                                  |
 | `ConfigOption<T>`              | Base class for an extensible configuration option.                                                |
 | `IntSliderOption`              | A `ConfigOption` implementation for integer values controlled via a slider.                       |
 | `StepSliderOption<T>`          | A `ConfigOption` implementation for values selected from a predefined list of steps.              |

@@ -29,7 +29,8 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>This lives in {@code gui} rather than next to the click/hover seam in
  * {@code chat}: it is a query against the live client screen and needs
- * {@link Minecraft}, which nothing in the {@code chat} package touches.</p>
+ * {@link Minecraft}, which nothing in the {@code chat} package touches. Finding the
+ * overlay in the first place is {@link ChatOverlay}'s job, not this one's.</p>
  */
 final class ChatHitTest {
     private ChatHitTest() {
@@ -44,7 +45,7 @@ final class ChatHitTest {
     static Style hoveredStyle(double mouseX, double mouseY) {
         Minecraft mc = Minecraft.getInstance();
         //? if <1.21.11 {
-        return chat(mc).getClickedComponentStyleAt(mouseX, mouseY);
+        return ChatOverlay.chat(mc).getClickedComponentStyleAt(mouseX, mouseY);
         //?} elif <26.1 {
         /*// The collector is fed by replaying the chat, so it needs the same
         // inputs the real render pass gets: the gui-scaled height the lines are
@@ -53,11 +54,11 @@ final class ChatHitTest {
         // and whether chat is focused, which disables that fade entirely.
         ActiveTextCollector.ClickableStyleFinder finder =
                 new ActiveTextCollector.ClickableStyleFinder(mc.font, (int) mouseX, (int) mouseY);
-        chat(mc).captureClickableText(
+        ChatOverlay.chat(mc).captureClickableText(
                 finder,
                 mc.getWindow().getGuiScaledHeight(),
-                guiTicks(mc),
-                chat(mc).isChatFocused());
+                ChatOverlay.guiTicks(mc),
+                ChatOverlay.chat(mc).isChatFocused());
         return finder.result();
         *///?} else {
         /*// As above, except that 26.1 replaced the focused flag with a tri-state
@@ -67,31 +68,15 @@ final class ChatHitTest {
         // prompt, which changes nothing about where a link sits.
         ActiveTextCollector.ClickableStyleFinder finder =
                 new ActiveTextCollector.ClickableStyleFinder(mc.font, (int) mouseX, (int) mouseY);
-        chat(mc).captureClickableText(
+        ChatOverlay.chat(mc).captureClickableText(
                 finder,
                 mc.getWindow().getGuiScaledHeight(),
-                guiTicks(mc),
-                chat(mc).isChatFocused()
+                ChatOverlay.guiTicks(mc),
+                ChatOverlay.chat(mc).isChatFocused()
                         ? ChatComponent.DisplayMode.FOREGROUND
                         : ChatComponent.DisplayMode.BACKGROUND);
         return finder.result();
         *///?}
     }
 
-    // 26.2 split the in-game HUD out of Gui: Gui kept the screen stack and the
-    // HUD it now owns, and the chat overlay moved onto that Hud. Both accessors
-    // keep their names, only their owner changed.
-    private static ChatComponent chat(Minecraft mc) {
-        //? if <26.2 {
-        return mc.gui.getChat();
-        //?} else
-        /*return mc.gui.hud.getChat();*/
-    }
-
-    private static int guiTicks(Minecraft mc) {
-        //? if <26.2 {
-        return mc.gui.getGuiTicks();
-        //?} else
-        /*return mc.gui.hud.getGuiTicks();*/
-    }
 }

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "Turns image, GIF and video links shared in chat into rich in-game media: hover any [picture] or [gif] to see an instant preview, pin images as movable, resizable windows, and click a video link to play it inside Minecraft with sound. Supports direct image and video files, animated Tenor GIFs, HLS/DASH streams and YouTube (via yt-dlp), with full playback controls, a queue and background playback.",
+  "authors": [
+    "T_Lia"
+  ],
+  "license": "${mod_license}",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.lia.mediaplayer.platform.fabric.FabricBridge"
+    ],
+    "modmenu": [
+      "com.lia.mediaplayer.platform.fabric.ModMenuIntegration"
+    ]
+  },
+  "provides": [
+    "liasmediaplayerapi"
+  ],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version_range_fabric}",
+    "java": ">=${java_version}"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

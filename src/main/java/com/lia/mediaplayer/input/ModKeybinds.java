@@ -6,10 +6,6 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 //? if >=1.21.11
 /*import net.minecraft.resources.ResourceLocation;*/
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 
 /**
  * The mod's configurable key bindings. They appear in the vanilla
@@ -19,10 +15,10 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
  *
  * <p>The bindings act on the <em>active</em> audio bar (see
  * {@link com.lia.mediaplayer.gui.AudioPlayerManager}); the actual reaction to a press
- * lives in {@link KeybindHandler}. Registration happens on the mod event bus via
- * {@link RegisterKeyMappingsEvent}.</p>
+ * lives in {@link KeybindHandler}. Registering the mappings with the game is the job
+ * of the per-loader bridge in {@code platform}, which is the only part of this that
+ * differs between NeoForge and Fabric; this class just declares them.</p>
  */
-@EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class ModKeybinds {
 
     // A key mapping category used to be a bare translation key; 1.21.11 made it a
@@ -50,15 +46,12 @@ public final class ModKeybinds {
                 InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY);
     }
 
-    @SubscribeEvent
-    static void onRegister(RegisterKeyMappingsEvent event) {
-        // Categories are now registered objects rather than free-form strings,
-        // and NeoForge wants modded ones declared before the mappings using them.
-        //? if >=1.21.11
-        /*event.registerCategory(CATEGORY);*/
-        event.register(PLAY_PAUSE);
-        event.register(NEXT);
-        event.register(PREVIOUS);
-        event.register(OPEN_PLAYLISTS);
+    /**
+     * Every mapping this mod declares, in the order they should appear in the controls
+     * screen. The loader bridges iterate this rather than naming each field, so adding a
+     * binding here is enough for both loaders to pick it up.
+     */
+    public static KeyMapping[] all() {
+        return new KeyMapping[] {PLAY_PAUSE, NEXT, PREVIOUS, OPEN_PLAYLISTS};
     }
 }

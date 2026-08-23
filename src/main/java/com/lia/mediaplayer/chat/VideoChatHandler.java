@@ -1,16 +1,10 @@
 package com.lia.mediaplayer.chat;
 
-import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 /**
  * Rewrites incoming chat so video, stream and YouTube links (including a YouTube
@@ -22,7 +16,6 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
  * supplies the video-specific rule (which links to claim and the aqua underlined
  * style).</p>
  */
-@EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class VideoChatHandler {
 
     /**
@@ -59,18 +52,16 @@ public final class VideoChatHandler {
     private VideoChatHandler() {
     }
 
-    @SubscribeEvent
-    public static void onSystemChatReceived(ClientChatReceivedEvent.System event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), VIDEO_LINKS));
+    /**
+     * Rewrites one incoming chat message. Loader-neutral: the bridge that owns the
+     * loader's chat event calls this and puts the result back.
+     */
+    public static Component rewrite(Component message) {
+        return ChatLinkRewriter.rewrite(message, VIDEO_LINKS);
     }
 
-    @SubscribeEvent
-    public static void onPlayerChatReceived(ClientChatReceivedEvent.Player event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), VIDEO_LINKS));
-    }
-
-    @SubscribeEvent
-    public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+    /** Drops every open video window and the thumbnail/title caches when leaving a world. */
+    public static void onDisconnect() {
         com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx != null) {
             ctx.getVideoManager().disposeAll();

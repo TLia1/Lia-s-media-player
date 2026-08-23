@@ -1,6 +1,8 @@
 # Lia's Media player
 
-**For Minecraft <!-- minecraft_version -->1.21.1<!-- /minecraft_version --> · NeoForge · Client-side only**
+**For Minecraft 1.21.1 - 26.2 · NeoForge & Fabric · Client-side only**
+
+*(On Fabric you also need [Fabric API](https://modrinth.com/mod/fabric-api).)*
 
 Lia's Media player is a companion mod that can display medias that you can *interact* — right inside Minecraft, without
 ever leaving the game.

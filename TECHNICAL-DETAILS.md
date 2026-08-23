@@ -1,6 +1,6 @@
 # <!-- mod_name -->Lia's Media Player<!-- /mod_name --> — <!-- mod_id -->`liasmediaplayer`<!-- /mod_id -->
 
-A **client-side** NeoForge mod for Minecraft **1.21.1 through 26.2** (primary target
+A **client-side** mod for **NeoForge and Fabric** on Minecraft **1.21.1 through 26.2** (primary target
 **<!-- minecraft_version -->1.21.1<!-- /minecraft_version -->**; see
 [Supported versions](#supported-versions)). It
 improves how image, GIF,
@@ -19,10 +19,13 @@ audio player.
   `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`1.5.0`<!-- /mod_version -->
 - **Primary target:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions)
-- **Side:** **client-only** (`@Mod(dist = Dist.CLIENT)`) — it has no effect on a
-  server and is not required by anyone else on the server.
-- **Dependencies:** NeoForge + Minecraft only. There are **no bundled native
-  libraries**: video playback shells out to the external `ffmpeg`/`ffprobe` and
+- **Side:** **client-only** (`Dist.CLIENT` / `"environment": "client"`) — it has no
+  effect on a server and is not required by anyone else on the server.
+- **Loaders:** NeoForge and Fabric, from one source tree. Only the
+  [`platform`](#the-loader-seam-platform) package knows which one it is running on.
+- **Dependencies:** Minecraft + the loader, plus **Fabric API** on Fabric (that loader's
+  event surface) and optionally ModMenu. There are **no bundled native libraries** and
+  **no mixins**: video playback shells out to the external `ffmpeg`/`ffprobe` and
   `yt-dlp` command-line tools, which the mod downloads automatically into the game
   folder on first launch (see [`MediaBinaries`](#external-tools-toolsmediabinaries)).
 
@@ -51,7 +54,7 @@ concern:
 
 | Package    | Responsibility                                                                                                                                                     | Depends on                                                         |
 |------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
-| `api`      | **Public API for other mods.** Interfaces, enums, `IMediaPlayerAPI`, `LiasMediaPlayerApi`, and events. This package is the only thing external mods should import. | (NeoForge only)                                                    |
+| `api`      | **Public API for other mods.** Interfaces, enums, `IMediaPlayerAPI`, `LiasMediaPlayerApi`, and its extension points. This package is the only thing external mods should import — and, since API 2.0.0, it names no mod loader at all. | (Minecraft only)                                                   |
 | `config`   | **Configuration.** Stores mod options (resolutions, caps) via JSON and persists them to disk. Provides a hub screen for navigating to sub-menus. | (Minecraft only)                                                   |
 | `source`   | **What is this link?** URL classification and chat labels. The extension point.                                                                                    | (Minecraft only)                                                   |
 | `image`    | Image/GIF download, decode and texture cache.                                                                                                                      | `source`, `config`                                                 |
@@ -63,8 +66,9 @@ concern:
 | `gui`      | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the hover preview, playlists and config hub. | `source`, `image`, `video`, `audio`, `media`, `playlist`, `config` |
 | `input`    | The configurable keybinds and the handler that drives the active audio player.                                                                                     | `gui`                                                              |
 | `command`  | Registers client commands (like `/show`) to launch media directly.                                                                                                 | `api`                                                              |
-| `chat`     | Hooking the chat events and rewriting links into labels.                                                                                                           | `source`, `image`, `video`, `audio`, `gui`                         |
-| *(root)*   | The `@Mod` entry points (main mod + API). Fires `MediaSourceRegistrationEvent` during client setup.                                                                | `tools`, `api`, `gui`, `command`                                   |
+| `chat`     | Rewriting links into labels, as plain functions on `Component`.                                                                                                    | `source`, `image`, `video`, `audio`, `gui`                         |
+| `platform` | **The loader seam.** `ClientHooks` is the mod's whole catalogue of client hooks in vanilla types; `platform/neoforge` and `platform/fabric` subscribe to their loader's events and forward to it. The only package that imports a loader. | `chat`, `gui`, `input`, `command`, `api`, *(root)*                 |
+| *(root)*   | `LiasMediaPlayer` — loader-neutral startup: builds the context, publishes the API singleton, starts the tool download, and applies addon-supplied sources.          | `tools`, `api`, `gui`                                              |
 
 The two playback engines (`video`, `audio`) are siblings that share their common
 machinery through the lower `media` layer rather than depending on each other, so the
@@ -73,7 +77,12 @@ dependency graph stays acyclic. In particular the **volume is a single shared va
 window swaps tracks.
 
 The root `LiasMediaPlayer` class holds the shared `MODID`/`LOGGER` constants used
-across every package and kicks off the background tool download.
+across every package, builds the composition root, and kicks off the background tool
+download. It carries no loader annotation: `platform/neoforge/NeoForgeMod` and
+`platform/fabric/FabricBridge` are the two entry points that call into it.
+
+Nothing depends on `platform`, so adding it above everything keeps the graph acyclic —
+and nothing *below* it may import `net.neoforged` or `net.fabricmc`.
 
 ### Source classification: the extension point (`source`)
 
@@ -104,25 +113,31 @@ image; a `.mp4` is a video; a `.mp3` is audio — and audio-only siblings like `
 package-private helper for the shared path/host parsing.
 
 External mods can also register sources through the public API: either by calling
-`LiasMediaPlayerApi.getInstance().registerSource()` at any time, or by listening for
-`MediaSourceRegistrationEvent` on the mod event bus during initialization. Both
-paths append to the same `REGISTERED` list. The `MediaSources.REGISTERED` list is
-now a mutable `ArrayList` (was `List.of`), and `MediaSources.register()` is the
-public entry point.
+`LiasMediaPlayerApi.getInstance().registerSource()` at any time, or by registering a
+`MediaSourceProvider` with `LiasMediaPlayerApi.registerSourceProvider()` (or, on Fabric,
+declaring a `liasmediaplayer:sources` entrypoint). Providers are collected and run once
+during client setup by `LiasMediaPlayer.registerExternalSources`, and every path appends
+to the same registered list; `MediaSources.register()` is the public entry point.
+
+The provider indirection is what makes the API loader-neutral. It used to be a NeoForge
+mod-bus event, and Fabric has no bus to post one on — so the *discovery* mechanism became
+the loader's business and the interface an addon implements became the same on both.
 
 ## Source layout
 
 | File                                                                                        | Role                                                                                                                                                                                                                                                                                                                                                                                                                          |
 |---------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `LiasMediaPlayer.java`                                                                      | `@Mod(dist = Dist.CLIENT)` entry point. Holds the mod id (`liasmediaplayer`) and the shared logger, kicks off the background tool download, and fires `MediaSourceRegistrationEvent` during `FMLClientSetupEvent` so addons can register custom sources. Event handlers are discovered separately via `@EventBusSubscriber`.                                                                                                  |
+| `LiasMediaPlayer.java`                                                                      | Loader-neutral startup. Holds the mod id (`liasmediaplayer`) and the shared logger; `init()` builds `MediaPlayerContext`, publishes it as the API singleton and kicks off the background tool download; `registerExternalSources(...)` runs every addon-supplied `MediaSourceProvider`. Carries no loader annotation — the two bridges in `platform/` call it.                                                                 |
 | **`api/`**                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `LiasMediaPlayerApi.java`                                                                   | `@Mod("liasmediaplayerapi", dist = Dist.CLIENT)` — the API mod entry point, shown as a separate entry in the Mods menu. No logic of its own.                                                                                                                                                                                                                                                                                  |
+| `LiasMediaPlayerApi.java`                                                                   | The API front door: holds the live `IMediaPlayerAPI` singleton and the `MediaSourceProvider` registry addons register with. No loader imports — the NeoForge `@Mod` entry that gives the API its own line in the Mods menu lives in `platform/neoforge/NeoForgeApiMod`.                                                                                                                                                        |
 | `IMediaPlayerAPI.java`                                                                      | The public façade interface. Methods for source registration, playback control, volume, media queries, and playlist access. Exposes unique player IDs for fine-grained control of specific windows.                                                                                                                                                                                                                           |
 | `MediaSource.java`                                                                          | The public extension interface: `matches` / `kind` / `label`. Other mods implement this to teach the player about new link formats.                                                                                                                                                                                                                                                                                           |
 | `MediaKind.java`                                                                            | Public enum: `IMAGE`, `VIDEO`, `AUDIO`.                                                                                                                                                                                                                                                                                                                                                                                       |
 | `PlaybackState.java`                                                                        | Public enum: `LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`.                                                                                                                                                                                                                                                                                                                                                               |
-| `event/MediaSourceRegistrationEvent.java`                                                   | Mod-bus event fired during `FMLClientSetupEvent`. Addons listen to register custom `MediaSource`s.                                                                                                                                                                                                                                                                                                                            |
-| `event/PlaybackEvent.java`                                                                  | Game-bus event fired on playback state changes (STARTED, PAUSED, RESUMED, SEEKED, ENDED, FAILED, STOPPED). Enables sync addons.                                                                                                                                                                                                                                                                                               |
+| `MediaSourceProvider.java`                                                                  | The extension point addons implement to contribute `MediaSource`s. Registered with `LiasMediaPlayerApi.registerSourceProvider` on either loader, or through the `liasmediaplayer:sources` entrypoint on Fabric.                                                                                                                                                                                                                |
+| `event/MediaSourceRegistrationEvent.java`                                                   | Plain object handed to every `MediaSourceProvider` during client setup, collecting the sources they register. (API 1.x: a NeoForge mod-bus event.)                                                                                                                                                                                                                                                                            |
+| `event/PlaybackEvent.java`                                                                  | Describes a playback state change (STARTED, PAUSED, RESUMED, SEEKED, ENDED, FAILED, STOPPED). Enables sync addons. (API 1.x: a NeoForge game-bus event.)                                                                                                                                                                                                                                                                      |
+| `event/PlaybackEvents.java` · `event/PlaybackListener.java`                                 | The dispatcher for `PlaybackEvent` and the interface it calls. The API owns this because Fabric has no global bus to borrow; a listener that throws is logged and swallowed rather than taking down the player that posted.                                                                                                                                                                                                    |
 | `config/ConfigOption.java`                                                                  | Base class for an extensible configuration option. Subclasses like `IntSliderOption`, `StepSliderOption` and `EnumOption` are provided.                                                                                                         |
 | `config/EnumOption.java`                                                                    | A `ConfigOption` implementation for enum values, displayed as a button that cycles through the available options.                                                                                                                                                                                                                                                                                                              |
 | **`config/` (internal)**                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -140,12 +155,12 @@ public entry point.
 | `MediaTitleCache.java`                                                                      | Resolves and caches a human-readable title per URL (YouTube oEmbed, or the file name) for the queue/playlist panels. Shared by both engines.                                                                                                                                                                                                                                                                                  |
 | **`chat/`**                                                                                 |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ChatLinkRewriter.java`                                                                     | The shared chat-rewrite engine: walks a message component-by-component (preserving inherited styles) and replaces each URL claimed by a `LinkRewrite` rule with its label. Both handlers reuse this, so the walk lives in exactly one place.                                                                                                                                                                                  |
-| `ImageChatHandler.java`                                                                     | Subscribes to chat-received / logout events. Supplies the image rule (gold `[picture]`/`[gif]` label; registers the URL with `ImagePreviewCache`) and disposes the image side on disconnect.                                                                                                                                                                                                                                  |
-| `VideoChatHandler.java`                                                                     | Subscribes to chat-received / logout events. Supplies the video rule (aqua underlined `[video]`/`[youtube]` label) and disposes the video side on disconnect.                                                                                                                                                                                                                                                                 |
-| `AudioChatHandler.java`                                                                     | Subscribes to chat-received / logout events. Supplies the audio rule (green underlined `[audio]` label) and disposes the audio side on disconnect.                                                                                                                                                                                                                                                                            |
+| `ImageChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the image rule (gold `[picture]`/`[gif]` label; registers the URL with `ImagePreviewCache`) and disposes the image side on disconnect. Takes no event object — `platform.ClientHooks` calls it.                                                                                                                                                                              |
+| `VideoChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the video rule (aqua underlined `[video]`/`[youtube]` label) and disposes the video side on disconnect.                                                                                                                                                                                                                                                                     |
+| `AudioChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the audio rule (green underlined `[audio]` label) and disposes the audio side on disconnect.                                                                                                                                                                                                                                                                                |
 | **`gui/`**                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `MediaWindow.java`                                                                          | Shared base for the on-screen windows. Owns the box geometry, the corner buttons, resize grip, move/resize/zoom gestures, and global z-order. Its initial position is determined by the `default_window_position` config option. Each window has a stable ID for API control. Declares the subclass contract, including a polymorphic `close()` and an `anchorGroup()`. |
-| `MediaWindowOverlay.java`                                                                   | Single coordinator that renders and routes input for *all* windows (images + videos) as one z-ordered stack. Owns the chat-screen render pass, the HUD overlay pass, mouse handling (click-to-front, click-on-link to open/queue via `MediaSources`), the "reveal hidden videos" button, and the auto-advance/auto-close of finished videos.                                                                                  |
+| `MediaWindowOverlay.java`                                                                   | Single coordinator that renders and routes input for *all* windows (images + videos) as one z-ordered stack: the chat-screen render pass, the HUD overlay pass, mouse handling (click-to-front, click-on-link to open/queue via `MediaSources`), the "reveal hidden videos" button, and the auto-advance/auto-close of finished videos. Every method is a plain function on vanilla types, returning `true` when it consumed input. |
 | `ImageWindow.java`                                                                          | A pinned image/GIF preview drawn as a movable + resizable window (extends `MediaWindow`). Owns no textures of its own — it draws the current frame from `ImagePreviewCache`.                                                                                                                                                                                                                                                  |
 | `ImageWindowManager.java`                                                                   | Registry of pinned image windows keyed by URL; shows/closes them and caps how many are alive (6). Closing is just a map removal (textures live in the cache).                                                                                                                                                                                                                                                                 |
 | `ImageHoverPreview.java`                                                                    | Draws the floating image/GIF preview shown when hovering an image label in chat (loading/failed/loaded states). Invoked by the overlay after the pinned windows so it always sits on top.                                                                                                                                                                                                                                     |
@@ -178,35 +193,115 @@ public entry point.
 | `Playlist.java`                                                                             | A named, ordered list of media URLs (its fields are the JSON schema).                                                                                                                                                                                                                                                                                                                                                         |
 | `PlaylistStore.java`                                                                        | Loads/saves the playlists to `<gamedir>/liasmediaplayer/playlists.json` (Gson), lazily on first access and after every change, using atomic file replacements to prevent corruption.                                                                                                                                                                                                                                          |
 | **`input/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ModKeybinds.java`                                                                          | The four configurable key bindings (play/pause, next, previous, open playlists), unbound by default, registered on the mod bus via `RegisterKeyMappingsEvent` under a "Lia's Media Player" category.                                                                                                                                                                                                                          |
-| `KeybindHandler.java`                                                                       | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`.                                                                                                                                                                                                                                                                                                            |
+| `ModKeybinds.java`                                                                          | The four configurable key bindings (play/pause, next, previous, open playlists), unbound by default, under a "Lia's Media Player" category. Declares them and exposes `all()`; registering them with the game is each loader bridge's job.                                                                                                                                                                                    |
+| `KeybindHandler.java`                                                                       | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`. Called from `platform.ClientHooks.onClientTick`.                                                                                                                                                                                                                                                           |
 | **`tools/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `FFmpegCli.java`                                                                            | Thin wrapper around the `ffmpeg`/`ffprobe` binaries. Probes stream metadata (via `ffprobe` JSON, parsed with Gson) and starts ffmpeg processes that pipe raw `rgba` video and `s16le` PCM audio to stdout. A shutdown hook tracks and forcibly kills active processes on game exit to prevent orphaned binaries.                                                                                                              |
 | `MediaBinaries.java`                                                                        | Public facade that orchestrates `BinaryLocator` and `BinaryDownloader`. Exposes the resolved paths for `yt-dlp`, `ffmpeg` and `ffprobe`, caches results, and manages the once-per-session download guard. The only class the rest of the mod imports from `tools/` (besides `FFmpegCli`).                                                                                                                                     |
 | `BinaryLocator.java`                                                                        | Scans for existing installations of each tool: explicit overrides (JVM property / env var), the mod's managed directory, every directory on `PATH`, and common per-OS install locations (winget, scoop, Chocolatey, Homebrew, pip Scripts, …). Probes bare command names as a last resort. Never downloads anything.                                                                                                          |
 | `BinaryDownloader.java`                                                                     | Downloads and installs tools when `BinaryLocator` finds nothing. Handles the two download shapes: a single executable (yt-dlp) and a per-platform archive (ffmpeg bundle). Unpacks `.zip` (JDK) and `.tar.xz` (system `tar`) with zip-slip protection. Uses a shared `HttpClient` and temp-file-then-atomic-move for safe writes.                                                                                             |
+| **`platform/`**                                                                             |                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `ClientHooks.java`                                                                          | The mod's whole catalogue of client hooks — chat, disconnect, tick, screen init/render, HUD render, and the four mouse hooks — written only in vanilla types. The two bridges call these; nothing below this package sees a loader event.                                                                                                                                                                                      |
+| `neoforge/NeoForgeMod.java`                                                                 | `@Mod(dist = Dist.CLIENT)`. Registers the `IConfigScreenFactory` extension point, calls `LiasMediaPlayer.init()`, and collects addon sources during `FMLClientSetupEvent`.                                                                                                                                                                                                                                                    |
+| `neoforge/NeoForgeApiMod.java`                                                              | `@Mod("liasmediaplayerapi", dist = Dist.CLIENT)` — the second Mods-menu entry. No logic. Exists so `api/` needs no loader import.                                                                                                                                                                                                                                                                                             |
+| `neoforge/NeoForgeBridge.java`                                                              | Every `@SubscribeEvent` the mod has, each unwrapping an event object and calling the matching `ClientHooks` method (`setCanceled(true)` where the hook returns `true`). Also registers the key mappings and the `/show` command.                                                                                                                                                                                               |
+| `fabric/FabricBridge.java`                                                                  | `ClientModInitializer`. Subscribes the Fabric API events and forwards to `ClientHooks`. Carries the two things Fabric has no direct equivalent for: the `ALLOW_CHAT` + re-inject path for player chat, and the drag reconstruction (see below).                                                                                                                                                                                |
+| `fabric/FabricChatSink.java`                                                                | Adds a rewritten player message to the chat overlay by hand, reproducing vanilla's `GuiMessageTag` with `ChatTrustLevel.evaluate`. Guards `addMessage` → `addPlayerMessage` (26.1).                                                                                                                                                                                                                                            |
+| `fabric/FabricHud.java` · `fabric/FabricScreens.java` · `fabric/FabricKeyMappings.java`     | One-guard seams for the Fabric API's own churn: `HudRenderCallback` → `HudElementRegistry`, `Screens.getButtons` → `getWidgets`, `KeyBindingHelper` → `KeyMappingHelper` — all at 26.1.                                                                                                                                                                                                                                       |
+| `fabric/ModMenuIntegration.java`                                                            | `ModMenuApi` entrypoint putting `ConfigScreen` behind ModMenu's wrench button — Fabric's stand-in for NeoForge's `IConfigScreenFactory`. Optional: compiled against, never required at runtime.                                                                                                                                                                                                                               |
 | **`command/`**                                                                              |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ShowCommand.java`                                                                          | Registers the `/show` client command via `RegisterClientCommandsEvent`. Takes `type` (image/video/audio), `url`, and an optional `newPlayer` boolean. Forwards parsed commands to `LiasMediaPlayerApi`.                                                                                                                                                                                                                       |
+| `ShowCommand.java`                                                                          | Builds the `/show` command tree, **generic in its source type** (`tree(BiConsumer<CommandContext<S>, Component>)`) because NeoForge and Fabric hand out command sources with no common ancestor; each bridge supplies how its source reports a failure. Takes `type` (image/video/audio), `url`, and an optional `newPlayer` boolean. Forwards to `LiasMediaPlayerApi`.                                                         |
 
 Resources:
 
-- `src/main/resources/META-INF/neoforge.mods.toml` — mod metadata. Declares two
+- `src/main/resources/META-INF/neoforge.mods.toml` — NeoForge metadata. Declares two
   `[[mods]]` entries (`liasmediaplayer` and `liasmediaplayerapi`) and only
-  `neoforge` and `minecraft` as required dependencies. The `mod_id`, `mod_name`,
-  `mod_version`, etc. are expanded from `stonecutter.properties.toml` at build time.
-  `@EventBusSubscriber` handlers are discovered by annotation scanning regardless of
-  which sub-package they live in, so moving them between packages needs no config
-  change.
+  `neoforge` and `minecraft` as required dependencies. `@EventBusSubscriber` handlers
+  are discovered by annotation scanning regardless of which sub-package they live in,
+  so moving them between packages needs no config change.
+- `src/main/resources/fabric.mod.json` — Fabric metadata. Declares the `client`
+  entrypoint (`FabricBridge`), the optional `modmenu` one, `provides` for the
+  `liasmediaplayerapi` id, and `fabric-api` as a required dependency.
+
+Both files live in the same shared resource directory; each buildscript expands only its
+own (`mod_id`, `mod_version`, … from `stonecutter.properties.toml`) and excludes the
+other from its jar. No `pack.mcmeta` is shipped — both loaders synthesise one for a mod's
+own `assets/`.
+
+## The loader seam (`platform`)
+
+The mod ships for two loaders from one source tree, and exactly one package knows it:
+`com.lia.mediaplayer.platform`. Everything below it talks to vanilla Minecraft and to
+`ClientHooks`, which is the mod's **complete** list of moments it needs the game to call
+it — twelve of them, in vanilla types:
+
+| Hook | NeoForge | Fabric |
+|---|---|---|
+| `onChatReceived` (system) | `ClientChatReceivedEvent.System` | `ClientReceiveMessageEvents.MODIFY_GAME` |
+| `onChatReceived` (player) | `ClientChatReceivedEvent.Player` | `ALLOW_CHAT` + re-inject — see below |
+| `onDisconnect` | `ClientPlayerNetworkEvent.LoggingOut` | `ClientPlayConnectionEvents.DISCONNECT` |
+| `onClientTick` | `ClientTickEvent.Post` | `ClientTickEvents.END_CLIENT_TICK` |
+| `onScreenInit` | `ScreenEvent.Init.Post` | `ScreenEvents.AFTER_INIT` + `Screens.getWidgets` |
+| `onScreenRender` | `ScreenEvent.Render.Post` | `ScreenEvents.afterRender` / `afterExtract` |
+| `onHudRender` | `RenderGuiEvent.Post` | `HudRenderCallback` / `HudElementRegistry` |
+| `onMousePressed` / `Released` / `Scrolled` | `ScreenEvent.Mouse*.Pre` + `setCanceled` | `ScreenMouseEvents.allow*` + `return false` |
+| `onMouseDragged` | `ScreenEvent.MouseDragged.Pre` | reconstructed — see below |
+
+A bridge per loader (`platform/neoforge/NeoForgeBridge`, `platform/fabric/FabricBridge`)
+subscribes to its own events and forwards. Both are deliberately dumb: anything resembling
+a decision belongs one level down, where the other loader gets it for free. Two thin
+bridges were chosen over a cross-loader abstraction layer such as Architectury precisely
+because the surface is this small — and because such a layer would be a runtime dependency
+the player has to install, which this mod does not have.
+
+Three places absorb a genuine asymmetry between the loaders.
+
+**Player chat cannot be modified through the Fabric API.** `ClientReceiveMessageEvents`
+has `MODIFY_GAME` for system messages but deliberately no `MODIFY_CHAT`: rewriting a
+signed message would break its signature chain. The documented way round is to cancel
+through `ALLOW_CHAT` and add the new message yourself, which is what `FabricChatSink`
+does. The one thing the callback withholds is the `GuiMessageTag` — the "not secure" /
+"modified" indicator vanilla draws beside the line — but it does not have to be
+approximated: `ChatTrustLevel.evaluate` is public and takes exactly what the callback
+provides, so the tag is the one vanilla would have attached (evaluated against the
+*original* message, as vanilla does). This path is only taken for messages the mod
+actually rewrote: `ClientHooks.onChatReceived` returns the **same instance** when nothing
+matched, and the bridge leaves those to vanilla untouched. `ClientHooksTest` pins that
+identity, because losing it would push every ordinary chat line through re-injection.
+
+**Fabric has no drag event before 1.21.8.** `ScreenMouseEvents.allowMouseDrag` arrived in
+1.21.8; dragging is how windows are moved and resized, so it is not optional. Rather than
+ship a mixin for the three versions below that, `FabricBridge` reconstructs the drag: it
+tracks whether a button is down (from the press/release hooks, which every version has)
+and feeds the cursor position from the render hook. This is not a downgrade — vanilla
+dispatches drags from the GLFW cursor callback, which the game polls once per frame, so a
+real drag event fires at most once per frame either way. The reconstruction has the same
+resolution, works identically on all seven versions, and keeps the mod mixin-free.
+
+**The API had no loader-neutral extension point.** `MediaSourceRegistrationEvent` used to
+extend NeoForge's `Event` and be posted on the mod bus; Fabric has no bus to post it on.
+It is now a plain object handed to `MediaSourceProvider`s, which the loader discovers its
+own way — a static registry on `LiasMediaPlayerApi` (both loaders) plus the
+`liasmediaplayer:sources` entrypoint (Fabric). `PlaybackEvent` moved the same way, onto
+`PlaybackEvents`. That is the breaking half of the API 2.0.0 bump.
+
+Fabric API's own version churn is handled the way `gui/` handles vanilla's: one seam per
+concern, each holding a single guard — `FabricHud`, `FabricScreens`, `FabricKeyMappings`,
+`FabricChatSink`. Three of the four break at **26.1**, the same threshold as the vanilla
+GUI rewrite. The exception is worth remembering: the screen mouse events folded their
+loose `(x, y, button)` parameters into a `MouseButtonEvent` record at **1.21.11**, not
+26.1 — the one Fabric threshold that does not line up with a vanilla one.
 
 ## How a link becomes media
 
-Three `@EventBusSubscriber` chat handlers rewrite incoming chat (all through one
-shared rewriter), and a single overlay coordinator does all the drawing and input.
+Three chat rules rewrite incoming chat (all through one shared rewriter), and a single
+overlay coordinator does all the drawing and input. Neither knows which loader delivered
+the message or the mouse click.
 
 ### 1. Rewrite incoming chat
 
-`ImageChatHandler`, `VideoChatHandler` and `AudioChatHandler` subscribe to
-`ClientChatReceivedEvent.System` / `.Player`. Each handler hands the message to the
+`ClientHooks.onChatReceived` runs the message through `ImageChatHandler`,
+`VideoChatHandler` and `AudioChatHandler` in turn. Each hands the message to the
 shared `ChatLinkRewriter` together with a small `LinkRewrite` rule describing what
 it claims and how it styles a match. The rewriter walks the message
 component-by-component (preserving inherited styles); for every URL matching
@@ -232,18 +327,20 @@ untouched.
 All on-screen windows — pinned `ImageWindow`s and `VideoWindow`s — live in one
 stack ordered by `MediaWindow.zOrder()`:
 
-- **On the chat screen** (`ScreenEvent.Render.Post` over a `ChatScreen`): every
+- **On the chat screen** (`ClientHooks.onScreenRender` over a `ChatScreen`): every
   visible window is drawn back-to-front, each in its own depth band, with the text
   buffer flushed after each one so a front window fully occludes the one behind it
   (content *and* batched text like the seek time / volume pop-up). Then the
   "reveal hidden videos" button and finally the image hover preview
   (`ImageHoverPreview`) are drawn on top. Each window's default cascade position
   comes from its `anchorGroup()`, so images and videos fan out independently.
-- **During gameplay** (`RenderGuiEvent.Post`, no screen open): the same windows are
+- **During gameplay** (`ClientHooks.onHudRender`, no screen open): the same windows are
   drawn on the HUD as **picture only** (no controls), so a clip keeps showing while
   you play.
-- **Mouse input** (`ScreenEvent.MouseButtonPressed/Released/Dragged/Scrolled`) is
+- **Mouse input** (the four `ClientHooks.onMouse*` hooks) is
   tested **top-first**, so only the front-most window under the cursor reacts;
+  each hook returns `true` when it consumed the input, which each bridge translates
+  into its loader's way of saying "the screen must not see this";
   clicking a window raises it (`bringToFront`), and the close button calls the
   window's polymorphic `close()` (no `instanceof` needed). If no window consumes the
   click but the cursor is over a media link, the overlay asks `MediaSources.kindOf`
@@ -262,7 +359,7 @@ only while at least one video/audio player is hidden.
 
 ### 3. Cleanup
 
-On `ClientPlayerNetworkEvent.LoggingOut`, the image side (`ImageChatHandler`)
+On `ClientHooks.onDisconnect`, the image side (`ImageChatHandler`)
 disposes pinned windows and clears `ImagePreviewCache`; the video side
 (`VideoChatHandler`) disposes all players and clears `VideoThumbnailCache` /
 `MediaTitleCache`;
@@ -616,8 +713,13 @@ clipboard import of a single playlist also takes its name from YouTube.
 ## Keybinds (`input/`)
 
 `ModKeybinds` declares four `KeyMapping`s — play/pause, next, previous, open playlists —
-under a "Lia's Media Player" category, registered on the **mod** event bus via
-`RegisterKeyMappingsEvent`. They are **unbound by default** (so they can never clash with
+under a "Lia's Media Player" category, and exposes them as `all()`. Registering them with
+the game is each loader bridge's job (`RegisterKeyMappingsEvent` on NeoForge,
+`KeyBindingHelper`/`KeyMappingHelper` on Fabric), so adding a binding here is all that is
+needed for both. 1.21.11 turned the category from a bare translation key into a registered
+object; NeoForge wants modded ones declared before the mappings that use them, while
+Fabric derives the grouping from the mapping itself and needs no registration.
+They are **unbound by default** (so they can never clash with
 a vanilla or other-mod key out of the box; the player assigns them in *Options →
 Controls*). `KeybindHandler` polls them each client tick with `consumeClick()` and drives
 the front-most audio bar (or opens `PlaylistScreen`); an unbound binding simply never
@@ -649,39 +751,51 @@ audio bars fan out without landing on top of one another.
 
 ## Building & installing
 
-This is a NeoForge mod built with **ModDevGradle**, with
-[Stonecutter](https://stonecutter.kikugie.dev) compiling the single `src/` tree
-against every supported Minecraft version — no Shadow/shading and no bundled
-natives, so the produced jar is small. From the project root:
+[Stonecutter](https://stonecutter.kikugie.dev) compiles the single `src/` tree into
+fourteen jars — every supported Minecraft version times both mod loaders — with
+**ModDevGradle** on the NeoForge side and **Fabric Loom** on the Fabric side. No
+Shadow/shading and no bundled natives, so each produced jar is small. From the project
+root:
 
 ```
-./gradlew buildAll            # builds every Minecraft version
-./gradlew :1.21.1:build       # builds one version into versions/1.21.1/build/libs/
-./gradlew :1.21.1:runClient   # launches a dev client for that version
+./gradlew buildAll                   # builds all 14 targets
+./gradlew buildNeoforge / buildFabric  # one loader, every Minecraft version
+./gradlew :1.21.1-neoforge:build     # into versions/1.21.1-neoforge/build/libs/
+./gradlew :1.21.1-fabric:runClient   # launches a dev client for that target
 ```
+
+Subprojects are named `<minecraft-version>-<loader>`; the matrix is declared once, in
+`settings.gradle.kts`. Loom is applied through `dev.kikugie.loom-back-compat`, which picks
+`fabric-loom-remap` for the obfuscated versions and `fabric-loom` for 26+ (which ship
+unobfuscated). Both loaders read the same per-version property table and each takes the
+keys it needs. `buildAll` spans two Java toolchains *and* two modding toolchains, so it is
+slow — prefer a single target while iterating.
 
 ### Supported versions
 
 <!-- supported_versions -->
-| Minecraft | NeoForge | Java |
-|---|---|---|
-| `1.21.1` *(primary)* | `21.1.230` | 21 |
-| `1.21.4` | `21.4.157` | 21 |
-| `1.21.5` | `21.5.98` | 21 |
-| `1.21.8` | `21.8.54` | 21 |
-| `1.21.11` | `21.11.45` | 21 |
-| `26.1.2` | `26.1.2.97` | 25 |
-| `26.2` | `26.2.0.64` | 25 |
+| Minecraft | NeoForge | Fabric API | Java |
+|---|---|---|---|
+| `1.21.1` *(primary)* | `21.1.230` | `0.116.15+1.21.1` | 21 |
+| `1.21.4` | `21.4.157` | `0.119.4+1.21.4` | 21 |
+| `1.21.5` | `21.5.98` | `0.128.2+1.21.5` | 21 |
+| `1.21.8` | `21.8.54` | `0.136.1+1.21.8` | 21 |
+| `1.21.11` | `21.11.45` | `0.141.6+1.21.11` | 21 |
+| `26.1.2` | `26.1.2.97` | `0.155.2+26.1.2` | 25 |
+| `26.2` | `26.2.0.64` | `0.158.0+26.2` | 25 |
 <!-- /supported_versions -->
 
-Generated by `./gradlew updateDocs` from `stonecutter.properties.toml`. The Java
-column is the toolchain that version compiles against, taken from the Minecraft
-version manifest — 26.1 is where Mojang moved from Java 21 to Java 25, so a full
-`buildAll` needs both installed (or lets Gradle provision the missing one).
+Generated by `./gradlew updateDocs` from `stonecutter.properties.toml`. Every row is
+built for **both** loaders. The Java column is the toolchain that version compiles
+against, taken from the Minecraft version manifest — 26.1 is where Mojang moved from
+Java 21 to Java 25, so a full `buildAll` needs both installed (or lets Gradle provision
+the missing one). The Fabric API column is the version built against; ModMenu is an
+optional compile-only dependency, also pinned per version in the same file.
 
-Install by dropping the built jar from `versions/<version>/build/libs/` into the **client's** `mods/`
-folder, alongside the NeoForge build for your Minecraft version from the table
-above. It is a client-only mod: do not install it on a server, where it does nothing.
+Install by dropping the built jar from `versions/<target>/build/libs/` into the
+**client's** `mods/` folder, alongside NeoForge or Fabric Loader for your Minecraft
+version from the table above — plus **Fabric API** on Fabric, without which the mod will
+not load. It is a client-only mod: do not install it on a server, where it does nothing.
 
 The first time you play a video, the mod downloads `ffmpeg`/`ffprobe` and (for
 YouTube) `yt-dlp` into `<gamedir>/liasmediaplayer/bin/`. If that automatic download
@@ -706,9 +820,8 @@ for what the mod does in-game.
   change. Keep the `IMAGE`, `VIDEO` and `AUDIO` sources **disjoint** so they compose on
   the same message. If an engine needs to single out the new source (as both engines do
   for YouTube), expose a small `static` predicate on it.
-  External mods add sources through the API: `MediaPlayerAPI.registerSource()` or
-  the `MediaSourceRegistrationEvent`. See `API-DOCUMENTATION.md` for the developer
-  guide.
+  External mods add sources through the API: `MediaPlayerAPI.registerSource()` or a
+  `MediaSourceProvider`. See `API-DOCUMENTATION.md` for the developer guide.
 - **Shared volume.** There is one level for everything in `media.Volume`. Both
   `VideoPlayer` and `AudioPlayer` read/write it and apply it via `Volume.apply`; don't
   reintroduce a per-engine volume field.
@@ -726,10 +839,22 @@ for what the mod does in-game.
 - **Playlists.** `PlaylistStore` is the only thing that touches `playlists.json`; mutate
   a `Playlist` then call `PlaylistStore.save()`. The JSON schema is the `Playlist` field
   names (`name`, `urls`) — keep them stable or migrate.
-- **Keybinds.** Add a binding by declaring a `KeyMapping` in `ModKeybinds`, registering
-  it in `onRegister`, handling it in `KeybindHandler`, and adding its name to the lang
-  files. New bindings should stay unbound by default (`InputConstants.UNKNOWN`) to avoid
-  clashes.
+- **Keybinds.** Add a binding by declaring a `KeyMapping` in `ModKeybinds`, adding it to
+  `ModKeybinds.all()`, handling it in `KeybindHandler`, and adding its name to the lang
+  files. Both loader bridges register whatever `all()` returns, so nothing loader-side
+  needs touching. New bindings should stay unbound by default (`InputConstants.UNKNOWN`)
+  to avoid clashes.
+- **Loader-agnostic by default.** Nothing outside `com.lia.mediaplayer.platform` may
+  import `net.neoforged` or `net.fabricmc` — that is what lets one source tree serve both
+  loaders. When a feature needs a new moment from the game, add a hook to `ClientHooks`
+  and wire it into **both** bridges rather than subscribing to a loader event from `gui`,
+  `chat` or `input`. A whole file that is one loader's belongs in `platform/<loader>/`,
+  which each buildscript excludes from the other's compilation; `//? if fabric` guards are
+  for a few lines inside a *shared* file and should stay rare.
+- **`ClientHooks.onChatReceived` must return its argument unchanged when nothing
+  matched.** The Fabric bridge uses that identity to decide whether to leave a message to
+  vanilla or cancel and re-inject it; a defensive copy would send every ordinary chat line
+  through re-injection. `ClientHooksTest` pins it.
 - **GUI & Internationalization.** Any new UI text elements must be internationalized using `Component.translatable()`
   and added to all supported language files (e.g., `assets/liasmediaplayer/lang/en_us.json` and `fr_fr.json`). Do not
   use hardcoded `Component.literal()` strings for UI text.

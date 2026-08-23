@@ -1,13 +1,14 @@
 package com.lia.mediaplayer;
 
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.MediaSourceProvider;
 import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
 import com.lia.mediaplayer.tools.MediaBinaries;
 import com.mojang.logging.LogUtils;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Replaces image links with a hoverable
@@ -17,22 +18,36 @@ import org.slf4j.Logger;
  * <p>The player shells out to two external command-line tools — yt-dlp (to
  * resolve YouTube links) and ffmpeg (to decode video/audio). Rather than
  * bundling them in the jar, we download the official builds into the game
- * folder on first launch; see {@link MediaBinaries}. Kicking that off from the
- * mod constructor means the binaries are usually ready before the first link is
+ * folder on first launch; see {@link MediaBinaries}. Kicking that off from
+ * startup means the binaries are usually ready before the first link is
  * clicked, instead of being fetched lazily mid-feature.</p>
+ *
+ * <p>This class is the mod's <em>loader-neutral</em> startup: no {@code @Mod},
+ * no {@code ClientModInitializer}, no event bus. Each loader has a small bridge
+ * in {@code com.lia.mediaplayer.platform} that owns its entry point and calls
+ * {@link #init()} and {@link #registerExternalSources(List)} at the right moment.</p>
  */
-@Mod(value = LiasMediaPlayer.MODID, dist = Dist.CLIENT)
-public class LiasMediaPlayer {
-    // The value here should match an entry in the META-INF/neoforge.mods.toml file
+public final class LiasMediaPlayer {
+    // The value here should match an entry in the loader metadata (neoforge.mods.toml
+    // and fabric.mod.json).
     public static final String MODID = "liasmediaplayer";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public LiasMediaPlayer(IEventBus modEventBus, net.neoforged.fml.ModContainer modContainer) {
-        modContainer.registerExtensionPoint(net.neoforged.neoforge.client.gui.IConfigScreenFactory.class, (mc, parent) -> new com.lia.mediaplayer.gui.ConfigScreen(parent));
+    private LiasMediaPlayer() {
+    }
 
-        // Create the global context which holds all managers
+    /**
+     * Builds the composition root, publishes it as the API singleton, and starts the
+     * background work that should be done before the player clicks anything.
+     *
+     * <p>Called once, from the loader bridge's entry point.</p>
+     *
+     * @return the freshly created context, already published via
+     *         {@link LiasMediaPlayerApi#setInstance}
+     */
+    public static MediaPlayerContext init() {
         MediaPlayerContext context = new MediaPlayerContext();
-        com.lia.mediaplayer.api.LiasMediaPlayerApi.setInstance(context);
+        LiasMediaPlayerApi.setInstance(context);
 
         // Install yt-dlp and ffmpeg in the background so they are ready when needed.
         MediaBinaries.installAllAsync();
@@ -40,17 +55,35 @@ public class LiasMediaPlayer {
         // Load persisted volume.
         context.getVolumeManager().load();
 
-        // Fire the source registration event during client setup so addons can
-        // register their custom MediaSources.
-        modEventBus.addListener(this::onClientSetup);
+        return context;
     }
 
-    private void onClientSetup(FMLClientSetupEvent event) {
+    /**
+     * Runs every addon-supplied {@link MediaSourceProvider} and applies whatever sources
+     * they contribute. Called during client setup, once the loader has had a chance to
+     * discover them.
+     *
+     * @param discovered providers the loader found by its own mechanism (a Fabric
+     *                   entrypoint, for instance); those registered through
+     *                   {@link LiasMediaPlayerApi#registerSourceProvider} are added to
+     *                   these and work on either loader
+     */
+    public static void registerExternalSources(List<MediaSourceProvider> discovered) {
+        List<MediaSourceProvider> providers = new ArrayList<>(LiasMediaPlayerApi.sourceProviders());
+        providers.addAll(discovered);
+
         MediaSourceRegistrationEvent registrationEvent = new MediaSourceRegistrationEvent();
-        // Post to the mod event bus; addons that depend on the API listen for this.
-        net.neoforged.fml.ModLoader.postEventWrapContainerInModOrder(registrationEvent);
-        // Apply the registered sources.
-        MediaPlayerContext context = (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        for (MediaSourceProvider provider : providers) {
+            try {
+                provider.registerSources(registrationEvent);
+            } catch (RuntimeException e) {
+                // One broken addon must not stop the others, nor the mod itself.
+                LOGGER.error("Media source provider {} threw while registering",
+                        provider.getClass().getName(), e);
+            }
+        }
+
+        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
         registrationEvent.getRegistered().forEach(source -> context.getMediaSources().register(source));
         LOGGER.info("Registered {} external media source(s) via API",
                 registrationEvent.getRegistered().size());

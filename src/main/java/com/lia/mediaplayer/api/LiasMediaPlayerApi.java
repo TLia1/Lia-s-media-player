@@ -4,35 +4,40 @@
  */
 package com.lia.mediaplayer.api;
 
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * The API mod entry point. This class exists solely so that NeoForge shows
- * "Lia's Media Player API" as a separate entry in the Mods menu — it carries
- * no logic of its own. All public API surfaces live in this package
- * ({@code com.lia.mediaplayer.api}).
+ * The API's front door: the live {@link IMediaPlayerAPI} instance, and the place addons
+ * register their {@link MediaSourceProvider}s. All public API surfaces live in this
+ * package ({@code com.lia.mediaplayer.api}).
  *
  * <p>Other mods should <b>only depend on classes in this package</b> and never
  * import anything from {@code com.lia.mediaplayer} directly.</p>
+ *
+ * <p>Nothing here mentions a mod loader. The NeoForge {@code @Mod} entry that used to
+ * live on this class — the one that gives the API its own line in the Mods menu — moved
+ * to {@code platform.neoforge}, so that this package compiles unchanged on Fabric.</p>
  */
-@Mod(value = LiasMediaPlayerApi.API_ID, dist = Dist.CLIENT)
 public class LiasMediaPlayerApi {
     /**
-     * The mod ID for the API entry in neoforge.mods.toml.
+     * The mod ID for the API entry in the loader metadata.
      */
     public static final String API_ID = "liasmediaplayerapi";
+
+    /**
+     * Providers registered before the mod collected them, plus any registered after
+     * (which are applied immediately). Copy-on-write: addons register from their mod
+     * constructor or client initializer, which is not the thread that reads this.
+     */
+    private static final List<MediaSourceProvider> PROVIDERS = new CopyOnWriteArrayList<>();
 
     /**
      * Written once on the mod-construction thread and read from the render thread,
      * the decode threads and the IO pool, so it has to be safely published.
      */
     private static volatile IMediaPlayerAPI instance;
-
-    public LiasMediaPlayerApi(IEventBus modEventBus) {
-        // The API mod has no initialization logic of its own.
-    }
 
     /**
      * Retrieves the active Media Player API instance.
@@ -65,5 +70,29 @@ public class LiasMediaPlayerApi {
      */
     public static void setInstance(IMediaPlayerAPI api) {
         instance = api;
+    }
+
+    /**
+     * Registers a provider of custom {@link MediaSource}s. Call this from your mod's
+     * entry point; it works identically on NeoForge and Fabric, and may be called before
+     * Lia's Media Player has finished initializing.
+     *
+     * <p>Fabric addons may use the {@code liasmediaplayer:sources} entrypoint instead —
+     * see {@link MediaSourceProvider}.</p>
+     *
+     * @since API 2.0.0
+     */
+    public static void registerSourceProvider(MediaSourceProvider provider) {
+        if (provider != null) {
+            PROVIDERS.add(provider);
+        }
+    }
+
+    /**
+     * Every provider registered so far (unmodifiable). Called by the mod during client
+     * setup; addons have no reason to.
+     */
+    public static List<MediaSourceProvider> sourceProviders() {
+        return Collections.unmodifiableList(PROVIDERS);
     }
 }

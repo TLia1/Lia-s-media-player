@@ -62,5 +62,8 @@
   "chat.liasmediaplayer.playlist.loading": "Reading the YouTube playlist...",
   "chat.liasmediaplayer.playlist.loaded": "Queued %s tracks from the YouTube playlist",
   "chat.liasmediaplayer.playlist.failed": "Could not read that YouTube playlist",
-  "error.liasmediaplayer.ytdlp_failed": "No youtube video was foud with this url"
+  "error.liasmediaplayer.ytdlp_failed": "No youtube video was foud with this url",
+  "command.liasmediaplayer.invalid_type": "Invalid media type: %s",
+  "command.liasmediaplayer.unsupported_url": "Unsupported media URL.",
+  "command.liasmediaplayer.kind_mismatch": "Cannot play a %s as %s."
 }

@@ -5,34 +5,26 @@
 package com.lia.mediaplayer.api.event;
 
 import com.lia.mediaplayer.api.MediaSource;
-import net.neoforged.bus.api.Event;
-import net.neoforged.fml.event.IModBusEvent;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Fired on the <b>mod event bus</b> during Lia's Media Player initialization to let
- * other mods register custom {@link MediaSource}s.
+ * Handed to every registered {@link com.lia.mediaplayer.api.MediaSourceProvider} during
+ * Lia's Media Player initialization so it can contribute custom {@link MediaSource}s.
  *
- * <p>Example usage in an addon mod:</p>
- * <pre>{@code
- * @Mod("myaddon")
- * public class MyAddon {
- *     public MyAddon(IEventBus modBus) {
- *         modBus.addListener(this::onRegisterSources);
- *     }
- *
- *     private void onRegisterSources(MediaSourceRegistrationEvent event) {
- *         event.register(new MySoundCloudSource());
- *     }
- * }
- * }</pre>
+ * <p>This used to be a NeoForge mod-bus event. It is now a plain object, because the mod
+ * ships for two loaders and Fabric has no global event bus to post it on: the loader
+ * decides how providers are <em>discovered</em>, and this type is what they are all
+ * handed once discovered. See {@link com.lia.mediaplayer.api.MediaSourceProvider} for
+ * how to register one on each loader.</p>
  *
  * <p>This is part of the <b>public API</b>.</p>
+ *
+ * @since API 2.0.0 — no longer extends {@code net.neoforged.bus.api.Event}
  */
-public class MediaSourceRegistrationEvent extends Event implements IModBusEvent {
+public class MediaSourceRegistrationEvent {
 
     private final List<MediaSource> registered = new ArrayList<>();
 

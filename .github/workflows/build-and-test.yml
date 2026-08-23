@@ -10,40 +10,54 @@ permissions:
   contents: read
 
 jobs:
-  # The version list lives in settings.gradle.kts and nowhere else. Parsing it
-  # here keeps the matrix from silently drifting out of date — a target added to
-  # Stonecutter but forgotten here would just stop being built, with a green
+  # The build matrix lives in settings.gradle.kts and nowhere else. Parsing it
+  # here keeps this workflow from silently drifting out of date — a target added
+  # to Stonecutter but forgotten here would just stop being built, with a green
   # tick. This runs without Gradle, so it costs seconds rather than a minute.
+  #
+  # Each `match("<mc>", "<loader>", ...)` line expands to one subproject per
+  # loader, named "<mc>-<loader>" — the same expansion settings.gradle.kts does.
+  # The count is asserted below, so a change of shape that still parses (say, a
+  # line losing a loader) fails loudly instead of quietly building less.
   targets:
     name: Collect targets
     runs-on: ubuntu-latest
     outputs:
-      versions: ${{ steps.parse.outputs.versions }}
+      targets: ${{ steps.parse.outputs.targets }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Parse the Stonecutter version list
+      - name: Parse the Stonecutter build matrix
         id: parse
         run: |
-          versions=$(sed -n 's/.*versions(\(.*\)).*/\1/p' settings.gradle.kts \
-            | tr -d ' "' | tr ',' '\n' | grep . | jq -R . | jq -sc .)
-          if [ "$versions" = "[]" ] || [ -z "$versions" ]; then
-            echo "::error::Could not parse the version list from settings.gradle.kts"
+          expanded=$(grep -oE '^[[:space:]]*match\("[^"]+"(,[[:space:]]*"[^"]+")+\)' settings.gradle.kts \
+            | sed -e 's/.*match(//' -e 's/)$//' -e 's/"//g' -e 's/,[[:space:]]*/,/g' \
+            | awk -F, 'NF > 1 { for (i = 2; i <= NF; i++) print $1 "-" $i }')
+          targets=$(printf '%s\n' "$expanded" | grep . | jq -R . | jq -sc .)
+          count=$(printf '%s\n' "$expanded" | grep -c .)
+          if [ "$targets" = "[]" ] || [ -z "$targets" ]; then
+            echo "::error::Could not parse the build matrix from settings.gradle.kts"
             exit 1
           fi
-          echo "versions=$versions" >> "$GITHUB_OUTPUT"
-          echo "Building: $versions"
+          # Every Minecraft version is built for both loaders; an odd count means a
+          # match() line was parsed only in part.
+          if [ $((count % 2)) -ne 0 ]; then
+            echo "::error::Parsed $count targets from settings.gradle.kts, expected an even number (one per loader)"
+            exit 1
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "Building: $targets"
 
   build:
-    name: Build ${{ matrix.version }}
+    name: Build ${{ matrix.target }}
     needs: targets
     runs-on: ubuntu-latest
     strategy:
       # One target failing should not hide the state of the others.
       fail-fast: false
       matrix:
-        version: ${{ fromJSON(needs.targets.outputs.versions) }}
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
 
     steps:
       - name: Checkout repository
@@ -68,16 +82,16 @@ jobs:
       # Gradle does not look at setup-java's install locations on its own, so
       # point it at both explicitly. Without this it would fall back to
       # downloading a toolchain through the foojay resolver on every 26.x job.
-      - name: Build and test ${{ matrix.version }}
+      - name: Build and test ${{ matrix.target }}
         run: |
           chmod +x gradlew
-          ./gradlew ":${{ matrix.version }}:build" ":${{ matrix.version }}:test" \
+          ./gradlew ":${{ matrix.target }}:build" ":${{ matrix.target }}:test" \
             -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
-      - name: Upload ${{ matrix.version }} jar
+      - name: Upload ${{ matrix.target }} jar
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: mod-jar-${{ matrix.version }}
-          path: versions/${{ matrix.version }}/build/libs/*.jar
+          name: mod-jar-${{ matrix.target }}
+          path: versions/${{ matrix.target }}/build/libs/*.jar
           retention-days: 14

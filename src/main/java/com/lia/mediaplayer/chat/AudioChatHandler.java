@@ -1,14 +1,8 @@
 package com.lia.mediaplayer.chat;
 
-import com.lia.mediaplayer.LiasMediaPlayer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 /**
  * Rewrites incoming chat so direct audio links become a green, underlined
@@ -21,7 +15,6 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
  * style). Audio and video sources are disjoint, so this composes on the same message as
  * {@link VideoChatHandler} and {@link ImageChatHandler} without fighting over a link.</p>
  */
-@EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class AudioChatHandler {
 
     /**
@@ -53,18 +46,16 @@ public final class AudioChatHandler {
     private AudioChatHandler() {
     }
 
-    @SubscribeEvent
-    public static void onSystemChatReceived(ClientChatReceivedEvent.System event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), AUDIO_LINKS));
+    /**
+     * Rewrites one incoming chat message. Loader-neutral: the bridge that owns the
+     * loader's chat event calls this and puts the result back.
+     */
+    public static Component rewrite(Component message) {
+        return ChatLinkRewriter.rewrite(message, AUDIO_LINKS);
     }
 
-    @SubscribeEvent
-    public static void onPlayerChatReceived(ClientChatReceivedEvent.Player event) {
-        event.setMessage(ChatLinkRewriter.rewrite(event.getMessage(), AUDIO_LINKS));
-    }
-
-    @SubscribeEvent
-    public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
+    /** Drops every open audio bar when leaving a world. */
+    public static void onDisconnect() {
         com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
         if (ctx != null) {
             ctx.getAudioManager().disposeAll();

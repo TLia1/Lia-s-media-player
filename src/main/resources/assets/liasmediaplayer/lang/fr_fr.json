@@ -62,5 +62,8 @@
   "chat.liasmediaplayer.playlist.loading": "Lecture de la playlist YouTube...",
   "chat.liasmediaplayer.playlist.loaded": "%s pistes ajoutées depuis la playlist YouTube",
   "chat.liasmediaplayer.playlist.failed": "Impossible de lire cette playlist YouTube",
-  "error.liasmediaplayer.ytdlp_failed": "Aucune video youtube n'a été trouvé avec cette url"
+  "error.liasmediaplayer.ytdlp_failed": "Aucune video youtube n'a été trouvé avec cette url",
+  "command.liasmediaplayer.invalid_type": "Type de média invalide : %s",
+  "command.liasmediaplayer.unsupported_url": "URL de média non prise en charge.",
+  "command.liasmediaplayer.kind_mismatch": "Impossible de lire un %s en tant que %s."
 }

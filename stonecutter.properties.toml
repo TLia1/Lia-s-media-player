@@ -17,12 +17,22 @@ mod.name = "Lia's Media Player"
 mod.group = "com.lia.mediaplayer"
 # The mod version. See https://semver.org/
 mod.version = "1.5.0"
-# Version of the public API shipped as a second [[mods]] entry in the same jar.
-mod.api_version = "1.4.0"
+# Version of the public API shipped as a second [[mods]] entry in the same jar
+# (NeoForge) / provided id (Fabric). Bumped to 2.0.0 when the API stopped extending
+# NeoForge's event bus types so that the same addon code compiles on both loaders.
+mod.api_version = "2.0.0"
 # The license of the mod. Review your options at https://choosealicense.com/.
 mod.license = "All Rights Reserved"
 # The loader version range can only use the major version of FML as bounds.
 mod.loader_version_range = "[1,)"
+
+# ---------------------------------------------------------------------------
+# Loader versions shared by every Minecraft version
+# ---------------------------------------------------------------------------
+# The minimum Fabric Loader the mod declares in fabric.mod.json. The Loom version the
+# Fabric subprojects build with is `loomx.loom_version` in gradle.properties, because
+# the plugin that reads it runs before this file is loaded.
+deps.fabric_loader = "0.19.3"
 
 # ---------------------------------------------------------------------------
 # Per-version dependencies
@@ -37,6 +47,15 @@ mod.loader_version_range = "[1,)"
 # `deps.java` is the Java release Mojang ships to players for that Minecraft
 # version, read from the version manifest's `javaVersion.majorVersion`. It is
 # per-version because 26.1 moved from Java 21 to Java 25.
+#
+# Both loaders read from the same per-version table and each picks the keys it needs;
+# there is no `[fabric."1.21.1"]` nesting on purpose. Stonecutter flattens these tables
+# by stripping tag segments from the property path, and a `neoforge` tag would also
+# strip the `neoforge` in `deps.neoforge` — so the loader is encoded in the key name
+# rather than in the table name.
+#
+# `deps.minecraft_range` is a Maven range for neoforge.mods.toml;
+# `deps.minecraft_range_fabric` is the same bound in Fabric's own syntax.
 
 ["1.21.1"]
 deps.minecraft = "1.21.1"
@@ -44,6 +63,9 @@ deps.minecraft_range = "[1.21.1]"
 deps.neoforge = "21.1.230"
 deps.parchment = "1.21.1:2024.11.17"
 deps.java = 21
+deps.minecraft_range_fabric = "1.21.1"
+deps.fabric_api = "0.116.15+1.21.1"
+deps.modmenu = "11.0.4"
 
 ["1.21.4"]
 deps.minecraft = "1.21.4"
@@ -51,6 +73,9 @@ deps.minecraft_range = "[1.21.4]"
 deps.neoforge = "21.4.157"
 deps.parchment = "1.21.4:2025.03.23"
 deps.java = 21
+deps.minecraft_range_fabric = "1.21.4"
+deps.fabric_api = "0.119.4+1.21.4"
+deps.modmenu = "13.0.4"
 
 ["1.21.5"]
 deps.minecraft = "1.21.5"
@@ -58,6 +83,9 @@ deps.minecraft_range = "[1.21.5]"
 deps.neoforge = "21.5.98"
 deps.parchment = "1.21.5:2025.06.15"
 deps.java = 21
+deps.minecraft_range_fabric = "1.21.5"
+deps.fabric_api = "0.128.2+1.21.5"
+deps.modmenu = "14.0.2"
 
 ["1.21.8"]
 deps.minecraft = "1.21.8"
@@ -65,6 +93,9 @@ deps.minecraft_range = "[1.21.8]"
 deps.neoforge = "21.8.54"
 deps.parchment = "1.21.8:2025.09.14"
 deps.java = 21
+deps.minecraft_range_fabric = "1.21.8"
+deps.fabric_api = "0.136.1+1.21.8"
+deps.modmenu = "15.0.2"
 
 ["1.21.11"]
 deps.minecraft = "1.21.11"
@@ -72,6 +103,9 @@ deps.minecraft_range = "[1.21.11]"
 deps.neoforge = "21.11.45"
 deps.parchment = "1.21.11:2025.12.20"
 deps.java = 21
+deps.minecraft_range_fabric = "1.21.11"
+deps.fabric_api = "0.141.6+1.21.11"
+deps.modmenu = "17.0.1-beta.1"
 
 # 26.1 is the first Minecraft version to require Java 25, and the first for
 # which Parchment publishes nothing — org.parchmentmc.data stops at 1.21.11.
@@ -81,6 +115,9 @@ deps.minecraft_range = "[26.1.2]"
 deps.neoforge = "26.1.2.97"
 deps.parchment = ""
 deps.java = 25
+deps.minecraft_range_fabric = "26.1.2"
+deps.fabric_api = "0.155.2+26.1.2"
+deps.modmenu = "18.0.0"
 
 ["26.2"]
 deps.minecraft = "26.2"
@@ -88,3 +125,6 @@ deps.minecraft_range = "[26.2,)"
 deps.neoforge = "26.2.0.64"
 deps.parchment = ""
 deps.java = 25
+deps.minecraft_range_fabric = ">=26.2"
+deps.fabric_api = "0.158.0+26.2"
+deps.modmenu = "20.0.1"

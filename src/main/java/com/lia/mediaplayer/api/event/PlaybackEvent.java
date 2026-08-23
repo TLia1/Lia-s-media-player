@@ -5,16 +5,14 @@
 package com.lia.mediaplayer.api.event;
 
 import com.lia.mediaplayer.api.PlaybackState;
-import net.neoforged.bus.api.Event;
 
 /**
- * Fired on the <b>NeoForge event bus</b> ({@code NeoForge.EVENT_BUS}) when
- * a playback state change occurs. Addons can listen to these events to implement
- * features like video/audio synchronization across a server.
+ * Describes a playback state change. Addons subscribe through {@link PlaybackEvents} to
+ * implement features like video/audio synchronization across a server.
  *
  * <p>Example usage:</p>
  * <pre>{@code
- * NeoForge.EVENT_BUS.addListener((PlaybackEvent event) -> {
+ * PlaybackEvents.register(event -> {
  *     if (event.getType() == PlaybackEvent.Type.STARTED) {
  *         // A new track started playing
  *         String url = event.getUrl();
@@ -22,9 +20,15 @@ import net.neoforged.bus.api.Event;
  * });
  * }</pre>
  *
+ * <p>This used to extend {@code net.neoforged.bus.api.Event} and be documented on
+ * {@code NeoForge.EVENT_BUS}. It is now a plain object dispatched by
+ * {@link PlaybackEvents}, so the same addon code works on both loaders.</p>
+ *
  * <p>This is part of the <b>public API</b>.</p>
+ *
+ * @since API 2.0.0 — no longer extends {@code net.neoforged.bus.api.Event}
  */
-public class PlaybackEvent extends Event {
+public class PlaybackEvent {
 
     /**
      * The type of playback event.

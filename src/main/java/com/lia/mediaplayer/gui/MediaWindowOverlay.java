@@ -1,6 +1,5 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.chat.ChatEvents;
@@ -10,27 +9,28 @@ import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * Single coordinator that renders and drives <em>all</em> media windows — the
  * pinned {@link ImageWindow}s and the {@link VideoWindow}s — as one stack.
+ *
+ * <p>Every method here is a plain function on vanilla types: no loader event object
+ * ever reaches this class. {@code platform.ClientHooks} is what the two loader bridges
+ * call, and it forwards to these. That split is what lets one window stack serve both
+ * NeoForge and Fabric, whose screen/HUD events have neither a common type nor a common
+ * shape — and it makes the window logic testable without booting the game.</p>
  */
-@EventBusSubscriber(modid = LiasMediaPlayer.MODID, value = Dist.CLIENT)
 public final class MediaWindowOverlay {
     private static final int BASE_Z = 300;
     private static final int Z_STEP = 5;
@@ -43,15 +43,20 @@ public final class MediaWindowOverlay {
     private MediaWindowOverlay() {
     }
 
-    @SubscribeEvent
-    public static void onScreenInit(ScreenEvent.Init.Post event) {
-        if (event.getScreen() instanceof PauseScreen) {
-            Screen screen = event.getScreen();
-            int screenWidth = screen.width;
-            event.addListener(Button.builder(Component.translatable("gui.liasmediaplayer.config_button"), (button) -> {
-                Screens.open(new ConfigScreen(screen));
-            }).bounds(screenWidth - 10 - 112, 10, 112, 20).build());
+    /**
+     * Adds the mod's config button to the pause menu.
+     *
+     * <p>{@code addWidget} is how the caller's loader attaches a widget to an
+     * already-initialised screen — a NeoForge event method on one side, a mutable widget
+     * list on the other — which is the only part of this that is not vanilla.</p>
+     */
+    public static void screenInit(Screen screen, Consumer<AbstractWidget> addWidget) {
+        if (!(screen instanceof PauseScreen)) {
+            return;
         }
+        addWidget.accept(Button.builder(Component.translatable("gui.liasmediaplayer.config_button"), (button) -> {
+            Screens.open(new ConfigScreen(screen));
+        }).bounds(screen.width - 10 - 112, 10, 112, 20).build());
     }
 
     private static MediaPlayerContext getContext() {
@@ -105,21 +110,15 @@ public final class MediaWindowOverlay {
         }
     }
 
-    @SubscribeEvent
-    public static void onScreenRender(ScreenEvent.Render.Post event) {
-        if (!(event.getScreen() instanceof ChatScreen)) {
+    /** Draws the window stack and its two overlay buttons over an open chat screen. */
+    public static void screenRender(Screen screen, GuiGraphics g, int mouseX, int mouseY) {
+        if (!(screen instanceof ChatScreen)) {
             return;
         }
-        int mouseX = event.getMouseX();
-        int mouseY = event.getMouseY();
-        int screenWidth = event.getScreen().width;
-        int screenHeight = event.getScreen().height;
-
-        renderAll(event.getGuiGraphics(), screenWidth, screenHeight, mouseX, mouseY, true);
-        renderPlaylistsButton(event.getGuiGraphics(), mouseX, mouseY);
-        renderRevealButton(event.getGuiGraphics(), mouseX, mouseY);
-        ImageHoverPreview.render(event.getGuiGraphics(), mouseX, mouseY,
-                screenWidth, screenHeight);
+        renderAll(g, screen.width, screen.height, mouseX, mouseY, true);
+        renderPlaylistsButton(g, mouseX, mouseY);
+        renderRevealButton(g, mouseX, mouseY);
+        ImageHoverPreview.render(g, mouseX, mouseY, screen.width, screen.height);
     }
 
     private static void renderPlaylistsButton(GuiGraphics g, int mouseX, int mouseY) {
@@ -170,41 +169,42 @@ public final class MediaWindowOverlay {
         GuiLayer.popAndFlush(g);
     }
 
-    @SubscribeEvent
-    public static void onRenderHud(RenderGuiEvent.Post event) {
+    /** Draws the window stack over the in-world HUD, without controls and without a cursor. */
+    public static void hudRender(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
         if (Screens.current() != null || noWindows()) {
             return;
         }
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
-        renderAll(event.getGuiGraphics(), screenWidth, screenHeight, -1, -1, false);
+        renderAll(g, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
+                -1, -1, false);
     }
 
     // ------------------------------------------------------------------
     // Mouse input (chat screen only)
     // ------------------------------------------------------------------
 
-    @SubscribeEvent
-    public static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (!(event.getScreen() instanceof ChatScreen)) {
-            return;
+    /**
+     * Routes a mouse press over the chat screen to the window stack, the two overlay
+     * buttons, or the media link under the cursor.
+     *
+     * @return {@code true} when the mod consumed the press and the screen must not see it
+     */
+    public static boolean mousePressed(Screen screen, double mouseX, double mouseY, int button) {
+        if (!(screen instanceof ChatScreen)) {
+            return false;
         }
         MediaPlayerContext ctx = getContext();
-        if (ctx == null) return;
+        if (ctx == null) return false;
 
-        if (event.getButton() == 0
-                && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), plBtnX, plBtnY, plBtnW, plBtnH)) {
+        if (button == 0 && MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH)) {
             Screens.open(new PlaylistScreen());
-            event.setCanceled(true);
-            return;
+            return true;
         }
-        if (event.getButton() == 0 && revealVisible
-                && MediaWindow.inRect(event.getMouseX(), event.getMouseY(), revealX, revealY, revealW, revealH)) {
+        if (button == 0 && revealVisible
+                && MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH)) {
             ctx.getVideoManager().revealAll();
             ctx.getAudioManager().revealAll();
-            event.setCanceled(true);
-            return;
+            return true;
         }
         List<MediaWindow> all = orderedWindows();
         for (int i = all.size() - 1; i >= 0; i--) {
@@ -212,110 +212,122 @@ public final class MediaWindowOverlay {
             if (!window.isVisible()) {
                 continue;
             }
-            MediaWindow.ClickResult result =
-                    window.mouseClicked(event.getMouseX(), event.getMouseY(), event.getButton());
+            MediaWindow.ClickResult result = window.mouseClicked(mouseX, mouseY, button);
             if (result == MediaWindow.ClickResult.CLOSE) {
                 window.close();
-                event.setCanceled(true);
-                return;
+                return true;
             }
             if (result == MediaWindow.ClickResult.HANDLED) {
                 window.bringToFront();
-                event.setCanceled(true);
-                return;
+                return true;
             }
         }
-        if (event.getButton() == 0) {
-            String url = hoveredUrl(event.getMouseX(), event.getMouseY());
-            if (url == null) {
-                return;
-            }
-            // A playlist page is not a media item: expand it first (a yt-dlp round-trip
-            // on a background thread), then queue everything it contains.
-            if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
-                playYouTubePlaylist(url, Keys.altDown());
-                event.setCanceled(true);
-                return;
-            }
-            MediaKind kind = ctx.getMediaSources().kindOf(url);
-            if (kind == MediaKind.VIDEO) {
-                if (Keys.altDown()) {
-                    if (Keys.shiftDown()) {
-                        ctx.getAudioManager().open(url).bringToFront();
-                    } else {
-                        ctx.getAudioManager().enqueue(url);
-                    }
-                } else if (Keys.shiftDown()) {
-                    ctx.getVideoManager().open(url).bringToFront();
-                } else {
-                    ctx.getVideoManager().enqueue(url);
-                }
-                event.setCanceled(true);
-            } else if (kind == MediaKind.AUDIO) {
+        if (button != 0) {
+            return false;
+        }
+        String url = hoveredUrl(mouseX, mouseY);
+        if (url == null) {
+            return false;
+        }
+        // A playlist page is not a media item: expand it first (a yt-dlp round-trip
+        // on a background thread), then queue everything it contains.
+        if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+            playYouTubePlaylist(url, Keys.altDown());
+            return true;
+        }
+        MediaKind kind = ctx.getMediaSources().kindOf(url);
+        if (kind == MediaKind.VIDEO) {
+            if (Keys.altDown()) {
                 if (Keys.shiftDown()) {
                     ctx.getAudioManager().open(url).bringToFront();
                 } else {
                     ctx.getAudioManager().enqueue(url);
                 }
-                event.setCanceled(true);
-            } else if (kind == MediaKind.IMAGE) {
-                ctx.getImageManager().show(url).bringToFront();
-                event.setCanceled(true);
+            } else if (Keys.shiftDown()) {
+                ctx.getVideoManager().open(url).bringToFront();
+            } else {
+                ctx.getVideoManager().enqueue(url);
             }
+            return true;
         }
+        if (kind == MediaKind.AUDIO) {
+            if (Keys.shiftDown()) {
+                ctx.getAudioManager().open(url).bringToFront();
+            } else {
+                ctx.getAudioManager().enqueue(url);
+            }
+            return true;
+        }
+        if (kind == MediaKind.IMAGE) {
+            ctx.getImageManager().show(url).bringToFront();
+            return true;
+        }
+        return false;
     }
 
-    @SubscribeEvent
-    public static void onMouseDragged(ScreenEvent.MouseDragged.Pre event) {
-        if (!(event.getScreen() instanceof ChatScreen) || noWindows()) {
-            return;
+    /**
+     * Moves or resizes whichever window is currently being dragged.
+     *
+     * @return {@code true} when a window took the drag
+     */
+    public static boolean mouseDragged(Screen screen, double mouseX, double mouseY) {
+        if (!(screen instanceof ChatScreen) || noWindows()) {
+            return false;
         }
         List<MediaWindow> ordered = orderedWindows();
         for (int i = ordered.size() - 1; i >= 0; i--) {
             MediaWindow window = ordered.get(i);
-            if (window.isVisible() && window.mouseDragged(event.getMouseX(), event.getMouseY())) {
-                event.setCanceled(true);
-                return;
+            if (window.isVisible() && window.mouseDragged(mouseX, mouseY)) {
+                return true;
             }
         }
+        return false;
     }
 
-    @SubscribeEvent
-    public static void onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-        if (!(event.getScreen() instanceof ChatScreen) || noWindows()) {
-            return;
+    /**
+     * Ends a drag or a resize.
+     *
+     * @return {@code true} when a window was being dragged
+     */
+    public static boolean mouseReleased(Screen screen) {
+        if (!(screen instanceof ChatScreen) || noWindows()) {
+            return false;
         }
         List<MediaWindow> ordered = orderedWindows();
         for (int i = ordered.size() - 1; i >= 0; i--) {
             MediaWindow window = ordered.get(i);
             if (window.isVisible() && window.mouseReleased()) {
-                event.setCanceled(true);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
-    @SubscribeEvent
-    public static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-        if (!(event.getScreen() instanceof ChatScreen) || noWindows()) {
-            return;
+    /**
+     * Sends a scroll to the window under the cursor (volume, seek, queue list).
+     *
+     * @return {@code true} when a window took the scroll
+     */
+    public static boolean mouseScrolled(Screen screen, double mouseX, double mouseY, double deltaY) {
+        if (!(screen instanceof ChatScreen) || noWindows()) {
+            return false;
         }
         List<MediaWindow> all = orderedWindows();
         for (int i = all.size() - 1; i >= 0; i--) {
             MediaWindow window = all.get(i);
-            if (window.mouseScrolled(event.getMouseX(), event.getMouseY(), event.getScrollDeltaY())) {
-                event.setCanceled(true);
-                return;
+            if (window.mouseScrolled(mouseX, mouseY, deltaY)) {
+                return true;
             }
         }
+        return false;
     }
 
     // ------------------------------------------------------------------
     // Lifecycle: close finished videos
     // ------------------------------------------------------------------
 
-    @SubscribeEvent
-    public static void onClientTick(ClientTickEvent.Post event) {
+    /** Closes players whose track ended and could not advance to a next one. */
+    public static void clientTick() {
         MediaPlayerContext ctx = getContext();
         if (ctx == null) return;
 
