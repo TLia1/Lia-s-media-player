@@ -2,6 +2,8 @@ package com.lia.mediaplayer.playlist;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class PlaylistTest {
@@ -82,5 +84,63 @@ class PlaylistTest {
 
         assertEquals("url1", playlist.urls().get(0));
         assertEquals("url2", playlist.urls().get(1));
+    }
+
+    // ------------------------------------------------------------------
+    // move: what a drag-and-drop reorder does
+    // ------------------------------------------------------------------
+
+    private static Playlist of(String... urls) {
+        Playlist playlist = new Playlist("Test");
+        for (String url : urls) {
+            playlist.add(url);
+        }
+        return playlist;
+    }
+
+    @Test
+    void move_DownwardsAccountsForTheGapTheEntryLeaves() {
+        Playlist playlist = of("a", "b", "c", "d");
+        // "put a in the gap before d", read against the list as it is now.
+        playlist.move(0, 3);
+        assertEquals(List.of("b", "c", "a", "d"), playlist.urls());
+    }
+
+    @Test
+    void move_UpwardsInsertsAtTheGapItself() {
+        Playlist playlist = of("a", "b", "c", "d");
+        playlist.move(3, 1);
+        assertEquals(List.of("a", "d", "b", "c"), playlist.urls());
+    }
+
+    @Test
+    void move_PastTheEndPutsTheEntryLast() {
+        Playlist playlist = of("a", "b", "c");
+        playlist.move(0, 3);
+        assertEquals(List.of("b", "c", "a"), playlist.urls());
+    }
+
+    @Test
+    void move_IntoItsOwnGapChangesNothing() {
+        Playlist playlist = of("a", "b", "c");
+        playlist.move(1, 1);
+        playlist.move(1, 2);
+        assertEquals(List.of("a", "b", "c"), playlist.urls());
+    }
+
+    @Test
+    void move_FromOutOfBoundsDoesNothing() {
+        Playlist playlist = of("a", "b");
+        playlist.move(-1, 0);
+        playlist.move(2, 0);
+        assertEquals(List.of("a", "b"), playlist.urls());
+    }
+
+    @Test
+    void move_ADropPastTheBottomOfTheListLandsAtTheEnd() {
+        // The drop gap is clamped, not refused: dragging below the last row means "last".
+        Playlist playlist = of("a", "b", "c");
+        playlist.move(0, 99);
+        assertEquals(List.of("b", "c", "a"), playlist.urls());
     }
 }

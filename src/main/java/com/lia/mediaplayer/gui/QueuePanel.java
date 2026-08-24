@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.media.MediaTitleCache;
-import com.lia.mediaplayer.video.VideoThumbnailCache;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -62,8 +61,8 @@ final class QueuePanel {
         }
     }
 
-    private static final int THUMB_W = 48;
-    private static final int THUMB_H = 27;
+    private static final int THUMB_W = Thumbnail.W;
+    private static final int THUMB_H = Thumbnail.H;
     private static final int HEADER_H = 12;
     private static final int PAD = 3;
     /** Gap between the window and the panel docked beside it. */
@@ -241,7 +240,7 @@ final class QueuePanel {
         if (mode.hasThumbnails()) {
             int tx = rowX + 2;
             int ty = rowY + (rowH - THUMB_H) / 2;
-            drawThumbnail(g, font, url, tx, ty);
+            Thumbnail.draw(g, font, url, tx, ty);
             labelX = tx + THUMB_W + 4;
         }
 
@@ -262,26 +261,6 @@ final class QueuePanel {
         Glyphs.arrow(g, upX, btnY, true, canUp ? (overUp ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
         Glyphs.arrow(g, downButtonX(), btnY, false, canDown ? (overDown ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
         Glyphs.close(g, removeButtonX(), btnY, overRemove ? Theme.DANGER : Theme.ICON);
-    }
-
-    private void drawThumbnail(GuiGraphics g, Font font, String url, int tx, int ty) {
-        g.fill(tx, ty, tx + THUMB_W, ty + THUMB_H, Theme.PLACEHOLDER);
-        VideoThumbnailCache.Thumb thumb = VideoThumbnailCache.getOrLoad(url);
-        if (thumb.isLoaded()) {
-            // Fit the (already-small) thumbnail inside the box, preserving aspect.
-            int tw = Math.max(1, thumb.width);
-            int th = Math.max(1, thumb.height);
-            double scale = Math.min(THUMB_W / (double) tw, THUMB_H / (double) th);
-            int w = Math.max(1, (int) Math.round(tw * scale));
-            int h = Math.max(1, (int) Math.round(th * scale));
-            int ox = tx + (THUMB_W - w) / 2;
-            int oy = ty + (THUMB_H - h) / 2;
-            Blit.textured(g, thumb.texture, ox, oy, w, h, tw, th);
-        } else {
-            String dots = thumb.state == VideoThumbnailCache.State.FAILED ? "?" : "...";
-            g.drawString(font, Component.literal(dots),
-                    tx + (THUMB_W - font.width(dots)) / 2, ty + (THUMB_H - font.lineHeight) / 2, Theme.TEXT_DIM);
-        }
     }
 
     // ------------------------------------------------------------------

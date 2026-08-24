@@ -166,6 +166,23 @@ final class Glyphs {
     }
 
     /**
+     * Two stacked sheets: copy this to the clipboard.
+     *
+     * <p>The back sheet is drawn as an outline and the front one filled, because at
+     * eleven pixels two outlines overlap into a grid — the pair only reads as "one thing
+     * and its copy" when one of them is solid.</p>
+     */
+    static void copy(GuiGraphics g, int x, int y, int color) {
+        // Back sheet, top-left: three sides of a rectangle (the fourth is behind the
+        // front sheet and would only thicken the seam).
+        g.fill(x + 1, y + 1, x + 7, y + 2, color);
+        g.fill(x + 1, y + 1, x + 2, y + 7, color);
+        g.fill(x + 1, y + 6, x + 4, y + 7, color);
+        // Front sheet, bottom-right.
+        g.fill(x + 4, y + 4, x + 10, y + 10, color);
+    }
+
+    /**
      * A "playlist" glyph: three stacked lines, each with a bullet on its left.
      */
     static void queue(GuiGraphics g, int x, int y, int color) {

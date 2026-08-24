@@ -8,6 +8,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 //? if <1.21.5 {
 import java.lang.reflect.Field;
@@ -60,6 +62,12 @@ public final class TextureBridge {
     }
     //?}
 
+    /**
+     * Textures asked to go away, waiting for a moment when nothing is looking at them.
+     * See {@link #release}.
+     */
+    private static final List<ResourceLocation> PENDING_RELEASE = new ArrayList<>();
+
     private TextureBridge() {
     }
 
@@ -72,9 +80,63 @@ public final class TextureBridge {
         Minecraft.getInstance().getTextureManager().register(location, newTexture(location, image));
     }
 
-    /** Drops the texture registered under {@code location}, if there is one. */
+    /**
+     * Drops the texture registered under {@code location} — <em>not now</em>, but at the
+     * next {@link #flushReleases()}, which is once a client tick.
+     *
+     * <h4>Why it cannot be now</h4>
+     *
+     * <p>From 26.1 the GUI is no longer drawn as it is walked: a screen (and every
+     * mod hook that draws over one) <em>extracts</em> its draw commands, and
+     * {@code GuiRenderer} executes the whole frame's worth afterwards. A command that
+     * names a texture holds a view of it, so closing that texture between the extraction
+     * and the execution kills the frame with
+     * {@code IllegalStateException: Texture view Sampler0 (…) has been closed!} — from
+     * inside vanilla's renderer, with nothing of the mod on the stack to say who did it.
+     *
+     * <p>And the mod does close textures from inside a draw. Three places, all of them
+     * legitimate: {@code VideoRenderer.uploadFrame} reallocates when the frame size
+     * changes and the frames are pulled off the queue by the window's own draw;
+     * {@code VideoThumbnailCache} evicts its eldest entry when a list asks for a
+     * thumbnail it does not hold; and {@code ImagePreviewCache} trims itself to its
+     * memory limit when a preview finishes loading. Each of those can free a texture
+     * that an earlier draw in the same frame is still pointing at.
+     *
+     * <p>Deferring by one tick makes the whole class of failure impossible instead of
+     * auditing the call sites one by one, and it is safe because every location the mod
+     * registers comes from a monotonic counter: a released location is never registered
+     * again, so a pending release can never take a live texture with it. The cost is
+     * that a dropped texture outlives its owner by up to 50 ms — which nothing draws,
+     * because the caller clears its reference the moment it asks for the release.
+     */
     public static void release(ResourceLocation location) {
-        Minecraft.getInstance().getTextureManager().release(location);
+        synchronized (PENDING_RELEASE) {
+            PENDING_RELEASE.add(location);
+        }
+    }
+
+    /**
+     * Frees everything {@link #release} has queued. Called once a client tick, which is
+     * between two frames — the only moment at which no draw command can still be holding
+     * one of these textures.
+     */
+    public static void flushReleases() {
+        List<ResourceLocation> due;
+        synchronized (PENDING_RELEASE) {
+            if (PENDING_RELEASE.isEmpty()) {
+                return;
+            }
+            due = new ArrayList<>(PENDING_RELEASE);
+            PENDING_RELEASE.clear();
+        }
+        for (ResourceLocation location : due) {
+            try {
+                Minecraft.getInstance().getTextureManager().release(location);
+            } catch (RuntimeException e) {
+                // Freeing a texture must never be the thing that takes the game down.
+                LiasMediaPlayer.LOGGER.debug("Could not release texture {}", location, e);
+            }
+        }
     }
 
     /**

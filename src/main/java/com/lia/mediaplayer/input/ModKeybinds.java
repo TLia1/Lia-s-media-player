@@ -44,6 +44,11 @@ public final class ModKeybinds {
     public static final KeyMapping CLOSE_ALL = unbound("close_all");
     public static final KeyMapping OPEN_CONFIG = unbound("config");
     /**
+     * Opens {@code gui.MediaControlScreen}: the window stack, made clickable, without
+     * having to open the chat to get at it.
+     */
+    public static final KeyMapping OPEN_CONTROLS = unbound("controls");
+    /**
      * Plays whatever link is on the clipboard. The fastest way there is to a media
      * link: no message has to be sent, and nobody else has to have shared it.
      */
@@ -67,6 +72,6 @@ public final class ModKeybinds {
                 PLAY_PAUSE, NEXT, PREVIOUS,
                 VOLUME_UP, VOLUME_DOWN, MUTE,
                 TOGGLE_WINDOWS, CLOSE_ALL,
-                OPEN_PLAYLISTS, OPEN_CONFIG, PLAY_CLIPBOARD};
+                OPEN_CONTROLS, OPEN_PLAYLISTS, OPEN_CONFIG, PLAY_CLIPBOARD};
     }
 }

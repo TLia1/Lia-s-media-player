@@ -55,6 +55,33 @@ public final class Playlist {
         }
     }
 
+    /**
+     * Moves the entry at {@code from} so that it sits before what is currently at
+     * {@code insertBefore}, the two indices being read against the list <em>as it is
+     * now</em>.
+     *
+     * <p>That is the shape a drop needs: the user points at a gap between two rows, and
+     * which gap they meant does not change because the row being moved is about to leave
+     * its own place. {@link #swap} cannot express it — dragging a track from the twelfth
+     * position to the second is one move, not ten swaps.</p>
+     *
+     * @param insertBefore {@code 0..size}, where {@code size} means "past the last entry"
+     */
+    public void move(int from, int insertBefore) {
+        List<String> list = urls();
+        if (from < 0 || from >= list.size()) {
+            return;
+        }
+        int target = Math.max(0, Math.min(list.size(), insertBefore));
+        if (target == from || target == from + 1) {
+            return; // dropped back into the gap it came from
+        }
+        String url = list.remove(from);
+        // Removing the entry shifted everything after it down by one, so a gap that was
+        // past the old position is now one index lower.
+        list.add(target > from ? target - 1 : target, url);
+    }
+
     public void swap(int indexA, int indexB) {
         List<String> list = urls();
         if (indexA >= 0 && indexA < list.size() && indexB >= 0 && indexB < list.size()) {
