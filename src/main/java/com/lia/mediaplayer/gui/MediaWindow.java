@@ -745,10 +745,14 @@ abstract class MediaWindow {
      * queue moving on to its next track is otherwise completely silent about what
      * started. A visible window needs no banner: its title bar (or, for the audio bar,
      * its content row) already carries the name.</p>
+     *
+     * <p>The URL is handed over as-is: the banner resolves the title itself, so a name
+     * still being fetched when playback starts lands on the banner instead of leaving
+     * it announcing the placeholder.</p>
      */
     protected final void announceIfHidden(String url) {
         if (!visible) {
-            NowPlayingBanner.show(com.lia.mediaplayer.media.MediaTitleCache.getOrLoad(url));
+            NowPlayingBanner.show(url);
         }
     }
 

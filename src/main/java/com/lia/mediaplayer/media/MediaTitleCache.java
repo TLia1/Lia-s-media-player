@@ -79,6 +79,17 @@ public final class MediaTitleCache {
     }
 
     /**
+     * Whether a title for {@code url} is still being fetched, i.e. what
+     * {@link #getOrLoad} returns right now is the placeholder and not the real name.
+     * A caller that shows a title once — a transient banner rather than a panel
+     * redrawn every frame — uses this to wait for the real one.
+     */
+    public static boolean isLoading(String url) {
+        Entry entry = CACHE.get(url);
+        return entry != null && entry.state == State.LOADING;
+    }
+
+    /**
      * Drops every cached title (e.g. when leaving a server).
      */
     public static void clear() {
