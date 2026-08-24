@@ -270,6 +270,30 @@ final class Glyphs {
     }
 
     /**
+     * A circular arrow: try that again (a failed playback's retry, a tool re-download).
+     *
+     * <p>Drawn as an almost-closed ring of pixels with an arrow head on the top-right
+     * end, rather than as a second {@link #loop} — the two mean different things and a
+     * player has to tell them apart at a glance in the same control bar.</p>
+     */
+    static void refresh(GuiGraphics g, int x, int y, int color) {
+        // The ring: a circle of radius 4 about the middle of the button box, with the
+        // top-right eighth left open for the arrow head.
+        int cx = x + 5;
+        int cy = y + 5;
+        for (int i = 0; i < 8; i++) {
+            if (i == 7) {
+                continue; // the gap the arrow head sits in
+            }
+            g.fill(cx + SPIN_X[i] - 5, cy + SPIN_Y[i] - 5,
+                    cx + SPIN_X[i] - 3, cy + SPIN_Y[i] - 3, color);
+        }
+        // Arrow head, pointing clockwise into the gap.
+        g.fill(x + 7, y, x + 11, y + 1, color);
+        g.fill(x + 10, y, x + 11, y + 4, color);
+    }
+
+    /**
      * A waste bin: delete for good (as opposed to {@link #close}, which dismisses).
      */
     static void trash(GuiGraphics g, int x, int y, int color) {

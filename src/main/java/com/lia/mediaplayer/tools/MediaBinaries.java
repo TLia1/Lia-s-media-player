@@ -193,28 +193,208 @@ public final class MediaBinaries {
                     case INSTALLED -> "gui.liasmediaplayer.toast.installed";
                     default -> "gui.liasmediaplayer.toast.installed";
                 };
+                toast(translationKey);
+            }
 
-                net.minecraft.client.Minecraft.getInstance().execute(() -> {
-                    net.minecraft.client.gui.components.toasts.SystemToast.add(
-                            // ToastComponent became ToastManager in 1.21.4, and 26.2
-                            // moved its owner from Minecraft onto Minecraft.gui along
-                            // with the screen stack (see gui/Screens).
-                            //? if <1.21.4 {
-                            net.minecraft.client.Minecraft.getInstance().getToasts(),
-                            //?} elif <26.2 {
-                            /*net.minecraft.client.Minecraft.getInstance().getToastManager(),
-                            *///?} else {
-                            /*net.minecraft.client.Minecraft.getInstance().gui.toastManager(),
-                            *///?}
-                            net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                            net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
-                            net.minecraft.network.chat.Component.translatable(translationKey)
-                    );
-                });
+            // A yt-dlp that was already there is the case the install states above say
+            // nothing about, and it is the one that breaks: YouTube changes its player
+            // every few weeks and an extractor from three months ago simply stops
+            // resolving links. Checking the version costs one process launch at startup.
+            if (ytDlp != null && ytDlpState == InstallState.FOUND) {
+                checkYtDlpFreshness();
             }
         }, "liasmediaplayer-binary-installer");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /**
+     * Shows one of the mod's toasts. The version guards for reaching the toast queue
+     * live here and nowhere else.
+     */
+    private static void toast(String translationKey) {
+        net.minecraft.client.Minecraft.getInstance().execute(() -> {
+            net.minecraft.client.gui.components.toasts.SystemToast.add(
+                    // ToastComponent became ToastManager in 1.21.4, and 26.2
+                    // moved its owner from Minecraft onto Minecraft.gui along
+                    // with the screen stack (see gui/Screens).
+                    //? if <1.21.4 {
+                    net.minecraft.client.Minecraft.getInstance().getToasts(),
+                    //?} elif <26.2 {
+                    /*net.minecraft.client.Minecraft.getInstance().getToastManager(),
+                    *///?} else {
+                    /*net.minecraft.client.Minecraft.getInstance().gui.toastManager(),
+                    *///?}
+                    net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                    net.minecraft.network.chat.Component.translatable("gui.liasmediaplayer.toast.title"),
+                    net.minecraft.network.chat.Component.translatable(translationKey)
+            );
+        });
+    }
+
+    // ---- Keeping yt-dlp current ---------------------------------------------
+
+    /**
+     * How old a yt-dlp build may be before it is treated as stale. yt-dlp releases every
+     * week or two and YouTube breaks extractors at about that pace, so a month is
+     * already generous.
+     */
+    private static final int YT_DLP_MAX_AGE_DAYS = 30;
+
+    /** True while a tools update is running, so the UI can say so and not start a second. */
+    private static final java.util.concurrent.atomic.AtomicBoolean UPDATING =
+            new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * Whether a {@linkplain #updateToolsAsync update} is in flight.
+     */
+    public static boolean isUpdating() {
+        return UPDATING.get();
+    }
+
+    /**
+     * The version string {@code yt-dlp --version} prints (a release date, e.g.
+     * {@code 2025.08.11}), or {@code null} if it could not be asked.
+     */
+    @Nullable
+    public static String ytDlpVersion() {
+        String executable = CACHE.get(Tool.YT_DLP);
+        if (executable == null) {
+            executable = safeLocate(Tool.YT_DLP);
+        }
+        return executable == null ? null : runVersion(executable);
+    }
+
+    /**
+     * Whether {@code version} — a yt-dlp version string — is older than
+     * {@link #YT_DLP_MAX_AGE_DAYS} days on {@code today}.
+     *
+     * <p>Package-private and taking the date rather than reading the clock so it can be
+     * unit-tested. An unparseable version is <em>not</em> stale: a build we cannot read
+     * the date of is more likely a distribution's own packaging than an old copy, and
+     * nagging about it every launch would be worse than missing one update.</p>
+     */
+    static boolean isStale(@Nullable String version, java.time.LocalDate today) {
+        if (version == null || version.isBlank()) {
+            return false;
+        }
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("(\\d{4})\\.(\\d{2})\\.(\\d{2})").matcher(version);
+        if (!matcher.find()) {
+            return false;
+        }
+        try {
+            java.time.LocalDate released = java.time.LocalDate.of(
+                    Integer.parseInt(matcher.group(1)),
+                    Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3)));
+            return released.plusDays(YT_DLP_MAX_AGE_DAYS).isBefore(today);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Runs at startup once yt-dlp has been located: updates it if it is old and the
+     * player asked for that, and otherwise says so once, in a toast.
+     */
+    private static void checkYtDlpFreshness() {
+        String version = ytDlpVersion();
+        if (!isStale(version, java.time.LocalDate.now())) {
+            return;
+        }
+        LiasMediaPlayer.LOGGER.info("yt-dlp {} is more than {} days old", version, YT_DLP_MAX_AGE_DAYS);
+        if (com.lia.mediaplayer.config.ConfigStore.AUTO_UPDATE_TOOLS.getValue()) {
+            updateTools();
+        } else {
+            toast("gui.liasmediaplayer.toast.outdated");
+        }
+    }
+
+    /**
+     * Re-downloads yt-dlp (and ffmpeg, if it is missing or too old) on a background
+     * thread, ending in a toast either way. This is what the <em>update the tools</em>
+     * buttons — in the settings screen and on a failed player — call.
+     */
+    public static void updateToolsAsync() {
+        if (isUpdating()) {
+            return;
+        }
+        Thread thread = new Thread(MediaBinaries::updateTools, "liasmediaplayer-binary-updater");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * The update itself. Blocking; call it from a background thread.
+     *
+     * <p>yt-dlp is fetched <em>unconditionally</em> — the whole point is to replace a
+     * copy that is present and working-but-outdated, which every other path here
+     * deliberately leaves alone. ffmpeg only comes down if the one we have does not pass
+     * {@link BinaryLocator#isUsable}: its releases do not go stale the way yt-dlp's do,
+     * and it is a ~100 MB download.</p>
+     */
+    private static void updateTools() {
+        if (!UPDATING.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            Path managedDir = managedDir();
+            String before = ytDlpVersion();
+            String updated = BinaryDownloader.downloadYtDlp(managedDir, true);
+            if (updated != null) {
+                // Point every later lookup at the copy we just wrote, even if the one
+                // found at startup came from PATH: it is now the newest one we know of.
+                CACHE.put(Tool.YT_DLP, updated);
+                VERSION_CACHE.remove(updated);
+                String after = ytDlpVersion();
+                LiasMediaPlayer.LOGGER.info("yt-dlp updated: {} -> {}", before, after);
+            }
+
+            boolean ffmpegOk = safeLocate(Tool.FFMPEG) != null && safeLocate(Tool.FFPROBE) != null;
+            toast(updated != null && ffmpegOk
+                    ? "gui.liasmediaplayer.toast.reinstalled"
+                    : "gui.liasmediaplayer.toast.update_failed");
+        } finally {
+            UPDATING.set(false);
+        }
+    }
+
+    /** Version strings per executable path; asking costs a process launch. */
+    private static final Map<String, String> VERSION_CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * Asks a tool for its version, cached per path.
+     */
+    @Nullable
+    private static String runVersion(String executable) {
+        String cached = VERSION_CACHE.get(executable);
+        if (cached != null) {
+            return cached;
+        }
+        try {
+            Process process = new ProcessBuilder(executable, Tool.YT_DLP.versionFlag())
+                    .redirectErrorStream(true)
+                    .start();
+            String output;
+            try (java.io.InputStream in = process.getInputStream()) {
+                output = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            if (!process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+                return null;
+            }
+            String version = output.strip().lines().findFirst().orElse("").strip();
+            if (version.isEmpty()) {
+                return null;
+            }
+            VERSION_CACHE.put(executable, version);
+            return version;
+        } catch (java.io.IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
     }
 
     @Nullable

@@ -3,6 +3,7 @@ package com.lia.mediaplayer.gui;
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.config.ConfigOption;
+import com.lia.mediaplayer.tools.MediaBinaries;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -60,6 +61,15 @@ public class ConfigScreen extends Screen {
     private OptionsList optionsList;
     /** Kept across rebuilds, which is the point of holding it here. */
     private String query = "";
+    /** Greyed out while an update runs, so a second click cannot start another. */
+    @Nullable
+    private Button updateButton;
+    /**
+     * The installed yt-dlp version, read on a side thread: asking costs a process
+     * launch, which is not something a screen may do while it is being drawn.
+     */
+    @Nullable
+    private static volatile String ytDlpVersion;
 
     public ConfigScreen(@Nullable Screen lastScreen) {
         super(Component.translatable("gui.liasmediaplayer.config.title"));
@@ -114,8 +124,36 @@ public class ConfigScreen extends Screen {
         this.addWidget(this.optionsList);
         fillOptions(ctx);
 
+        // The tools row: "update the tools" beside Done, because a broken yt-dlp is the
+        // single most common reason a link stops playing and the settings screen is
+        // where a player goes looking when it does.
+        int updateW = 120;
+        int doneW = 140;
+        int rowX = (this.width - (updateW + 4 + doneW)) / 2;
+        this.updateButton = Button.builder(
+                        Component.translatable("gui.liasmediaplayer.config.update_tools"),
+                        b -> MediaBinaries.updateToolsAsync())
+                .bounds(rowX, this.height - 28, updateW, 20).build();
+        this.addRenderableWidget(this.updateButton);
         this.addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> this.onClose())
-                .bounds((this.width - 200) / 2, this.height - 28, 200, 20).build());
+                .bounds(rowX + updateW + 4, this.height - 28, doneW, 20).build());
+
+        readVersionAsync();
+    }
+
+    /**
+     * Asks yt-dlp for its version once per game session, off the render thread.
+     */
+    private void readVersionAsync() {
+        if (ytDlpVersion != null) {
+            return;
+        }
+        Thread thread = new Thread(() -> {
+            String version = MediaBinaries.ytDlpVersion();
+            ytDlpVersion = version == null ? "" : version;
+        }, "liasmediaplayer-ytdlp-version");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**
@@ -206,6 +244,18 @@ public class ConfigScreen extends Screen {
 
     private void drawLabels(GuiGraphics g) {
         g.drawCenteredString(this.font, this.title, this.width / 2, 20, Theme.TEXT);
+        if (this.updateButton != null) {
+            this.updateButton.active = !MediaBinaries.isUpdating();
+        }
+        String version = ytDlpVersion;
+        Component tools = MediaBinaries.isUpdating()
+                ? Component.translatable("gui.liasmediaplayer.config.updating")
+                : (version == null || version.isEmpty()
+                        ? null
+                        : Component.translatable("gui.liasmediaplayer.config.ytdlp_version", version));
+        if (tools != null) {
+            g.drawCenteredString(this.font, tools, this.width / 2, this.height - 40, Theme.TEXT_SUBTLE);
+        }
         if (this.optionsList != null && this.optionsList.children().isEmpty()) {
             g.drawCenteredString(this.font, Component.translatable("gui.liasmediaplayer.config.no_match"),
                     optionsX + rowW / 2, TOP + 20, Theme.TEXT_SUBTLE);

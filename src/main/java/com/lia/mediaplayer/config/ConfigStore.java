@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.api.config.BooleanOption;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import com.lia.mediaplayer.api.config.EnumOption;
 import com.lia.mediaplayer.api.config.IntSliderOption;
@@ -56,6 +57,8 @@ public class ConfigStore {
     public static final StringOption BLOCKED_DOMAINS;
     public static final StringOption ALLOWED_DOMAINS;
     public static final StringOption BLOCKED_SENDERS;
+    /** Whether an outdated yt-dlp is replaced at launch instead of merely reported. */
+    public static final BooleanOption AUTO_UPDATE_TOOLS;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
@@ -115,6 +118,8 @@ public class ConfigStore {
                 .withDescription("config.liasmediaplayer.allowed_domains.description");
         BLOCKED_SENDERS = (StringOption) new StringOption("liasmediaplayer:blocked_senders", "liasmediaplayer", "config.liasmediaplayer.blocked_senders", "")
                 .withDescription("config.liasmediaplayer.blocked_senders.description");
+        AUTO_UPDATE_TOOLS = (BooleanOption) new BooleanOption("liasmediaplayer:auto_update_tools", "liasmediaplayer", "config.liasmediaplayer.auto_update_tools", true)
+                .withDescription("config.liasmediaplayer.auto_update_tools.description");
     }
 
     public ConfigStore() {
@@ -132,6 +137,7 @@ public class ConfigStore {
         register(BLOCKED_DOMAINS);
         register(ALLOWED_DOMAINS);
         register(BLOCKED_SENDERS);
+        register(AUTO_UPDATE_TOOLS);
     }
 
     public synchronized void register(ConfigOption<?> option) {

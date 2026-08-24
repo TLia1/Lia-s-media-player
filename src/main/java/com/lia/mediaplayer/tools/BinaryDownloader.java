@@ -76,8 +76,21 @@ final class BinaryDownloader {
      */
     @Nullable
     static String downloadYtDlp(Path managedDir) {
+        return downloadYtDlp(managedDir, false);
+    }
+
+    /**
+     * Downloads the single-file yt-dlp release into {@code managedDir}.
+     *
+     * @param force fetch the latest release even when a usable copy is already there —
+     *              what "update the tools" means, since the copy being replaced is
+     *              working, just too old for what YouTube serves today
+     * @return the absolute path of the installed binary, or {@code null} on failure
+     */
+    @Nullable
+    static String downloadYtDlp(Path managedDir, boolean force) {
         Path target = managedDir.resolve(MediaBinaries.Tool.YT_DLP.exeName());
-        if (BinaryLocator.isUsable(MediaBinaries.Tool.YT_DLP, target.toString(), false)) {
+        if (!force && BinaryLocator.isUsable(MediaBinaries.Tool.YT_DLP, target.toString(), false)) {
             return target.toString();
         }
 

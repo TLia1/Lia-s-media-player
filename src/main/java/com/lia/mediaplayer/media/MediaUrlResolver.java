@@ -173,9 +173,14 @@ public final class MediaUrlResolver {
         }
 
         if (firstLine == null || firstLine.isBlank()) {
-            String detail = !stderr.isEmpty() ? " — " + stderr.toString().trim() : "";
-            String message = net.minecraft.network.chat.Component.translatable("error.liasmediaplayer.ytdlp_failed").getString();
-            throw new IOException(message);
+            // yt-dlp's own words, verbatim: they are what PlaybackError reads to tell a
+            // private video from an expired extractor, and what a bug report needs. This
+            // used to be replaced by one translated sentence ("no video found"), which
+            // said the same thing for every one of those and left nothing to diagnose.
+            String detail = stderr.toString().trim();
+            throw new IOException(detail.isEmpty()
+                    ? "yt-dlp found no playable media for " + url
+                    : "yt-dlp: " + detail);
         }
         LiasMediaPlayer.LOGGER.info("Resolved link {} -> direct stream via {}", url, executable);
         return firstLine.trim();

@@ -80,6 +80,9 @@ final class VideoWindow extends MediaWindow {
      */
     private final QueuePanel panel = new QueuePanel(queue, this::jumpTo);
 
+    /** Drawn over the content area once playback has failed; see {@link ErrorPanel}. */
+    private final ErrorPanel errorPanel = new ErrorPanel();
+
     VideoWindow(VideoPlayer player) {
         this.player = player;
     }
@@ -209,6 +212,16 @@ final class VideoWindow extends MediaWindow {
         player = new VideoPlayer(url);
         player.start();
         announceIfHidden(url);
+    }
+
+    /**
+     * Starts the current video over from scratch — a fresh player, a fresh resolve, a
+     * fresh ffmpeg. What the retry button on a failed player does, and the only sensible
+     * answer to most of the causes {@link com.lia.mediaplayer.media.PlaybackError} names:
+     * an expired stream URL, a timeout, a network blip.
+     */
+    void retry() {
+        playUrl(player.url());
     }
 
     /**
@@ -531,20 +544,8 @@ final class VideoWindow extends MediaWindow {
                 return;
             }
 
-            Component status = Component.translatable("gui.liasmediaplayer.video.playback_failed");
-            int tx = contentX + (contentW - font.width(status)) / 2;
-            int ty = contentY + 10;
-            g.drawString(font, status, tx, ty, Theme.TEXT);
-
-            String msg = player.errorMessage();
-            if (msg != null) {
-                List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(msg), Math.max(10, contentW - 20));
-                int startY = ty + font.lineHeight + 8;
-                for (int i = 0; i < lines.size(); i++) {
-                    if (startY + i * font.lineHeight > contentY + contentH - 4) break;
-                    g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, Theme.DANGER);
-                }
-            }
+            errorPanel.render(g, font, contentX, contentY, contentW, contentH,
+                    player.errorMessage(), cursorX(), cursorY());
         }
     }
 
@@ -653,6 +654,22 @@ final class VideoWindow extends MediaWindow {
 
     @Override
     protected ClickResult onControlClick(double mouseX, double mouseY) {
+        // Checked first: the failure panel covers the content area, where a click would
+        // otherwise start dragging the window.
+        if (player.state() == VideoPlayer.State.FAILED) {
+            switch (errorPanel.click(mouseX, mouseY)) {
+                case RETRY -> {
+                    retry();
+                    return ClickResult.HANDLED;
+                }
+                case UPDATE_TOOLS -> {
+                    com.lia.mediaplayer.tools.MediaBinaries.updateToolsAsync();
+                    return ClickResult.HANDLED;
+                }
+                case NONE -> {
+                }
+            }
+        }
         if (inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON)) {
             player.togglePause();
             return ClickResult.HANDLED;

@@ -816,6 +816,20 @@ abstract class MediaWindow {
     }
 
     /**
+     * Where the cursor was when this frame started, for the parts of a window that are
+     * drawn by {@link #drawContent} — which is handed no mouse position, having had
+     * nothing to hover over until the failure panel arrived. {@link Integer#MIN_VALUE}
+     * on the HUD, where there is no cursor at all.
+     */
+    protected final int cursorX() {
+        return lastMouseX;
+    }
+
+    protected final int cursorY() {
+        return lastMouseY;
+    }
+
+    /**
      * Whether the title bar, corner buttons, grip and control bar are drawn.
      *
      * <p>Always true outside theatre mode. In theatre they go after

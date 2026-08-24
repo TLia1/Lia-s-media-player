@@ -2,6 +2,7 @@ package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.media.PlaybackError;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -178,6 +179,14 @@ final class AudioWindow extends MediaWindow {
         player = new AudioPlayer(url);
         player.start();
         announceIfHidden(url);
+    }
+
+    /**
+     * Starts the current track over from scratch — a fresh player, a fresh resolve, a
+     * fresh ffmpeg. What the retry button on a failed bar does.
+     */
+    void retry() {
+        playUrl(player.url());
     }
 
     /**
@@ -418,8 +427,13 @@ final class AudioWindow extends MediaWindow {
         String text;
         int color = Theme.TEXT;
         if (player.state() == AudioPlayer.State.FAILED) {
-            text = Component.translatable("gui.liasmediaplayer.audio.playback_failed").getString();
+            // The bar has one line, so it says the cause rather than "playback failed",
+            // and hovering it gives the advice the video window has room to print.
+            text = PlaybackError.message(player.errorMessage()).getString();
             color = Theme.DANGER;
+            if (inRect(cursorX(), cursorY(), textX, ty, maxW, font.lineHeight)) {
+                Tooltips.request(PlaybackError.hint(player.errorMessage()));
+            }
         } else if (working) {
             text = Component.translatable("gui.liasmediaplayer.audio.loading",
                     MediaTitleCache.getOrLoad(player.url())).getString();
@@ -434,9 +448,19 @@ final class AudioWindow extends MediaWindow {
         int barTop = contentY + contentH;
 
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
-        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
+        boolean failed = player.state() == AudioPlayer.State.FAILED;
+        // There is nothing to pause on a failed track, and the one thing worth offering
+        // in that spot is another go at it — the bar has no room for a panel of buttons
+        // the way the video window does.
+        if (failed) {
+            Glyphs.refresh(g, playBtnX, playBtnY, overPlay ? Theme.ICON_HOVER : Theme.ICON);
+        } else {
+            Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
+        }
         if (overPlay) {
-            Tooltips.request(playTooltip(player.isPlaying()));
+            Tooltips.request(failed
+                    ? Component.translatable("gui.liasmediaplayer.error.retry")
+                    : playTooltip(player.isPlaying()));
         }
 
         boolean canPrev = queue.hasPrevious();
@@ -514,7 +538,11 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected ClickResult onControlClick(double mouseX, double mouseY) {
         if (inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON)) {
-            player.togglePause();
+            if (player.state() == AudioPlayer.State.FAILED) {
+                retry();
+            } else {
+                player.togglePause();
+            }
             return ClickResult.HANDLED;
         }
         if (inRect(mouseX, mouseY, prevBtnX, prevBtnY, BUTTON, BUTTON)) {

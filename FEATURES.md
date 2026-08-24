@@ -121,7 +121,15 @@ drawn on your HUD so a clip keeps showing during normal gameplay.
 **Everything just works.** Video playback relies on two small helper tools: `ffmpeg` (to decode video and sound) and
 `yt-dlp` (to play YouTube links). If you don't already have them, the mod quietly downloads the official copies into its
 own folder when the game starts — so you don't have to set anything up. If you *do* have them installed, the mod finds
-them automatically in the usual places.
+them automatically in the usual places. It also keeps `yt-dlp` fresh: YouTube breaks older versions every few weeks, so
+one that is more than a month old is replaced at launch (or reported, if you would rather do it yourself).
+
+**When something won't play, it says why.** A failed player no longer shows a wall of `ffmpeg` output: it names the
+reason — *video unavailable*, *private video*, *blocked in your country*, *yt-dlp is out of date*, *access refused*, … —
+tells you what to do about it, and gives you a **Retry** button. When the fix is a newer helper tool, an **Update the
+tools** button sits right next to it. The raw message is still there underneath, greyed out, for when you want to report
+a bug. The audio bar does the same in one line: the reason where the track name goes, the advice on hover, and its play
+button turns into a retry button.
 
 ---
 
@@ -205,6 +213,10 @@ frames to optimize memory usage based on your computer's capabilities.
 open, or to `ALLOWLIST` and list the only ones you do — sub-domains are covered either way. There is also a
 **blocked senders** list for players whose links you would rather the mod ignored entirely. All of it is local: the
 message still shows exactly what was written, it just stops being something the mod will play.
+- **Update yt-dlp automatically:** On by default. Replaces `yt-dlp` at launch when the installed copy is more than 30
+days old — the usual reason YouTube links suddenly stop playing. Turn it off and you get a toast instead.
+- An **Update the tools** button sits beside **Done**, with the installed `yt-dlp` version above it, for when you want
+to force a refresh yourself.
 - All options are saved automatically and persist between sessions.
 ---
 
