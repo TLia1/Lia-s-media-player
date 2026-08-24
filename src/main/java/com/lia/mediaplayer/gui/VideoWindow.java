@@ -325,6 +325,11 @@ final class VideoWindow extends MediaWindow {
     }
 
     @Override
+    long positionMicros() {
+        return player.positionMicros();
+    }
+
+    @Override
     boolean playNext() {
         return advance();
     }

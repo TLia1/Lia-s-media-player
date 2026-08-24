@@ -11,6 +11,7 @@ import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.OptionWidth;
 import com.lia.mediaplayer.api.config.StepSliderOption;
 import com.lia.mediaplayer.api.config.StringOption;
+import com.lia.mediaplayer.gui.ThemeName;
 import com.lia.mediaplayer.gui.WindowPosition;
 import com.lia.mediaplayer.source.FilterMode;
 import net.minecraft.client.Minecraft;
@@ -49,6 +50,8 @@ public class ConfigStore {
     public static final IntSliderOption MAX_IMAGE_CACHE_MEGABYTES;
     public static final IntSliderOption YT_DLP_TIMEOUT_SECONDS;
     public static final EnumOption<WindowPosition> DEFAULT_WINDOW_POSITION;
+    /** Which palette every window, panel and list draws with — see {@code gui.Theme}. */
+    public static final EnumOption<ThemeName> THEME;
     // The client-side link filters (see com.lia.mediaplayer.chat.MediaFilters). Both
     // host lists are kept, not one list whose meaning depends on the mode: switching
     // the mode to look at the other list should not throw away what was typed into
@@ -98,6 +101,13 @@ public class ConfigStore {
                 .withWidth(OptionWidth.HALF);
         YT_DLP_TIMEOUT_SECONDS = (IntSliderOption) new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60)
                 .withDescription("config.liasmediaplayer.yt_dlp_timeout.description");
+        THEME = new EnumOption<>(
+                "liasmediaplayer:theme",
+                "liasmediaplayer",
+                "config.liasmediaplayer.theme",
+                ThemeName.DARK
+        );
+        THEME.withDescription("config.liasmediaplayer.theme.description");
         DEFAULT_WINDOW_POSITION = new EnumOption<>(
                 "liasmediaplayer:default_window_position",
                 "liasmediaplayer",
@@ -132,6 +142,7 @@ public class ConfigStore {
         register(MAX_PINNED_IMAGES);
         register(FRAME_QUEUE_CAPACITY);
         register(YT_DLP_TIMEOUT_SECONDS);
+        register(THEME);
         register(DEFAULT_WINDOW_POSITION);
         register(LINK_FILTER_MODE);
         register(BLOCKED_DOMAINS);
@@ -274,5 +285,15 @@ public class ConfigStore {
     public WindowPosition defaultWindowPosition() {
         ensureLoaded();
         return DEFAULT_WINDOW_POSITION.getValue();
+    }
+
+    /**
+     * The selected palette. Read once a client tick by {@code gui.Theme}, which is why
+     * this one does not {@code ensureLoaded()}: the settings are loaded during startup
+     * (see {@code LiasMediaPlayer.init}), and a tick poll has no business doing file
+     * I/O on the off-chance they are not.
+     */
+    public ThemeName theme() {
+        return THEME.getValue();
     }
 }

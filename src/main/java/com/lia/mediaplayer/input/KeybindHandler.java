@@ -4,6 +4,7 @@ import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.gui.ConfigScreen;
 import com.lia.mediaplayer.gui.Keys;
+import com.lia.mediaplayer.gui.MediaControlScreen;
 import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import com.lia.mediaplayer.gui.PlaylistScreen;
 import com.lia.mediaplayer.gui.Screens;
@@ -32,8 +33,8 @@ public final class KeybindHandler {
     }
 
     public static void onClientTick() {
-        // Screens first: these are the two bindings that work with nothing playing, so
-        // they must not be behind the context check below.
+        // Screens first: these are the bindings that work with nothing playing, so they
+        // must not be behind the context check below.
         while (ModKeybinds.OPEN_PLAYLISTS.consumeClick()) {
             if (Screens.current() == null) {
                 Screens.open(new PlaylistScreen());
@@ -42,6 +43,13 @@ public final class KeybindHandler {
         while (ModKeybinds.OPEN_CONFIG.consumeClick()) {
             if (Screens.current() == null) {
                 Screens.open(new ConfigScreen(null));
+            }
+        }
+        // Also with nothing playing: the screen says so, which is a better answer than a
+        // key that appears not to work.
+        while (ModKeybinds.OPEN_CONTROLS.consumeClick()) {
+            if (Screens.current() == null) {
+                Screens.open(new MediaControlScreen());
             }
         }
 

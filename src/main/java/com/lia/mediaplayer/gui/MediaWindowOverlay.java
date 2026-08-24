@@ -100,16 +100,30 @@ public final class MediaWindowOverlay {
     }
 
     /**
+     * Whether there is anything in the stack at all — asked by
+     * {@link MediaControlScreen}, which is a screen for driving windows and should say
+     * so when there are none.
+     */
+    static boolean hasWindows() {
+        return !noWindows();
+    }
+
+    /**
      * Whether {@code screen} is one the window stack lives on — drawn over it, and
      * driven by its mouse and keyboard input.
      *
-     * <p>Today that is the chat screen and nothing else, but it is asked in six places
-     * (render, the four mouse hooks and the keyboard one), and every one of them has to
-     * agree: a screen that renders the windows but refuses their clicks would show
-     * buttons that do not work. One predicate is what keeps them in step.</p>
+     * <p>It is asked in six places (render, the four mouse hooks and the keyboard one),
+     * and every one of them has to agree: a screen that renders the windows but refuses
+     * their clicks would show buttons that do not work. One predicate is what keeps them
+     * in step — and what made {@link MediaControlScreen} a one-line addition rather than
+     * six.</p>
+     *
+     * <p>The chat screen is here because that is where a media link is clicked in the
+     * first place; the control screen because reaching a pause button should not require
+     * opening a text field.</p>
      */
     private static boolean acceptsWindows(Screen screen) {
-        return screen instanceof ChatScreen;
+        return screen instanceof ChatScreen || screen instanceof MediaControlScreen;
     }
 
     /**
@@ -491,6 +505,11 @@ public final class MediaWindowOverlay {
      * @return {@code true} when a window took the drag
      */
     public static boolean mouseDragged(Screen screen, double mouseX, double mouseY) {
+        // The mod's own screens get the drag before the windows do: they are the screen,
+        // so nothing of the stack is behind them to compete for it. See DragTarget.
+        if (screen instanceof DragTarget target) {
+            return target.onDrag(mouseX, mouseY);
+        }
         if (!acceptsWindows(screen) || noWindows()) {
             return false;
         }
@@ -510,6 +529,9 @@ public final class MediaWindowOverlay {
      * @return {@code true} when a window was being dragged
      */
     public static boolean mouseReleased(Screen screen) {
+        if (screen instanceof DragTarget target) {
+            return target.onRelease();
+        }
         if (!acceptsWindows(screen) || noWindows()) {
             return false;
         }
@@ -615,6 +637,14 @@ public final class MediaWindowOverlay {
 
     /** Closes players whose track ended and could not advance to a next one. */
     public static void clientTick() {
+        // Before anything is drawn with it: the palette follows the theme setting, and
+        // this is the one place that runs every tick whether or not anything is playing.
+        Theme.refresh();
+        // Same reason, and the same "whether or not anything is playing": a tick is
+        // between two frames, which is the only moment a texture can be freed without
+        // the risk of a draw command still pointing at it. See TextureBridge.release.
+        TextureBridge.flushReleases();
+
         MediaPlayerContext ctx = getContext();
         if (ctx == null) return;
 

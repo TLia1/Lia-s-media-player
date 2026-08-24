@@ -92,7 +92,7 @@ forever; turn on **shuffle** as well and each new round is **reshuffled**, so yo
 *Open playlists* key (see [Keybinds](#keybinds)).
 
 - Create, manage, and rename multiple personal playlists.
-- Reorder tracks with the up/down arrows next to each one.
+- Reorder tracks by dragging them, or with the up/down arrows next to each one.
 - One-click shuffle play, and a loop toggle for endless playback.
 - Import playlists directly from your clipboard (lines of URLs) and export playlists to your clipboard for easy sharing.
 
@@ -104,6 +104,11 @@ missed.
 **Windows line themselves up.** While you drag one, its edges and its centre snap to the edges and centre of the screen
 and of every other window, so two players end up flush rather than three pixels out. Hold **Shift** while dragging to
 place it exactly where you like instead.
+
+**Send the moment back to chat.** Every window has a **copy** button beside the browser one. On its own it copies the
+link; hold **Shift** and it copies the link *at the moment you are watching* — `...&t=137s` — so "have a look at this
+bit" is one click instead of a stopwatch. Works for YouTube, Twitch, Vimeo and SoundCloud; on anything else the button
+simply copies the link.
 
 **Theatre mode.** **Double-click the picture** (or press **Ctrl+F**) and the window fills the screen; the controls fade
 away after a couple of seconds of not moving the mouse and come straight back when you move it. Double-click again — or
@@ -169,7 +174,13 @@ Open the **Playlists** button in the top-left of your chat (or bind a key for it
 - **Add** tracks by pasting a link — a direct audio file *or* a YouTube video (only the sound is played).
 - **Import a whole YouTube playlist** by pasting its `playlist?list=...` link into the same box: every video in it is
   added as a track. Pasting one on the clipboard **In** button creates a new playlist named after the YouTube one.
-- **Rename**, **reorder tracks** (with the up/down arrows), **remove tracks**, or **delete** a playlist.
+- **Rename**, **reorder tracks**, **remove tracks**, or **delete** a playlist. Move a track one place with the up/down
+  arrows, or **drag it by its grip** straight to where you want it — a line shows where it will land, and the list
+  scrolls when you hold the drag against the top or bottom edge.
+- **Every track shows its picture**, the same thumbnail the player's queue uses, so a long playlist can be read at a
+  glance instead of line by line.
+- **Search the playlist** with the box above the list to find one track among a hundred, by name or by link. (Reordering
+  is paused while a search is filtering the list — clear the box and it comes back.)
 - **Play** it in order, or **Shuffle** it for a random order.
 - Toggle **Loop** before pressing Play or Shuffle to start the playlist looping — with Shuffle, each round comes back
   in a new random order. The loop and shuffle buttons on the player itself change this while it plays.
@@ -204,6 +215,9 @@ game's Mods list (the wrench in ModMenu, on Fabric).
 screen. A **search box** above the options filters them by name as you type.
 - Every option explains itself: hover it for a description, and use the **⟲** button beside it to put it back to its
 default. The button is greyed out while the option is already at its default.
+- **Theme:** Choose the palette every window, panel and list is drawn with — `Dark` (the default), `High contrast` or
+`Minecraft` (vanilla's own tones, if the default look feels too much like a desktop application). It applies
+straight away, everywhere.
 - **Default Window Position:** Choose where new windows appear by default. Options include `Center`, `Top Left`, `Top Right`, `Bottom Left`, and `Bottom Right`. The default is `Center`, which keeps the classic cascading behavior.
 - **Video Resolution:** Choose the maximum resolution for video playback (from 144p up to 720p).
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF
@@ -230,16 +244,18 @@ chat:
 - **Volume up**, **Volume down** and **Mute / unmute**.
 - **Hide / show all windows** — get the media out of the way with one key, and bring it all back with the same one.
 - **Close all windows**.
+- **Open the media controls** — a screen that is nothing but your media windows, where you can pause, seek, drag and
+  resize them without opening the chat to get at them. Escape closes it, and the world keeps running behind it.
 - **Open playlists** and **Open mod options**.
 - **Play the link on the clipboard** — copy a link from anywhere, press the key, and it plays. No one has to have shared
   it in chat first. Hold **Alt** for sound only or **Shift** for a window of its own, exactly as when clicking a link.
 
 They're **unbound by default** so they never clash with your existing keys — just assign whatever you like.
 
-### While the chat is open
+### While the chat (or the controls screen) is open
 
-A second set of shortcuts needs no setting up. They work whenever the chat screen is open, on whichever player is in
-front:
+A second set of shortcuts needs no setting up. They work whenever the chat screen — or the media controls screen
+above — is open, on whichever player is in front:
 
 | Key | What it does |
 |---|---|

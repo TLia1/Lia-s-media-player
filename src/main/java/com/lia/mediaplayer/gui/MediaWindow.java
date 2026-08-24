@@ -43,6 +43,10 @@ abstract class MediaWindow {
      */
     private static final int FLASH_MS = 220;
     /**
+     * How long the copy button keeps saying it copied something.
+     */
+    private static final int COPIED_MS = 1600;
+    /**
      * How long two clicks may be apart and still count as a double-click.
      */
     private static final int DOUBLE_CLICK_MS = 300;
@@ -129,6 +133,7 @@ abstract class MediaWindow {
     protected int closeBtnX, closeBtnY;
     protected int hideBtnX, hideBtnY;
     private int linkBtnX, linkBtnY;
+    private int copyBtnX, copyBtnY;
     private int favBtnX, favBtnY;
     private int gripX, gripY;
     /**
@@ -173,6 +178,15 @@ abstract class MediaWindow {
     // The previous click, for spotting a double-click on the picture.
     private long lastClickAt;
     private int lastClickX, lastClickY;
+
+    /**
+     * When the copy button last put something on the clipboard.
+     *
+     * <p>A copy leaves nothing on screen to show for itself — the clipboard is
+     * somewhere else — so the button says so itself for a moment afterwards. See
+     * {@link #copyTooltip()}.</p>
+     */
+    private long copiedAt;
 
     /**
      * Whether the state loaded from {@code windows.json} has been applied yet. Read on
@@ -265,8 +279,8 @@ abstract class MediaWindow {
     }
 
     /**
-     * How wide the row of corner buttons is: close, the browser link and the favourite
-     * heart, plus the hide button on the windows that have one.
+     * How wide the row of corner buttons is: close, the browser link, the copy button
+     * and the favourite heart, plus the hide button on the windows that have one.
      *
      * <p>It is part of the minimum because they are laid out right-to-left from the
      * window's right edge and nothing stops them running past its left one: a window
@@ -274,7 +288,7 @@ abstract class MediaWindow {
      * its left.</p>
      */
     private int cornerButtonsWidth() {
-        int buttons = 3 + (hasHideButton() ? 1 : 0);
+        int buttons = 4 + (hasHideButton() ? 1 : 0);
         return buttons * (BUTTON + 2) + 4;
     }
 
@@ -431,6 +445,18 @@ abstract class MediaWindow {
      */
     boolean seekBy(long deltaMicros) {
         return false;
+    }
+
+    /**
+     * Where playback has got to, in microseconds, or {@code -1} for a window with no
+     * clock behind it (a pinned image).
+     *
+     * <p>Part of the transport contract because it is asked for the same reason the rest
+     * of it is: something outside the window — here the copy button — needs one answer
+     * that both players give in the same terms.</p>
+     */
+    long positionMicros() {
+        return -1;
     }
 
     boolean playNext() {
@@ -599,7 +625,12 @@ abstract class MediaWindow {
         }
         linkBtnX = next - BUTTON - 2;
         linkBtnY = closeBtnY;
-        favBtnX = linkBtnX - BUTTON - 2;
+        // Beside the browser link rather than beside the heart: the two of them are the
+        // same gesture ("take this link somewhere else"), one to a window and one to the
+        // clipboard, and they are told apart by their glyphs, not by hunting for them.
+        copyBtnX = linkBtnX - BUTTON - 2;
+        copyBtnY = closeBtnY;
+        favBtnX = copyBtnX - BUTTON - 2;
         favBtnY = closeBtnY;
         titleTextRight = favBtnX - 3;
 
@@ -897,6 +928,13 @@ abstract class MediaWindow {
             Tooltips.request(Component.translatable("gui.liasmediaplayer.control.open_browser"));
         }
 
+        boolean overCopy = inRect(mouseX, mouseY, copyBtnX, copyBtnY, BUTTON, BUTTON);
+        drawButtonBackdrop(g, copyBtnX, copyBtnY);
+        Glyphs.copy(g, copyBtnX, copyBtnY, overCopy ? Theme.ICON_HOVER : Theme.ICON);
+        if (overCopy) {
+            Tooltips.request(copyTooltip());
+        }
+
         boolean overClose = inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON);
         drawButtonBackdrop(g, closeBtnX, closeBtnY);
         Glyphs.close(g, closeBtnX, closeBtnY, overClose ? Theme.DANGER : Theme.ICON);
@@ -995,6 +1033,10 @@ abstract class MediaWindow {
             }
             if (inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON)) {
                 openLink();
+                return ClickResult.HANDLED;
+            }
+            if (inRect(mouseX, mouseY, copyBtnX, copyBtnY, BUTTON, BUTTON)) {
+                copyLink(Keys.shiftDown());
                 return ClickResult.HANDLED;
             }
             if (inRect(mouseX, mouseY, favBtnX, favBtnY, BUTTON, BUTTON)) {
@@ -1262,6 +1304,64 @@ abstract class MediaWindow {
         if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
             Util.getPlatform().openUri(url);
         }
+    }
+
+    /**
+     * Puts the media's link on the clipboard — plainly, or with the moment currently
+     * playing written into it.
+     *
+     * <p>The timestamp is the whole point of the button existing next to the browser
+     * one: "have a look at this video" is a link anybody can already copy out of chat,
+     * and "have a look at <em>this bit</em>" is not. It is behind {@code Shift} rather
+     * than being a button of its own because it is the same action on the same link:
+     * a second glyph to aim at would say there were two things to copy.</p>
+     *
+     * @param atPosition write the current playback position into the link, where the
+     *                   site has a way of saying it
+     */
+    private void copyLink(boolean atPosition) {
+        String url = mediaUrl();
+        if (!com.lia.mediaplayer.source.Urls.isHttp(url)) {
+            return; // the same gate openLink applies, for the same reason
+        }
+        String copied = atPosition ? timestampedUrl(url) : url;
+        try {
+            Minecraft.getInstance().keyboardHandler.setClipboard(copied);
+        } catch (RuntimeException e) {
+            return; // no clipboard on this platform; saying "copied" would be a lie
+        }
+        copiedAt = Anim.now();
+    }
+
+    /**
+     * {@code url} with the playback position in it, or {@code url} itself when there is
+     * no position to write (a pinned image, a live stream at the start) or no way to
+     * write it for this site.
+     */
+    private String timestampedUrl(String url) {
+        long micros = positionMicros();
+        if (micros <= 0) {
+            return url;
+        }
+        return com.lia.mediaplayer.source.ShareLink.atSeconds(url, micros / 1_000_000L);
+    }
+
+    /**
+     * What the copy button says: that it just copied something, what {@code Shift} would
+     * add, or — where the site cannot express a position — plainly what it does.
+     */
+    private Component copyTooltip() {
+        if (Anim.progress(copiedAt, COPIED_MS) < 1.0) {
+            return Component.translatable("gui.liasmediaplayer.control.copy_link.done");
+        }
+        long micros = positionMicros();
+        if (micros <= 0 || !com.lia.mediaplayer.source.ShareLink.supportsTimestamp(mediaUrl())) {
+            return Component.translatable("gui.liasmediaplayer.control.copy_link");
+        }
+        String at = com.lia.mediaplayer.source.ShareLink.clockTime(micros / 1_000_000L);
+        return Component.translatable(Keys.shiftDown()
+                ? "gui.liasmediaplayer.control.copy_link.at"
+                : "gui.liasmediaplayer.control.copy_link.shift", at);
     }
 
     /**

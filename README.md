@@ -19,7 +19,10 @@ watchable (and listenable) media — without ever leaving the game.
 - Decide what gets played at all with client-side **domain and sender filters** — useful
   on a busy public server.
 - Drive the audio player with **configurable keybinds** (play/pause, next, previous,
-  open playlists).
+  open playlists) — including one that opens a **media controls screen**, where the
+  windows are clickable without the chat being open.
+- Copy a link back to chat **at the moment you are watching** (`&t=137s`), and pick the
+  **theme** the whole UI is drawn in (dark, high contrast, Minecraft or light).
 - Supports direct image, video and audio files, animated Tenor and Giphy GIFs, HLS/DASH
   streams, YouTube, Twitch, Vimeo, Streamable, Reddit, SoundCloud and Bandcamp — with
   zero manual setup for most things.
@@ -248,9 +251,11 @@ Audio links open a compact bar backed by an audio-only engine that reuses the sa
 ffmpeg tooling (YouTube playlist entries play as sound only). Saved playlists persist to
 a JSON file in the game folder, as does where each kind of window was last left, and
 configurable keybinds drive the players from the world — including one that plays
-whatever link is on the clipboard. While the chat is open a fixed set of shortcuts
-(space, the arrow keys, and `Ctrl` plus a letter) reaches the front-most player without
-getting in the way of typing.
+whatever link is on the clipboard and one that opens a screen where the windows can be
+driven with the mouse. While such a screen is open a fixed set of shortcuts (space, the
+arrow keys, and `Ctrl` plus a letter) reaches the front-most player without getting in
+the way of typing. Every colour comes from one palette, so a setting swaps the look of
+the whole mod.
 
 The code is organized into small, single-responsibility packages under
 `com.lia.mediaplayer`: `source` (what a link is — the extension point), `chat`

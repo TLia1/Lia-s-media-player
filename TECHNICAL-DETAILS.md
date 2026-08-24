@@ -161,6 +161,7 @@ the loader's business and the interface an addon implements became the same on b
 | `DirectVideoSource.java` · `StreamSource.java` · `YouTubeSource.java` · `YouTubePlaylistSource.java` · `TwitchSource.java` · `VimeoSource.java` · `StreamableSource.java` · `RedditVideoSource.java` | The eight `VIDEO` sources. `YouTubePlaylistSource` claims a `youtube.com/playlist?list=…` page (expanded into its videos on click, never played as-is) and stays disjoint from `YouTubeSource`, which keeps a `watch?v=…&list=…` link as the single video it opens. `YouTubeSource.isYouTube` and `TwitchSource.isTwitch` are reused by the playback engines for their dedicated resolution paths.                                                                                                                                                                                                                                                                      |
 | `AudioFileSource.java` · `SoundCloudSource.java` · `BandcampSource.java`                    | The three `AUDIO` sources: a direct audio file (`AudioFileSource.isAudioFile`), a SoundCloud track page and a Bandcamp track/album page. The last two are pages, so they answer `requiresExtractor()` with `true`.                                                                                                                                                                                                                                                                                                                                                      |
 | `Urls.java`                                                                                 | Package-private URL path/host parsing shared by the sources.                                                                                                                                                                                                                                                                                                                                                                  |
+| `ShareLink.java`                                                                            | Writes a playback position into a link so it can be pasted back into chat — `&t=137s` on YouTube, `?t=1h02m03s` on Twitch, a `#t=` fragment on Vimeo and SoundCloud — and says which sites have a spelling for it at all. Purely textual, so it is unit-tested (`ShareLinkTest`).                                                                                                                                                                                                                                                                                                                                                                  |
 | `LinkFilter.java` · `FilterMode.java`                                                       | The pure matching rules behind the client-side link filters — is this URL's host on a list (whole labels, sub-domains included), is this sender's name on one (matched anywhere in the display name) — and the three-way mode the host lists are read under. The lists are passed in, so both are unit-testable; the policy is `chat/MediaFilters`.                                                                            |
 | **`media/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `Volume.java`                                                                               | The single, shared playback level (0..1) used by both engines, plus the dB-gain math that applies it to a `SourceDataLine` (master-volume-scaled).                                                                                                                                                                                                                                                                            |
@@ -187,15 +188,19 @@ the loader's business and the interface an addon implements became the same on b
 | `QueuePanel.java`                                                                           | The list of what plays next, docked beside a player window: rows with a thumbnail and/or a title, click to jump, arrows to reorder, a cross to drop. Shared by both players — the window supplies only the `Mode` it has room for (`FULL` / `MINI` / `TEXT`) and what "play this one" means — and owns its own open state, scroll position and hit-testing geometry.                                                            |
 | `PlayQueue.java`                                                                            | The ordered URL queue model (append/jump/remove/reorder) shared by `VideoWindow` and `AudioWindow`, so the queue mechanics live in one place. Also owns the play history and the two playback modes that need it: `next(current)`/`previous(current)` apply the `RepeatMode` and the sticky shuffle flag, so the windows only ever swap their player. |
 | `RepeatMode.java`                                                                           | `OFF` / `ALL` / `ONE` — what the queue does when a track ends, cycled by the loop button.                                                                                                                                                                                                                                                                                 |
-| `Glyphs.java`                                                                               | Every icon the mod draws, in one place: the transport controls (play/pause, next, previous, stop, loop, shuffle, speaker, volume ±, speed), the window controls (close, minimize, external link, queue, fullscreen, pin), and the list controls (arrow, search, trash, drag handle, heart, note) — plus a text-ellipsis helper. All plain rectangles, so no textures and nothing that changes shape between versions.                          |
-| `Theme.java`                                                                                | The whole palette, named by role (`WINDOW_BG`, `ROW_HOVER_BG`, `ICON_HOVER`, `BORDER_FOCUSED`, `DANGER`, …), plus `withAlpha` — the one piece of colour arithmetic, used by everything that fades. Every window, panel, list and overlay reads its colours from here instead of declaring its own constants, so the look is defined in one file. |
+| `Glyphs.java`                                                                               | Every icon the mod draws, in one place: the transport controls (play/pause, next, previous, stop, loop, shuffle, speaker, volume ±, speed), the window controls (close, minimize, external link, copy, queue, fullscreen, pin), and the list controls (arrow, search, trash, drag handle, heart, note) — plus a text-ellipsis helper. All plain rectangles, so no textures and nothing that changes shape between versions.                          |
+| `Theme.java`                                                                                | The whole palette, named by role (`WINDOW_BG`, `ROW_HOVER_BG`, `ICON_HOVER`, `BORDER_FOCUSED`, `DANGER`, …), plus `withAlpha` — the one piece of colour arithmetic, used by everything that fades. Every window, panel, list and overlay reads its colours from here instead of declaring its own constants, which is what lets `apply(ThemeName)` repaint the entire mod by rewriting this one set of values. `refresh()` re-reads the setting once a client tick. |
+| `ThemeName.java`                                                                            | The four palettes: `DARK` (the mod's own), `CONTRAST`, `MINECRAFT` (vanilla's tones). The value type of the `theme` config option. |
 | `Tooltips.java`                                                                             | The single point of contact with tooltips. `render` draws one *immediately* (the call was renamed at 1.21.6 and again at 26.1, and the deferred replacement is a frame late for a caller running from the screen-render post hook). `request`/`renderPending` let the windows — which are not screen widgets and so have no `setTooltip` — ask for a tooltip while drawing, which `MediaWindowOverlay` then draws above the stack. |
 | `Anim.java`                                                                                 | The clock behind every short UI animation: wall-clock progress (`Util.getMillis`, never ticks — the windows are drawn on the HUD too, and a paused world does not tick) plus the ease-out and in-hold-out curves. |
 | `Panels.java`                                                                               | The panel shape: a rectangle with 2 px softened corners and the outline that follows it. Five fills, no texture and no per-version API; one corner radius everywhere is what makes the windows, the queue panel, the chips and the banner read as one UI. |
 | `NowPlayingBanner.java`                                                                     | The strip announcing a track that no visible window is showing — raised from `playUrl` when the window doing the playing is hidden, drawn over the chat screen and the bare HUD alike. |
 | `MediaControls.java`                                                                        | Shared control logic and utilities (time formatting, volume and seek math, volume pop-up and seek-bar rendering — the bar grows and reveals its handle only while it is being pointed at) used by `VideoWindow` and `AudioWindow`. |
 | `HistoryScreen.java`                                                                        | The library screen, opened from the playlist screen: the saved playlists on the left as the target of the "add" button, the history entries on the right with a heart, an add and a remove button each. A search box and a favourites-only toggle narrow the list; a click on a row plays it exactly as clicking the link in chat would. Titles resolve through `MediaTitleCache` for the visible rows only.                     |
-| `PlaylistScreen.java`                                                                       | The playlist manager screen: a list of saved playlists on the left (select / create), the selected playlist's entries on the right (rename, add a link or expand a YouTube playlist into tracks, remove, play in order, play shuffled, loop, delete). Persists via `PlaylistStore`.                                                                                                                                                                                          |
+| `PlaylistScreen.java`                                                                       | The playlist manager screen: a list of saved playlists on the left (select / create), the selected playlist's entries on the right — each with its thumbnail — with a search box over them, a grip to drag one into place, and the rename / add / remove / play / shuffle / loop / delete controls. Its widgets are built **once** and hidden while nothing is selected; the lists are drawn by hand, so no edit rebuilds a widget or steals what is being typed. Persists via `PlaylistStore`. |
+| `MediaControlScreen.java`                                                                   | A screen whose whole content is the window stack, opened by its own key binding: the windows become clickable without the chat having to be open. It draws nothing but a caption — `MediaWindowOverlay.acceptsWindows` accepting this type is the entire feature. |
+| `Thumbnail.java`                                                                            | One 48×27 picture of a media URL — the fitting, the placeholder and the loading mark — shared by the queue panel and the playlist screen. `VideoThumbnailCache` fetches; this puts one on screen. |
+| `DragTarget.java`                                                                           | The interface a mod screen implements to receive the drag stream the loader bridges already carry (`MediaWindowOverlay` routes it), instead of overriding vanilla's drag callbacks — whose signatures moved at 1.21.11. |
 | `ConfigScreen.java`                                                                         | The settings screen: registered groups down the left, the selected group's options beside them, and a search box filtering by translated label. One screen rather than two — it replaced the hub-plus-per-group-screen pair, so switching group is a click and never a screen change. |
 | `OptionsList.java`                                                                          | The scrolling column of option widgets, one or two per row by `OptionWidth`. Each row carries a reset button (greyed out while the option is already at its default) and each widget the option's description and warning as one tooltip. Overrides `getRowLeft` so the rows sit in their own column beside the group list. |
 | **`image/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -216,11 +221,11 @@ the loader's business and the interface an addon implements became the same on b
 | `HistoryEntry.java`                                                                         | One thing that was played: the URL, its `MediaKind`, when it last started, and whether it carries the heart. No title is stored — names come from `MediaTitleCache`, the same bargain `Playlist` makes.                                                                                                                                                                                                                        |
 | `HistoryStore.java`                                                                         | Loads/saves the history to `<gamedir>/liasmediaplayer/history.json` (lazy load, temp file + atomic move, never throws). Most recent first; re-playing an entry moves it back to the top instead of duplicating it. Ordinary entries are bounded at `MAX_ENTRIES`, favourites are not counted against it and are never evicted — and `clear()` keeps them. The static `record(url, kind)` is what the five playback entry points call. |
 | **`playlist/`**                                                                             |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `Playlist.java`                                                                             | A named, ordered list of media URLs (its fields are the JSON schema).                                                                                                                                                                                                                                                                                                                                                         |
+| `Playlist.java`                                                                             | A named, ordered list of media URLs (its fields are the JSON schema). `swap` moves an entry one place, `move(from, insertBefore)` moves it to where a drop landed.                                                                                                                                                                                                                                                                                                                                                         |
 | `PlaylistStore.java`                                                                        | Loads/saves the playlists to `<gamedir>/liasmediaplayer/playlists.json` (Gson), lazily on first access and after every change, using atomic file replacements to prevent corruption.                                                                                                                                                                                                                                          |
 | **`input/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ModKeybinds.java`                                                                          | The configurable key bindings (play/pause, next, previous, volume up/down, mute, show/hide all, close all, open playlists, open the settings, play the clipboard), unbound by default, under a "Lia's Media Player" category. Declares them and exposes `all()`; registering them with the game is each loader bridge's job.                                                                                                                                                                                    |
-| `KeybindHandler.java`                                                                       | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`. Called from `platform.ClientHooks.onClientTick`.                                                                                                                                                                                                                                                           |
+| `ModKeybinds.java`                                                                          | The configurable key bindings (play/pause, next, previous, volume up/down, mute, show/hide all, close all, open the media controls, open playlists, open the settings, play the clipboard), unbound by default, under a "Lia's Media Player" category. Declares them and exposes `all()`; registering them with the game is each loader bridge's job.                                                                                                                                                                                    |
+| `KeybindHandler.java`                                                                       | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`, `ConfigScreen` or `MediaControlScreen`. Called from `platform.ClientHooks.onClientTick`.                                                                                                                                                                                                                                                           |
 | **`tools/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `FFmpegCli.java`                                                                            | Thin wrapper around the `ffmpeg`/`ffprobe` binaries. Probes stream metadata (via `ffprobe` JSON, parsed with Gson) and starts ffmpeg processes that pipe raw `rgba` video and `s16le` PCM audio to stdout. A shutdown hook tracks and forcibly kills active processes on game exit to prevent orphaned binaries.                                                                                                              |
 | `MediaBinaries.java`                                                                        | Public facade that orchestrates `BinaryLocator` and `BinaryDownloader`. Exposes the resolved paths for `yt-dlp`, `ffmpeg` and `ffprobe`, caches results, and manages the once-per-session download guard. Also owns **keeping yt-dlp current**: it reads `yt-dlp --version` at launch, treats a build older than 30 days as stale, and either replaces it (`AUTO_UPDATE_TOOLS`) or says so in a toast; `updateToolsAsync()` / `isUpdating()` back the *update the tools* buttons. The only class the rest of the mod imports from `tools/` (besides `FFmpegCli`).                                                                                                                                     |
@@ -368,7 +373,9 @@ untouched.
 All on-screen windows — pinned `ImageWindow`s and `VideoWindow`s — live in one
 stack ordered by `MediaWindow.zOrder()`:
 
-- **On the chat screen** (`ClientHooks.onScreenRender` over a `ChatScreen`): every
+- **On a screen that hosts the stack** (`ClientHooks.onScreenRender` over a screen
+  `MediaWindowOverlay.acceptsWindows` accepts — the `ChatScreen`, and the
+  `MediaControlScreen` a key binding opens for exactly this): every
   visible window is drawn back-to-front, each in its own depth band, with the text
   buffer flushed after each one so a front window fully occludes the one behind it
   (content *and* batched text like the seek time / volume pop-up). Then the
@@ -705,8 +712,8 @@ and a **shuffle** toggle beside it while a queue exists; a **speaker/mute** butt
 pops up above it** on hover (shown only when the video has sound); and a draggable
 seek bar with a knob plus an elapsed `/` total time read-out (`LIVE` when the
 duration is unknown, with a `+N` suffix showing how many videos are queued). The
-top-right corner has the inherited **favourite** (♥), **open-in-browser** (↗),
-**hide** (`_`) and **close** (`x`) buttons. Move/resize/zoom come from `MediaWindow`.
+top-right corner has the inherited **favourite** (♥), **copy link**, **open-in-browser**
+(↗), **hide** (`_`) and **close** (`x`) buttons. Move/resize/zoom come from `MediaWindow`.
 
 **The play queue.** Instead of one window per link, extra videos are appended to the
 current window's queue. When the current video ends (or **next** is pressed),
@@ -831,11 +838,31 @@ store, which saves immediately.
 `PlaylistScreen` (opened from the chat **Playlists** button or its keybind) is a plain
 vanilla `Screen`: the left column lists saved playlists (click to select; an edit box +
 `+` button creates one), and the right column edits the selected playlist — rename it,
-paste a link to **add** an entry, remove entries, and **Play** (in order) or **Shuffle**
-(randomised, and left on for the bar). Play hands the URLs to `AudioPlayerManager.playAll`,
-which opens a fresh bar playing the first track with the rest queued behind it. A **Loop**
-toggle beside them decides whether that bar starts in `RepeatMode.ALL`. Entry names in the
-list come from the shared `MediaTitleCache` (real YouTube titles, or file names).
+search it, paste a link to **add** an entry, reorder or remove entries, and **Play** (in
+order) or **Shuffle** (randomised, and left on for the bar). Play hands the URLs to
+`AudioPlayerManager.playAll`, which opens a fresh bar playing the first track with the
+rest queued behind it. A **Loop** toggle beside them decides whether that bar starts in
+`RepeatMode.ALL`. Each row carries the track's picture (`gui/Thumbnail`, on the same
+`VideoThumbnailCache` the queue panel uses) and its name from the shared
+`MediaTitleCache` (real YouTube titles, or file names).
+
+Two things about the screen are worth knowing:
+
+- **Nothing rebuilds.** Every widget is created once in `init()`; the right-hand column
+  is merely hidden (`AbstractWidget.visible`, which also stops it taking clicks and the
+  focus) while no playlist is selected, and both lists are drawn by hand from the store
+  each frame. Selecting, adding, removing, reordering and a background YouTube import
+  landing therefore change only what the next frame draws — the screen used to rebuild
+  every widget on each of those, which discarded the focus and whatever was half-typed.
+- **A track can be dragged into place.** A press on a row picks it up, an insertion line
+  follows the cursor (the list scrolls when the drag is held against an edge), and the
+  drop calls `Playlist.move(from, insertBefore)` — one move, where the arrows are one
+  swap. The press arrives as an ordinary `mouseClicked`, but the drag and the release come
+  through `gui/DragTarget` from the loader bridges, which already carry both for every
+  screen in vanilla types; overriding vanilla's own callbacks would mean a version guard
+  each, since they became `MouseButtonEvent` records at 1.21.11. Dragging is disabled
+  while the search box is filtering: the rows on screen are then not consecutive, and
+  "drop it here" would have no honest answer, so the grip and the arrows grey out.
 
 Pasting a **YouTube playlist** link into the add box (or onto the clipboard **In** button)
 expands it into its videos through `YouTubePlaylistResolver` instead of storing the page
@@ -885,6 +912,25 @@ it through `MediaWindowOverlay.play` — the same routing, and the same modifier
 clicking the link in chat. Titles resolve through `MediaTitleCache` for the visible rows
 only, so scrolling a full history does not fire two hundred lookups.
 
+## Sharing a link back (`source/ShareLink`)
+
+Beside the browser button, every window carries a **copy** button: plainly it puts the
+media's URL on the clipboard, and with `Shift` it puts the URL **at the moment currently
+playing** — `...&t=137s` — which is the half of "have a look at this" that a link copied
+out of chat cannot say. The tooltip names the moment it would write, and says so for a
+second after it has, because a clipboard is somewhere else and a copy otherwise leaves
+nothing on screen to show for itself.
+
+`ShareLink` is where each site's spelling lives (`t=<n>s` on YouTube, `start=` for its
+embed form, `?t=1h02m03s` on Twitch, a `#t=` fragment on Vimeo and SoundCloud), and where
+the decision *not* to write one lives: a site with no timestamp form gets its link back
+untouched rather than a parameter it would ignore. It is plain string work over the
+existing `isYouTube` / `isTwitch` / `isVimeo` / `isSoundCloud` predicates — no URI
+round-trip, which would re-encode a link on its way to someone's chat box — so all of it
+is unit-tested. The position comes from `MediaWindow.positionMicros()`, the transport
+contract's answer to "where has this got to", which both players override and a pinned
+image answers with `-1`.
+
 ## Link filters (`chat/MediaFilters`, `source/LinkFilter`)
 
 The mod rewrites links posted by anyone, which on a public server is the one thing it can
@@ -926,8 +972,10 @@ Fabric derives the grouping from the mapping itself and needs no registration.
 They are **unbound by default** (so they can never clash with
 a vanilla or other-mod key out of the box; the player assigns them in *Options →
 Controls*). `KeybindHandler` polls them each client tick with `consumeClick()` and drives
-the front-most audio bar (or opens `PlaylistScreen`); an unbound binding simply never
-fires. A small `assets/liasmediaplayer/lang/{en_us,fr_fr}.json` provides the readable
+the front-most audio bar (or opens `PlaylistScreen`, `ConfigScreen` or
+`MediaControlScreen`); an unbound binding simply never fires. The three screen bindings
+are polled before the mod's context is even looked up, because they are the ones that
+still mean something with nothing playing. A small `assets/liasmediaplayer/lang/{en_us,fr_fr}.json` provides the readable
 names.
 
 "Play from clipboard" reads `Minecraft.keyboardHandler.getClipboard()` and hands it to
@@ -936,10 +984,11 @@ link routes through, so `Alt` (sound only) and `Shift` (its own window) mean exa
 they mean in chat. Volume and mute act on `media.Volume`, the one shared level, rather
 than on any particular player.
 
-### Shortcuts over the chat screen (`gui/WindowShortcuts`)
+### Shortcuts over a screen that hosts the windows (`gui/WindowShortcuts`)
 
 The bindings above are global; a second, fixed set acts on the window stack while a
-screen that hosts it is open, reached through `ClientHooks.onKeyPressed`. The table lives
+screen that hosts it is open — the chat screen or the `MediaControlScreen` — reached
+through `ClientHooks.onKeyPressed`. The table lives
 in `WindowShortcuts.actionFor(key, control, shift, typing)`, a pure function so the whole
 of it is unit-tested (`WindowShortcutsTest`), with `handle()` as the part that needs a
 live window.
@@ -971,6 +1020,50 @@ front-most window that `hasTransport()`, so a pinned image over a playing video 
 swallow the space bar, and `Ctrl+F` goes to the front-most window that
 `supportsTheater()`.
 
+## Themes (`gui/Theme`, `gui/ThemeName`)
+
+Every colour the mod draws is a **role** on `Theme` — `WINDOW_BG`, `ROW_HOVER_BG`,
+`ICON_HOVER`, `BORDER_FOCUSED`, `PRESS_FLASH`, `DANGER` — and no call site names a shade.
+That is what makes a theme possible at all: `Theme.apply(ThemeName)` rewrites the roles
+and the next frame is drawn in the new palette, with nothing to invalidate because
+nothing caches a colour past the draw that used it. The fields are consequently **not
+final**; they are the active palette, not constants.
+
+Four palettes: `DARK` (the mod's own), `CONTRAST` (opaque black, white edges, no state
+told apart by a shade of grey), `MINECRAFT` (the translucent `0xC0101010` a vanilla
+screen dims the world with, its grey widget edges and its `§a`/`§e`/`§c` accents). 
+Each is written as **what it changes about `DARK`**, which is re-installed in
+full first — so a role a theme does not mention keeps the dark value deliberately, and
+can never be left holding the *previous* theme's. `ThemeTest` walks every role by
+reflection to pin that: each theme leaves every role set, switching away and back
+restores the palette exactly, and no theme is the dark one under another name.
+
+The setting is an `EnumOption<ThemeName>`, read by `Theme.refresh()` once a client tick
+from `MediaWindowOverlay.clientTick`. A poll rather than a notification: the value can
+move from the option's widget, from its reset button or from the config file being
+re-read, and comparing two enum references costs nothing while making all three work
+without anybody remembering to announce anything.
+
+`EnumOption` labels its value with `<translationKey>.<constant in lower case>` when the
+language files carry that key and the bare constant name when they do not, so the theme
+names are translated and every other enum option keeps exactly the label it had.
+
+## Media controls without the chat (`gui/MediaControlScreen`)
+
+The window stack is drawn everywhere but is only *driven* from a screen that hosts it,
+which for a long time meant the chat screen alone: pausing a video required opening a
+text field. `MediaControlScreen` is that same host with nothing on it — a plain `Screen`
+with no widgets, `isPauseScreen()` false, a caption at the bottom, and its own key
+binding. Everything else it needs already existed: `MediaWindowOverlay.acceptsWindows`
+accepting the type gives it the rendering, the four mouse hooks, the shortcut table and
+the overlay chips in one line, which is the payoff of that predicate having been factored
+out of the six places that ask it.
+
+It calls `super.render` (`super.extractRenderState` from 26.1) rather than taking the
+drawing over, and that is not optional: on Fabric the screen-render hook that draws the
+window stack is injected into the vanilla method, so a screen that never calls it would
+show nothing at all.
+
 ## Remembered window state (`gui/WindowStateStore`)
 
 `<gamedir>/liasmediaplayer/windows.json` keeps where the windows were left — position,
@@ -1001,8 +1094,8 @@ landing exactly on the first.
 
 The shared base for the image, video and audio windows owns:
 
-- **Geometry & chrome** — the box, padding, the top-right corner buttons (link,
-  optional hide, close) and the bottom-right resize grip.
+- **Geometry & chrome** — the box, padding, the top-right corner buttons (favourite,
+  copy, link, optional hide, close) and the bottom-right resize grip.
 - **Move** — drag the window body; the first drag/resize "pins" the position so the
   window stops auto-anchoring and keeps its placement.
 - **Resize** — drag the corner grip, or **`Ctrl`+mouse-wheel** to zoom; content is
@@ -1163,6 +1256,19 @@ for what the mod does in-game.
 - **Threading split (images).** All cache/texture access stays on the render/main
   thread; only downloading and decoding run on the IO pool. Keep that split when
   modifying `ImagePreviewCache`, `VideoThumbnailCache` and `media.MediaTitleCache`.
+- **No texture is ever closed during a frame.** From 26.1 the GUI is *extracted* into
+  draw commands and executed afterwards, and a command holds a view of the texture it
+  names — so freeing one mid-frame ends the frame with
+  `IllegalStateException: Texture view Sampler0 (…) has been closed!`, thrown from inside
+  vanilla's renderer with nothing of the mod on the stack. Every texture the mod owns is
+  therefore dropped through `TextureBridge.release`, which only *queues* the location;
+  `TextureBridge.flushReleases()` frees it on the next client tick, between two frames.
+  Do not call `TextureManager.release` (or `DynamicTexture.close`) directly — the three
+  places that free a texture (a video frame reallocated on a size change, a thumbnail
+  evicted from a full cache, an image preview trimmed to the memory limit) all run
+  *inside* a draw, which is exactly how that crash happens. The deferral is safe because
+  every location the mod registers comes from a monotonic counter, so a released one is
+  never registered again.
 - **Threading split (video/audio).** Only the player's own background threads touch the
   ffmpeg processes and the audio line; only the render thread touches the
   `DynamicTexture` and OpenGL. `FFmpegCli`/`media.MediaUrlResolver`/`MediaBinaries` calls
