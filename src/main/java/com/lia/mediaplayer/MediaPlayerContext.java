@@ -8,6 +8,7 @@ import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.gui.AudioPlayerManager;
 import com.lia.mediaplayer.gui.ImageWindowManager;
 import com.lia.mediaplayer.gui.VideoPlayerManager;
+import com.lia.mediaplayer.gui.WindowStateStore;
 import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.MediaSources;
@@ -26,6 +27,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     private final MediaSources mediaSources;
     private final ConfigStore configStore;
     private final PlaylistStore playlistStore;
+    private final WindowStateStore windowStateStore;
     private final Volume volume;
 
     public MediaPlayerContext() {
@@ -35,6 +37,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         this.mediaSources = new MediaSources();
         this.configStore = new ConfigStore();
         this.playlistStore = new PlaylistStore();
+        this.windowStateStore = new WindowStateStore();
         this.volume = new Volume();
     }
 
@@ -60,6 +63,14 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     public PlaylistStore getPlaylistStore() {
         return playlistStore;
+    }
+
+    /**
+     * Where the windows were left last time — position, size, and each player's queue
+     * panel and loop settings. See {@link WindowStateStore}.
+     */
+    public WindowStateStore getWindowStateStore() {
+        return windowStateStore;
     }
 
     public Volume getVolumeManager() {

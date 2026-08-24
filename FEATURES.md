@@ -95,6 +95,18 @@ front one — the one your next click will reach. They grow into place when they
 when they close, and a click leaves a brief mark where it landed, so you can tell a button that responded from one you
 missed.
 
+**Windows line themselves up.** While you drag one, its edges and its centre snap to the edges and centre of the screen
+and of every other window, so two players end up flush rather than three pixels out. Hold **Shift** while dragging to
+place it exactly where you like instead.
+
+**Theatre mode.** **Double-click the picture** (or press **Ctrl+F**) and the window fills the screen; the controls fade
+away after a couple of seconds of not moving the mouse and come straight back when you move it. Double-click again — or
+Ctrl+F again — and the window returns to exactly the size and place it was.
+
+**It remembers.** Where you put a player, how big you made it, whether its queue panel was open, and its loop and
+shuffle settings are all saved and used again next time — for each kind of window separately, so your video player, your
+audio bar and your pinned images each keep their own spot.
+
 **Keeps playing in the background.** Hide a player, and it keeps running — audio and all — so you can listen while you
 play. When a hidden player moves on to the next track, a small **now playing** banner names it at the top of the
 screen, whether or not the chat is open. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay
@@ -175,9 +187,35 @@ chat:
 
 - **Play / Pause**, **Next track** and **Previous track**: these apply to the active audio track, or if none is playing,
   the active video player.
-- **Open playlists**
+- **Volume up**, **Volume down** and **Mute / unmute**.
+- **Hide / show all windows** — get the media out of the way with one key, and bring it all back with the same one.
+- **Close all windows**.
+- **Open playlists** and **Open mod options**.
+- **Play the link on the clipboard** — copy a link from anywhere, press the key, and it plays. No one has to have shared
+  it in chat first. Hold **Alt** for sound only or **Shift** for a window of its own, exactly as when clicking a link.
 
 They're **unbound by default** so they never clash with your existing keys — just assign whatever you like.
+
+### While the chat is open
+
+A second set of shortcuts needs no setting up. They work whenever the chat screen is open, on whichever player is in
+front:
+
+| Key | What it does |
+|---|---|
+| **Space** | play / pause |
+| **← / →** | jump back / forward 5 seconds |
+| **Shift + ← / →** | jump back / forward 30 seconds |
+| **↑ / ↓** | volume up / down |
+| **Ctrl + M** | mute |
+| **Ctrl + L** | loop: off → the whole queue → this track |
+| **Ctrl + S** | shuffle |
+| **Ctrl + N / Ctrl + P** | next / previous track |
+| **Ctrl + F** | theatre mode |
+
+**They stay out of the way of typing.** Space and the arrow keys only act while the chat box is *empty* — the moment you
+start writing a message they belong to your message again. The rest sit behind **Ctrl**, so they keep working even
+half-way through a sentence. **Escape** always closes the chat, as it should. (On macOS, **Cmd** stands in for Ctrl.)
 
 ## Chat Commands
 

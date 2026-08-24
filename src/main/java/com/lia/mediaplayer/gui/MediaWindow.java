@@ -43,6 +43,18 @@ abstract class MediaWindow {
      */
     private static final int FLASH_MS = 220;
     /**
+     * How long two clicks may be apart and still count as a double-click.
+     */
+    private static final int DOUBLE_CLICK_MS = 300;
+    /**
+     * How far the second click of a double-click may land from the first.
+     */
+    private static final int DOUBLE_CLICK_SLOP = 4;
+    /**
+     * How long the cursor has to sit still before theatre mode drops its chrome.
+     */
+    private static final int THEATER_IDLE_MS = 2000;
+    /**
      * How much smaller a window starts before it grows into its real size.
      */
     private static final double OPEN_SCALE = 0.92;
@@ -142,6 +154,35 @@ abstract class MediaWindow {
     private boolean draggingResize;
     private int grabDX, grabDY;
 
+    // Theatre mode: the window fills the screen and the geometry it had before is put
+    // aside so leaving puts it back exactly where it was.
+    private boolean theater;
+    private boolean savedPlaced, savedSized;
+    private int savedX, savedY;
+    private double savedScale;
+
+    // Where the cursor last was and when it last moved, which is what tells theatre
+    // mode whether anyone is still looking for the controls.
+    private int lastMouseX = Integer.MIN_VALUE, lastMouseY = Integer.MIN_VALUE;
+    private long lastMouseMoveAt = Anim.now();
+
+    // The previous click, for spotting a double-click on the picture.
+    private long lastClickAt;
+    private int lastClickX, lastClickY;
+
+    /**
+     * Whether the state loaded from {@code windows.json} has been applied yet. Read on
+     * the first layout rather than in the constructor, so a window built before the
+     * mod's context exists still finds the store.
+     */
+    private boolean restoredState;
+
+    /**
+     * A restored content width still waiting for a real source size to be turned into
+     * a scale; {@code 0} when there is nothing pending. See {@link #applyPendingWidth}.
+     */
+    private int pendingWidth;
+
     // ------------------------------------------------------------------
     // Subclass contract
     // ------------------------------------------------------------------
@@ -155,6 +196,16 @@ abstract class MediaWindow {
      * Intrinsic content height in pixels.
      */
     protected abstract int sourceHeight();
+
+    /**
+     * Whether {@link #sourceWidth()} / {@link #sourceHeight()} report the content's real
+     * size yet, rather than the placeholder a window shows before its media has loaded.
+     * Only {@link #applyPendingWidth} cares, and only on the first frames of a window
+     * whose size is being restored.
+     */
+    protected boolean sourceSizeKnown() {
+        return true;
+    }
 
     /**
      * Default (un-resized) scale that fits the content nicely on screen.
@@ -322,6 +373,93 @@ abstract class MediaWindow {
     }
 
     // ------------------------------------------------------------------
+    // Transport contract
+    //
+    // What a keyboard shortcut (see WindowShortcuts) can ask of a window. Every method
+    // returns whether it did something, which is also the answer to "was the key
+    // consumed?" — a pinned image answers no to all of them and the key falls through.
+    // Both player windows already own these actions for their control bars; this is
+    // the same set, reachable without the mouse.
+    // ------------------------------------------------------------------
+
+    /**
+     * Whether this window has a player behind it, and so anything to play, pause or
+     * seek. {@link WindowShortcuts} uses it to pick which window a transport key means.
+     */
+    boolean hasTransport() {
+        return false;
+    }
+
+    boolean togglePlayPause() {
+        return false;
+    }
+
+    /**
+     * Seeks {@code deltaMicros} from the current position, clamped into the track.
+     */
+    boolean seekBy(long deltaMicros) {
+        return false;
+    }
+
+    boolean playNext() {
+        return false;
+    }
+
+    boolean playPrevious() {
+        return false;
+    }
+
+    boolean cycleRepeat() {
+        return false;
+    }
+
+    boolean toggleShuffle() {
+        return false;
+    }
+
+    /**
+     * Whether this window has a picture worth filling the screen with. The audio bar
+     * says no: it is already exactly as big as its content needs to be.
+     */
+    boolean supportsTheater() {
+        return true;
+    }
+
+    /**
+     * Called as theatre mode is entered, for a subclass to fold away anything docked
+     * beside the window that would fight with it for the screen.
+     */
+    protected void onEnterTheater() {
+    }
+
+    // ------------------------------------------------------------------
+    // Persistence contract
+    // ------------------------------------------------------------------
+
+    /**
+     * Which entry of {@code windows.json} this window reads and writes — one of
+     * {@link WindowStateStore#IMAGE}, {@link WindowStateStore#VIDEO} or
+     * {@link WindowStateStore#AUDIO}. State is shared by every window of a kind, so a
+     * second video player opens where the first one was left.
+     */
+    protected abstract String stateKey();
+
+    /**
+     * Adds this window's own state to the geometry {@link #captureState} collects.
+     * Only the player windows have anything to add (their queue panel and loop modes).
+     */
+    protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
+        return geometry;
+    }
+
+    /**
+     * Applies the parts of a restored state this window understands. Called once, on
+     * the first layout, after the geometry has been put back.
+     */
+    protected void applyRestoredState(WindowStateStore.State state) {
+    }
+
+    // ------------------------------------------------------------------
     // State
     // ------------------------------------------------------------------
 
@@ -348,6 +486,9 @@ abstract class MediaWindow {
         int srcW = Math.max(1, sourceWidth());
         int srcH = Math.max(1, sourceHeight());
 
+        restoreStateOnce();
+        applyPendingWidth();
+
         double scale = userSized ? userScale : computeAutoScale(srcW, srcH, screenWidth, screenHeight);
         titleBarH = hasTitleBar() ? TITLE_BAR : 0;
 
@@ -363,7 +504,12 @@ abstract class MediaWindow {
         int widthCapFromHeight = Math.max(minContentW, (int) Math.floor(maxContentH * (double) srcW / srcH));
         int widthCap = Math.min(maxContentW, widthCapFromHeight);
 
-        int settledW = Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
+        // Theatre mode is exactly the cap that was just computed: `widthCap` already
+        // knows about the chrome, the aspect ratio and the screen, so "as big as fits"
+        // needs no arithmetic of its own — and unlike going through MAX_SCALE, it fills
+        // the screen for a small source too.
+        int settledW = theater ? widthCap
+                : Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
         // The scale the window *is* at, recorded before the opening animation scales it
         // down: a wheel-zoom in the first frames must start from the real size, not from
         // the momentary one.
@@ -386,7 +532,10 @@ abstract class MediaWindow {
             initialPositionApplied = true;
         }
 
-        if (userPlaced) {
+        if (theater) {
+            boxX = Math.max(0, (screenWidth - boxW) / 2);
+            boxY = Math.max(0, (screenHeight - boxH) / 2);
+        } else if (userPlaced) {
             boxX = Mth.clamp(userX, 2, Math.max(2, screenWidth - boxW - 2));
             boxY = Mth.clamp(userY, 2, Math.max(2, screenHeight - boxH - 2));
         } else {
@@ -454,6 +603,99 @@ abstract class MediaWindow {
     }
 
     // ------------------------------------------------------------------
+    // Persistence
+    // ------------------------------------------------------------------
+
+    private static WindowStateStore stateStore() {
+        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        return context == null ? null : context.getWindowStateStore();
+    }
+
+    /**
+     * Puts back where this kind of window was left, on the first layout only.
+     *
+     * <p>Position, loop mode and the queue panel are put back straight away; the size
+     * waits for {@link #applyPendingWidth}, which needs a real source size to work
+     * against.</p>
+     */
+    private void restoreStateOnce() {
+        if (restoredState) {
+            return;
+        }
+        restoredState = true;
+        WindowStateStore store = stateStore();
+        if (store == null) {
+            return;
+        }
+        WindowStateStore.State state = store.get(stateKey());
+        // The remembered spot belongs to one window. A second player of the same kind
+        // takes it only if the first is not already sitting there — otherwise the two
+        // would land exactly on top of each other, and the cascade in computeAnchor
+        // exists precisely to stop that.
+        if (state.placed() && MediaWindowOverlay.isSoleWindowOfKind(this)) {
+            userPlaced = true;
+            userX = state.x();
+            userY = state.y();
+            // The configured default position must not overwrite what was restored.
+            initialPositionApplied = true;
+        }
+        if (state.sized() && state.width() > 0) {
+            pendingWidth = state.width();
+        }
+        applyRestoredState(state);
+    }
+
+    /**
+     * Turns a restored content width into the scale the window actually works in, once
+     * there is a real source size to divide it by.
+     *
+     * <p>A video window exists before its player has decoded a single frame, and
+     * {@link #sourceWidth()} reports a 320x180 placeholder until then. Converting the
+     * width against that placeholder would restore a box several times too large the
+     * moment the real resolution arrived, so the width waits here instead. A source
+     * whose size never resolves — a video that fails to open — simply keeps its
+     * auto-fit scale, which is the right answer for a window with nothing in it.</p>
+     */
+    private void applyPendingWidth() {
+        if (pendingWidth <= 0 || !sourceSizeKnown()) {
+            return;
+        }
+        userSized = true;
+        userScale = pendingWidth / (double) Math.max(1, sourceWidth());
+        pendingWidth = 0;
+    }
+
+    /**
+     * This window's arrangement as the store would record it, or {@code null} when it
+     * is in no state to be recorded. {@link MediaWindowOverlay#clientTick()} collects
+     * these once a tick.
+     *
+     * <p>Nothing is offered mid-gesture: a drag would produce a new position every
+     * tick, turning one placement into twenty file writes. The tick after the mouse
+     * comes up records where it landed. Theatre mode is skipped for the reason it is a
+     * mode at all — it is somewhere a window goes, not somewhere it lives, and the
+     * geometry worth remembering is the one waiting to be restored.</p>
+     *
+     * <p>Nor before the window has been laid out once, which is where the stored state
+     * is read back: a window that has never been positioned would otherwise report
+     * "never placed, never sized" and overwrite the very entry it is about to restore
+     * from. That is not a race worth losing — a window opened hidden is never laid out
+     * at all, so it would wipe the saved position every time.</p>
+     */
+    final WindowStateStore.State captureState() {
+        if (!restoredState || draggingMove || draggingResize || theater) {
+            return null;
+        }
+        // The width the window settles at, not the animated `contentW` of this frame:
+        // recording the opening animation's momentary size would save a box a little
+        // smaller than the one on screen.
+        int width = userSized ? (int) Math.round(sourceWidth() * userScale) : 0;
+        return decorateState(new WindowStateStore.State(
+                userPlaced, userX, userY, userSized, width,
+                false, RepeatMode.OFF, false));
+    }
+
+    // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
 
@@ -483,10 +725,11 @@ abstract class MediaWindow {
     final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls, boolean focused) {
         Font font = Minecraft.getInstance().font;
         double fade = openEase();
-        boolean controls = withControls || alwaysShowControls();
+        noteCursor(mouseX, mouseY);
+        boolean controls = (withControls || alwaysShowControls()) && chromeShown();
 
         Panels.fill(g, boxX, boxY, boxX + boxW, boxY + boxH, Theme.withAlpha(Theme.WINDOW_BG, fade));
-        if (titleBarH > 0) {
+        if (titleBarH > 0 && chromeShown()) {
             renderTitleBar(g, font, fade);
         }
         if (controls && controlBarHeight() > 0) {
@@ -511,8 +754,48 @@ abstract class MediaWindow {
 
         renderControls(g, font, mouseX, mouseY);
         renderCornerButtons(g, mouseX, mouseY);
-        renderGrip(g, mouseX, mouseY);
+        if (!theater) {
+            renderGrip(g, mouseX, mouseY); // nothing to resize while the screen is the size
+        }
         renderClickFlash(g);
+    }
+
+    /**
+     * Records where the cursor is, which is the whole of theatre mode's idle detection.
+     *
+     * <p>Done from {@code render} rather than from a move event because there is no
+     * mouse-move hook: {@code ClientHooks} carries press, drag, release and scroll, and
+     * the render hook is the one place the cursor position is reported on every version
+     * and on both loaders. It fires once a frame, which is exactly the resolution
+     * vanilla's own drag dispatch has.</p>
+     */
+    private void noteCursor(int mouseX, int mouseY) {
+        if (mouseX < 0 && mouseY < 0) {
+            return; // the HUD overlay draws with no cursor at all, not with a still one
+        }
+        if (mouseX != lastMouseX || mouseY != lastMouseY) {
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
+            lastMouseMoveAt = Anim.now();
+        }
+    }
+
+    /**
+     * Whether the title bar, corner buttons, grip and control bar are drawn.
+     *
+     * <p>Always true outside theatre mode. In theatre they go after
+     * {@link #THEATER_IDLE_MS} of a still cursor and come back the instant it moves —
+     * the behaviour of every full-screen video player, and the reason theatre mode is
+     * worth having at all.</p>
+     *
+     * <p>It is a clean cut rather than a fade on purpose. The chrome is drawn by a
+     * dozen {@link Glyphs} calls spread over two subclasses, none of which take an
+     * alpha; fading only the strips behind them would leave the glyphs floating at full
+     * strength over a vanishing backdrop, which reads worse than either end state. The
+     * layout is unchanged either way, so nothing moves when they return.</p>
+     */
+    private boolean chromeShown() {
+        return !theater || Anim.now() - lastMouseMoveAt < THEATER_IDLE_MS;
     }
 
     /**
@@ -620,7 +903,12 @@ abstract class MediaWindow {
     // ------------------------------------------------------------------
 
     final ClickResult mouseClicked(double mouseX, double mouseY, int button) {
-        ClickResult result = routeClick(mouseX, mouseY, button);
+        // Read before the cursor note below, because pressing a button is itself what
+        // wakes hidden theatre chrome: a click aimed at a control nobody can see must
+        // bring the controls back rather than press the control blindly.
+        boolean chromeWasShown = chromeShown();
+        noteCursor((int) Math.round(mouseX), (int) Math.round(mouseY));
+        ClickResult result = routeClick(mouseX, mouseY, button, chromeWasShown);
         if (result != ClickResult.NONE) {
             flashX = (int) Math.round(mouseX);
             flashY = (int) Math.round(mouseY);
@@ -629,31 +917,41 @@ abstract class MediaWindow {
         return result;
     }
 
-    private ClickResult routeClick(double mouseX, double mouseY, int button) {
+    private ClickResult routeClick(double mouseX, double mouseY, int button, boolean chromeWasShown) {
         if (button != 0 || !visible) {
             return ClickResult.NONE;
         }
-        if (inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON)) {
-            return ClickResult.CLOSE;
+        if (chromeWasShown) {
+            if (inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON)) {
+                return ClickResult.CLOSE;
+            }
+            if (inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON)) {
+                openLink();
+                return ClickResult.HANDLED;
+            }
+            if (hasHideButton() && inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON)) {
+                visible = false;
+                // Same outline a close leaves: from the screen's point of view the window
+                // went away, and it should go away the same way either time.
+                MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
+                return ClickResult.HANDLED;
+            }
+            if (!theater && inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
+                beginResize();
+                return ClickResult.HANDLED;
+            }
+            ClickResult sub = onControlClick(mouseX, mouseY);
+            if (sub != ClickResult.NONE) {
+                return sub;
+            }
         }
-        if (inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON)) {
-            openLink();
+        // A second click on the picture enlarges it to fill the screen, and a third
+        // puts it back — checked before the move grab below, which the first click of
+        // the pair has already harmlessly started and released.
+        if (isDoubleClick(mouseX, mouseY) && supportsTheater()
+                && inRect(mouseX, mouseY, contentX, contentY, contentW, contentH)) {
+            toggleTheater();
             return ClickResult.HANDLED;
-        }
-        if (hasHideButton() && inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON)) {
-            visible = false;
-            // Same outline a close leaves: from the screen's point of view the window
-            // went away, and it should go away the same way either time.
-            MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
-            return ClickResult.HANDLED;
-        }
-        if (inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
-            beginResize();
-            return ClickResult.HANDLED;
-        }
-        ClickResult sub = onControlClick(mouseX, mouseY);
-        if (sub != ClickResult.NONE) {
-            return sub;
         }
         // Anywhere else inside the window grabs it for moving (and, either way,
         // swallows the click so it does not fall through to the chat behind it).
@@ -664,14 +962,42 @@ abstract class MediaWindow {
         return ClickResult.NONE;
     }
 
+    /**
+     * Whether this click closes a double-click with the one before it: soon enough, and
+     * near enough that it was aimed at the same thing rather than being two separate
+     * clicks that happened to be quick.
+     */
+    private boolean isDoubleClick(double mouseX, double mouseY) {
+        int x = (int) Math.round(mouseX);
+        int y = (int) Math.round(mouseY);
+        long at = Anim.now();
+        boolean paired = at - lastClickAt <= DOUBLE_CLICK_MS
+                && Math.abs(x - lastClickX) <= DOUBLE_CLICK_SLOP
+                && Math.abs(y - lastClickY) <= DOUBLE_CLICK_SLOP;
+        // Reset rather than extend, so three fast clicks are one pair and a stray
+        // click, not two overlapping pairs.
+        lastClickAt = paired ? 0 : at;
+        lastClickX = x;
+        lastClickY = y;
+        return paired;
+    }
+
     final boolean mouseDragged(double mouseX, double mouseY) {
         if (draggingResize) {
             applyResize(mouseX);
             return true;
         }
         if (draggingMove) {
-            userX = (int) Math.round(mouseX) - grabDX;
-            userY = (int) Math.round(mouseY) - grabDY;
+            int x = (int) Math.round(mouseX) - grabDX;
+            int y = (int) Math.round(mouseY) - grabDY;
+            // Shift is the "no, I meant exactly there" modifier, the same escape hatch
+            // every drawing program gives its grid.
+            if (!Keys.shiftDown()) {
+                x = Snap.axis(x, boxW, MediaWindowOverlay.snapGuidesX(this), Snap.THRESHOLD);
+                y = Snap.axis(y, boxH, MediaWindowOverlay.snapGuidesY(this), Snap.THRESHOLD);
+            }
+            userX = x;
+            userY = y;
             return true;
         }
         return onControlDrag(mouseX, mouseY);
@@ -710,10 +1036,59 @@ abstract class MediaWindow {
     // ------------------------------------------------------------------
 
     private void beginMove(double mouseX, double mouseY) {
+        if (theater) {
+            return; // the window is the screen; there is nowhere to move it to
+        }
         pinPosition();
         draggingMove = true;
         grabDX = (int) Math.round(mouseX) - boxX;
         grabDY = (int) Math.round(mouseY) - boxY;
+    }
+
+    // ------------------------------------------------------------------
+    // Theatre mode
+    // ------------------------------------------------------------------
+
+    /**
+     * Whether this window currently fills the screen.
+     */
+    final boolean isTheater() {
+        return theater;
+    }
+
+    /**
+     * Swaps between the window's own size and filling the screen, putting the exact
+     * geometry back on the way out.
+     *
+     * <p>Nothing about the layout is recomputed here: {@link #layout} already branches
+     * on the flag, so a toggle is this bookkeeping plus one frame.</p>
+     *
+     * @return {@code true} when the window has a picture to enlarge and the mode changed
+     */
+    final boolean toggleTheater() {
+        if (!supportsTheater()) {
+            return false;
+        }
+        if (theater) {
+            theater = false;
+            userPlaced = savedPlaced;
+            userX = savedX;
+            userY = savedY;
+            userSized = savedSized;
+            userScale = savedScale;
+        } else {
+            savedPlaced = userPlaced;
+            savedX = userX;
+            savedY = userY;
+            savedSized = userSized;
+            savedScale = userScale;
+            theater = true;
+            onEnterTheater();
+        }
+        // The chrome is on when the mode changes either way, so the controls that just
+        // moved are visible where they landed rather than already timed out.
+        lastMouseMoveAt = Anim.now();
+        return true;
     }
 
     private void beginResize() {
@@ -732,6 +1107,9 @@ abstract class MediaWindow {
      * Wheel zoom around the current size ({@code steps} = wheel notches).
      */
     protected final void zoom(double steps) {
+        if (theater) {
+            return; // the size is the screen's; a zoom here would only be felt on the way out
+        }
         pinPosition();
         userSized = true;
         double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());

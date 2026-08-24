@@ -99,6 +99,131 @@ public final class MediaWindowOverlay {
         return ctx.getImageManager().isEmpty() && ctx.getVideoManager().isEmpty() && ctx.getAudioManager().isEmpty();
     }
 
+    /**
+     * Whether {@code screen} is one the window stack lives on — drawn over it, and
+     * driven by its mouse and keyboard input.
+     *
+     * <p>Today that is the chat screen and nothing else, but it is asked in six places
+     * (render, the four mouse hooks and the keyboard one), and every one of them has to
+     * agree: a screen that renders the windows but refuses their clicks would show
+     * buttons that do not work. One predicate is what keeps them in step.</p>
+     */
+    private static boolean acceptsWindows(Screen screen) {
+        return screen instanceof ChatScreen;
+    }
+
+    /**
+     * The top-most visible window matching {@code filter}, or {@code null}.
+     *
+     * <p>The filter is the point: "the window in front" is rarely the right target on
+     * its own. A transport key means the front-most window that <em>has</em> a
+     * transport, so a pinned image sitting over a playing video does not silently
+     * swallow the space bar.</p>
+     */
+    @Nullable
+    static MediaWindow frontMost(java.util.function.Predicate<MediaWindow> filter) {
+        MediaWindow best = null;
+        for (MediaWindow window : orderedWindows()) {
+            if (window.isVisible() && filter.test(window)) {
+                best = window; // orderedWindows() is sorted by z, so the last match wins
+            }
+        }
+        return best;
+    }
+
+    // ------------------------------------------------------------------
+    // Magnetism
+    // ------------------------------------------------------------------
+
+    /**
+     * The vertical lines a dragged window snaps to: the screen's two edges and its
+     * centre, plus the edges and centre of every other visible window.
+     *
+     * @param self the window being dragged, which must not be attracted to itself
+     */
+    static int[] snapGuidesX(MediaWindow self) {
+        var window = Minecraft.getInstance().getWindow();
+        int screenW = window.getGuiScaledWidth();
+        List<MediaWindow> others = otherVisibleWindows(self);
+        int[] guides = new int[3 + others.size() * 3];
+        guides[0] = 2;
+        guides[1] = screenW - 2;
+        guides[2] = screenW / 2;
+        int i = 3;
+        for (MediaWindow other : others) {
+            guides[i++] = other.boxX;
+            guides[i++] = other.boxX + other.boxW;
+            guides[i++] = other.boxX + other.boxW / 2;
+        }
+        return guides;
+    }
+
+    /** The horizontal counterpart of {@link #snapGuidesX}. */
+    static int[] snapGuidesY(MediaWindow self) {
+        var window = Minecraft.getInstance().getWindow();
+        int screenH = window.getGuiScaledHeight();
+        List<MediaWindow> others = otherVisibleWindows(self);
+        int[] guides = new int[3 + others.size() * 3];
+        guides[0] = 2;
+        guides[1] = screenH - 2;
+        guides[2] = screenH / 2;
+        int i = 3;
+        for (MediaWindow other : others) {
+            guides[i++] = other.boxY;
+            guides[i++] = other.boxY + other.boxH;
+            guides[i++] = other.boxY + other.boxH / 2;
+        }
+        return guides;
+    }
+
+    /**
+     * Whether {@code window} is the only one of its kind currently open.
+     *
+     * <p>Asked when a window is restoring where it was left: several windows share one
+     * {@code windows.json} entry, so only a lone one should take the remembered spot.</p>
+     */
+    static boolean isSoleWindowOfKind(MediaWindow window) {
+        for (MediaWindow other : orderedWindows()) {
+            if (other != window && other.stateKey().equals(window.stateKey())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Collects where the windows are and how they are set up, once a tick.
+     *
+     * <p>Windows are gathered into one entry per kind before anything reaches the
+     * store, because several of them share that entry: putting each in turn would have
+     * two video players overwrite each other every tick, and the store — which writes
+     * whenever the value it holds changes — would rewrite the file twenty times a
+     * second. The stack is sorted by z, so the front-most window of each kind is the
+     * one whose arrangement is kept, which is also the one the user last touched.</p>
+     */
+    private static void saveWindowState(MediaPlayerContext ctx) {
+        Map<String, WindowStateStore.State> latest = new LinkedHashMap<>();
+        for (MediaWindow window : orderedWindows()) {
+            WindowStateStore.State state = window.captureState();
+            if (state != null) {
+                latest.put(window.stateKey(), state);
+            }
+        }
+        WindowStateStore store = ctx.getWindowStateStore();
+        latest.forEach(store::put);
+        store.flush();
+    }
+
+    private static List<MediaWindow> otherVisibleWindows(MediaWindow self) {
+        List<MediaWindow> others = new ArrayList<>();
+        for (MediaWindow window : orderedWindows()) {
+            if (window != self && window.isVisible()) {
+                others.add(window);
+            }
+        }
+        return others;
+    }
+
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
@@ -179,7 +304,7 @@ public final class MediaWindowOverlay {
 
     /** Draws the window stack and its two overlay buttons over an open chat screen. */
     public static void screenRender(Screen screen, GuiGraphics g, int mouseX, int mouseY) {
-        if (!(screen instanceof ChatScreen)) {
+        if (!acceptsWindows(screen)) {
             return;
         }
         renderAll(g, screen.width, screen.height, mouseX, mouseY, true);
@@ -264,7 +389,7 @@ public final class MediaWindowOverlay {
      * @return {@code true} when the mod consumed the press and the screen must not see it
      */
     public static boolean mousePressed(Screen screen, double mouseX, double mouseY, int button) {
-        if (!(screen instanceof ChatScreen)) {
+        if (!acceptsWindows(screen)) {
             return false;
         }
         MediaPlayerContext ctx = getContext();
@@ -303,21 +428,42 @@ public final class MediaWindowOverlay {
         if (url == null) {
             return false;
         }
+        return play(url, Keys.altDown(), Keys.shiftDown());
+    }
+
+    /**
+     * Plays one URL the way a click on it would: the mod's single answer to "the user
+     * pointed at this link, now what?".
+     *
+     * <p>Public because a click on the chat is no longer the only way to arrive here —
+     * the "play from clipboard" key binding routes through the same decision, and the
+     * two must not drift apart on what alt means.</p>
+     *
+     * @param audioOnly play a video link as sound alone (the alt modifier)
+     * @param newWindow open a player of its own rather than queueing into the front one
+     *                  (the shift modifier)
+     * @return {@code true} when the URL was something the mod can play
+     */
+    public static boolean play(String url, boolean audioOnly, boolean newWindow) {
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null || url == null) {
+            return false;
+        }
         // A playlist page is not a media item: expand it first (a yt-dlp round-trip
         // on a background thread), then queue everything it contains.
         if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
-            playYouTubePlaylist(url, Keys.altDown());
+            playYouTubePlaylist(url, audioOnly);
             return true;
         }
         MediaKind kind = ctx.getMediaSources().kindOf(url);
         if (kind == MediaKind.VIDEO) {
-            if (Keys.altDown()) {
-                if (Keys.shiftDown()) {
+            if (audioOnly) {
+                if (newWindow) {
                     ctx.getAudioManager().open(url).bringToFront();
                 } else {
                     ctx.getAudioManager().enqueue(url);
                 }
-            } else if (Keys.shiftDown()) {
+            } else if (newWindow) {
                 ctx.getVideoManager().open(url).bringToFront();
             } else {
                 ctx.getVideoManager().enqueue(url);
@@ -325,7 +471,7 @@ public final class MediaWindowOverlay {
             return true;
         }
         if (kind == MediaKind.AUDIO) {
-            if (Keys.shiftDown()) {
+            if (newWindow) {
                 ctx.getAudioManager().open(url).bringToFront();
             } else {
                 ctx.getAudioManager().enqueue(url);
@@ -345,7 +491,7 @@ public final class MediaWindowOverlay {
      * @return {@code true} when a window took the drag
      */
     public static boolean mouseDragged(Screen screen, double mouseX, double mouseY) {
-        if (!(screen instanceof ChatScreen) || noWindows()) {
+        if (!acceptsWindows(screen) || noWindows()) {
             return false;
         }
         List<MediaWindow> ordered = orderedWindows();
@@ -364,7 +510,7 @@ public final class MediaWindowOverlay {
      * @return {@code true} when a window was being dragged
      */
     public static boolean mouseReleased(Screen screen) {
-        if (!(screen instanceof ChatScreen) || noWindows()) {
+        if (!acceptsWindows(screen) || noWindows()) {
             return false;
         }
         List<MediaWindow> ordered = orderedWindows();
@@ -383,7 +529,7 @@ public final class MediaWindowOverlay {
      * @return {@code true} when a window took the scroll
      */
     public static boolean mouseScrolled(Screen screen, double mouseX, double mouseY, double deltaY) {
-        if (!(screen instanceof ChatScreen) || noWindows()) {
+        if (!acceptsWindows(screen) || noWindows()) {
             return false;
         }
         List<MediaWindow> all = orderedWindows();
@@ -397,6 +543,73 @@ public final class MediaWindowOverlay {
     }
 
     // ------------------------------------------------------------------
+    // Keyboard input
+    // ------------------------------------------------------------------
+
+    /**
+     * Offers a key press to the window stack.
+     *
+     * <p>Unlike the mouse hooks this one runs even when no window is open, because the
+     * table it consults is not only about windows — the volume keys act on the mod's
+     * one shared level whether or not anything is on screen.</p>
+     *
+     * @return {@code true} when the mod took the key and the screen must not see it
+     */
+    public static boolean keyPressed(Screen screen, int key) {
+        if (!acceptsWindows(screen)) {
+            return false;
+        }
+        return WindowShortcuts.handle(screen, key);
+    }
+
+    // ------------------------------------------------------------------
+    // Bulk actions (the global key bindings)
+    // ------------------------------------------------------------------
+
+    /**
+     * Hides every visible window, or reveals them all when they are already hidden.
+     *
+     * <p>One key for both directions rather than two: what someone wants from it is
+     * "get the media out of the way" and then "bring it back", and which of those a
+     * press means is never in doubt from looking at the screen.</p>
+     */
+    public static void toggleAllVisible() {
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) return;
+        List<MediaWindow> all = orderedWindows();
+        boolean anyVisible = false;
+        for (MediaWindow window : all) {
+            if (window.isVisible()) {
+                anyVisible = true;
+                break;
+            }
+        }
+        if (anyVisible) {
+            for (MediaWindow window : all) {
+                if (window.isVisible()) {
+                    window.setVisible(false);
+                    noteClosed(window.boxX, window.boxY, window.boxW, window.boxH);
+                }
+            }
+            return;
+        }
+        // Images have no hide button and so no revealAll of their own; going through
+        // the windows covers all three kinds with one loop.
+        for (MediaWindow window : all) {
+            window.setVisible(true);
+        }
+    }
+
+    /**
+     * Closes every window, disposing the players behind them.
+     */
+    public static void closeAll() {
+        for (MediaWindow window : orderedWindows()) {
+            window.closeWithFade();
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Lifecycle: close finished videos
     // ------------------------------------------------------------------
 
@@ -404,6 +617,8 @@ public final class MediaWindowOverlay {
     public static void clientTick() {
         MediaPlayerContext ctx = getContext();
         if (ctx == null) return;
+
+        saveWindowState(ctx);
 
         if (!ctx.getVideoManager().isEmpty()) {
             for (VideoWindow window : ctx.getVideoManager().getWindows()) {

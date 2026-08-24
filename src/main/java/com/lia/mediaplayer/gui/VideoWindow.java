@@ -259,6 +259,15 @@ final class VideoWindow extends MediaWindow {
         return player.videoHeight() > 0 ? player.videoHeight() : 180;
     }
 
+    /**
+     * False until the first frame has been decoded — up to then {@link #sourceWidth()}
+     * is the 320x180 stand-in the window is drawn at while it loads.
+     */
+    @Override
+    protected boolean sourceSizeKnown() {
+        return player.videoWidth() > 0 && player.videoHeight() > 0;
+    }
+
     @Override
     protected String mediaUrl() {
         return player.url();
@@ -272,6 +281,77 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected int anchorGroup() {
         return 1;
+    }
+
+    @Override
+    protected String stateKey() {
+        return WindowStateStore.VIDEO;
+    }
+
+    @Override
+    protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
+        return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
+                geometry.sized(), geometry.width(),
+                queueOpen, queue.repeat(), queue.shuffle());
+    }
+
+    @Override
+    protected void applyRestoredState(WindowStateStore.State state) {
+        queueOpen = state.queuePanel();
+        queue.setRepeat(state.repeat());
+        queue.setShuffle(state.shuffle());
+    }
+
+    /**
+     * The queue panel is docked <em>beside</em> the player and caps its width to leave
+     * room ({@link #maxContentWidth}), so leaving it open would stop theatre mode ever
+     * filling the screen. It comes back when the window does.
+     */
+    @Override
+    protected void onEnterTheater() {
+        queueOpen = false;
+    }
+
+    // ------------------------------------------------------------------
+    // Transport (keyboard shortcuts; the control bar reaches the same actions)
+    // ------------------------------------------------------------------
+
+    @Override
+    boolean hasTransport() {
+        return true;
+    }
+
+    @Override
+    boolean togglePlayPause() {
+        player.togglePause();
+        return true;
+    }
+
+    @Override
+    boolean seekBy(long deltaMicros) {
+        long duration = player.durationMicros();
+        if (duration <= 0) {
+            return false; // a live stream has no position to seek within
+        }
+        player.seekTo(Mth.clamp(player.positionMicros() + deltaMicros, 0, duration));
+        return true;
+    }
+
+    @Override
+    boolean playNext() {
+        return advance();
+    }
+
+    @Override
+    boolean cycleRepeat() {
+        queue.cycleRepeat();
+        return true;
+    }
+
+    @Override
+    boolean toggleShuffle() {
+        queue.toggleShuffle();
+        return true;
     }
 
     @Override

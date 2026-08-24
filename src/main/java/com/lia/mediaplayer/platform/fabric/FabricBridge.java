@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphics;
@@ -105,7 +106,7 @@ public final class FabricBridge implements ClientModInitializer {
     }
 
     // ------------------------------------------------------------------
-    // Screens, HUD and mouse
+    // Screens, HUD, mouse and keyboard
     // ------------------------------------------------------------------
 
     private static void registerScreens() {
@@ -143,6 +144,16 @@ public final class FabricBridge implements ClientModInitializer {
             ScreenMouseEvents.allowMouseScroll(screen).register(
                     (s, mouseX, mouseY, horizontal, vertical) ->
                             !ClientHooks.onMouseScrolled(s, mouseX, mouseY, vertical));
+
+            // The keyboard callback moved to a KeyEvent record at the same threshold the
+            // mouse one did, and for the same reason.
+            //? if <1.21.11 {
+            ScreenKeyboardEvents.allowKeyPress(screen).register(
+                    (s, key, scancode, modifiers) -> !ClientHooks.onKeyPressed(s, key));
+            //?} else {
+            /*ScreenKeyboardEvents.allowKeyPress(screen).register(
+                    (s, event) -> !ClientHooks.onKeyPressed(s, event.key()));
+            *///?}
         });
     }
 

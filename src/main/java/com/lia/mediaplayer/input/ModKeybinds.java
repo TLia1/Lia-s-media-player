@@ -37,6 +37,17 @@ public final class ModKeybinds {
     public static final KeyMapping NEXT = unbound("next");
     public static final KeyMapping PREVIOUS = unbound("previous");
     public static final KeyMapping OPEN_PLAYLISTS = unbound("playlists");
+    public static final KeyMapping VOLUME_UP = unbound("volume_up");
+    public static final KeyMapping VOLUME_DOWN = unbound("volume_down");
+    public static final KeyMapping MUTE = unbound("mute");
+    public static final KeyMapping TOGGLE_WINDOWS = unbound("toggle_windows");
+    public static final KeyMapping CLOSE_ALL = unbound("close_all");
+    public static final KeyMapping OPEN_CONFIG = unbound("config");
+    /**
+     * Plays whatever link is on the clipboard. The fastest way there is to a media
+     * link: no message has to be sent, and nobody else has to have shared it.
+     */
+    public static final KeyMapping PLAY_CLIPBOARD = unbound("play_clipboard");
 
     private ModKeybinds() {
     }
@@ -52,6 +63,10 @@ public final class ModKeybinds {
      * binding here is enough for both loaders to pick it up.
      */
     public static KeyMapping[] all() {
-        return new KeyMapping[] {PLAY_PAUSE, NEXT, PREVIOUS, OPEN_PLAYLISTS};
+        return new KeyMapping[] {
+                PLAY_PAUSE, NEXT, PREVIOUS,
+                VOLUME_UP, VOLUME_DOWN, MUTE,
+                TOGGLE_WINDOWS, CLOSE_ALL,
+                OPEN_PLAYLISTS, OPEN_CONFIG, PLAY_CLIPBOARD};
     }
 }

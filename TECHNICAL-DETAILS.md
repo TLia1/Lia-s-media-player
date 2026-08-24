@@ -239,7 +239,7 @@ own `assets/`.
 The mod ships for two loaders from one source tree, and exactly one package knows it:
 `com.lia.mediaplayer.platform`. Everything below it talks to vanilla Minecraft and to
 `ClientHooks`, which is the mod's **complete** list of moments it needs the game to call
-it — twelve of them, in vanilla types:
+it — thirteen of them, in vanilla types:
 
 | Hook | NeoForge | Fabric |
 |---|---|---|
@@ -252,6 +252,7 @@ it — twelve of them, in vanilla types:
 | `onHudRender` | `RenderGuiEvent.Post` | `HudRenderCallback` / `HudElementRegistry` |
 | `onMousePressed` / `Released` / `Scrolled` | `ScreenEvent.Mouse*.Pre` + `setCanceled` | `ScreenMouseEvents.allow*` + `return false` |
 | `onMouseDragged` | `ScreenEvent.MouseDragged.Pre` | reconstructed — see below |
+| `onKeyPressed` | `ScreenEvent.KeyPressed.Pre` + `setCanceled` | `ScreenKeyboardEvents.allowKeyPress` + `return false` |
 
 A bridge per loader (`platform/neoforge/NeoForgeBridge`, `platform/fabric/FabricBridge`)
 subscribes to its own events and forwards. Both are deliberately dumb: anything resembling
@@ -296,7 +297,11 @@ concern, each holding a single guard — `FabricHud`, `FabricScreens`, `FabricKe
 `FabricChatSink`. Three of the four break at **26.1**, the same threshold as the vanilla
 GUI rewrite. The exception is worth remembering: the screen mouse events folded their
 loose `(x, y, button)` parameters into a `MouseButtonEvent` record at **1.21.11**, not
-26.1 — the one Fabric threshold that does not line up with a vanilla one.
+26.1 — the one Fabric threshold that does not line up with a vanilla one. The keyboard
+events moved to a `KeyEvent` record at the same point and for the same reason, so
+`allowKeyPress` carries the second guard at that threshold. NeoForge needs no guard
+either time: its event objects kept `getMouseX()` / `getKeyCode()` alongside the new
+record.
 
 ## How a link becomes media
 
@@ -756,7 +761,9 @@ clipboard import of a single playlist also takes its name from YouTube.
 
 ## Keybinds (`input/`)
 
-`ModKeybinds` declares four `KeyMapping`s — play/pause, next, previous, open playlists —
+`ModKeybinds` declares eleven `KeyMapping`s — play/pause, next, previous, volume up and
+down, mute, hide/show all windows, close all windows, open playlists, open the options,
+and play the link on the clipboard —
 under a "Lia's Media Player" category, and exposes them as `all()`. Registering them with
 the game is each loader bridge's job (`RegisterKeyMappingsEvent` on NeoForge,
 `KeyBindingHelper`/`KeyMappingHelper` on Fabric), so adding a binding here is all that is
@@ -770,6 +777,73 @@ the front-most audio bar (or opens `PlaylistScreen`); an unbound binding simply 
 fires. A small `assets/liasmediaplayer/lang/{en_us,fr_fr}.json` provides the readable
 names.
 
+"Play from clipboard" reads `Minecraft.keyboardHandler.getClipboard()` and hands it to
+`MediaWindowOverlay.play(url, audioOnly, newWindow)` — the same method a click on a chat
+link routes through, so `Alt` (sound only) and `Shift` (its own window) mean exactly what
+they mean in chat. Volume and mute act on `media.Volume`, the one shared level, rather
+than on any particular player.
+
+### Shortcuts over the chat screen (`gui/WindowShortcuts`)
+
+The bindings above are global; a second, fixed set acts on the window stack while a
+screen that hosts it is open, reached through `ClientHooks.onKeyPressed`. The table lives
+in `WindowShortcuts.actionFor(key, control, shift, typing)`, a pure function so the whole
+of it is unit-tested (`WindowShortcutsTest`), with `handle()` as the part that needs a
+live window.
+
+| Key | Action |
+|---|---|
+| `Space` | play / pause |
+| `←` / `→` | seek ∓5 s (`Shift`: ∓30 s) |
+| `↑` / `↓` | volume ±5% |
+| `Ctrl+M` | mute | 
+| `Ctrl+L` | cycle loop mode |
+| `Ctrl+S` | toggle shuffle |
+| `Ctrl+N` / `Ctrl+P` | next / previous track |
+| `Ctrl+F` | theatre mode |
+
+The split into two families is the whole design. These keys are pressed over the chat
+screen, where the text field has the focus, so a bare letter cannot be claimed — the
+first character of someone's message would be eaten. `Space` and the arrows are claimed
+only while the chat field is **empty**, which is both the "not typing yet" state and the
+state where none of them does anything to the field anyway; everything else sits behind
+`Ctrl`, which the field only binds for `A`/`C`/`X`/`V`. `Escape` is deliberately left
+alone. `gui/ChatInput` answers "is a message part-written?" by finding the `EditBox` in
+`Screen.children()` — `ChatScreen.input` is `protected`, and the field is registered into
+that list on every version. Whether `Ctrl` is held is asked of `gui/Keys`, not of the
+event's modifier bits, so the shortcuts are `Cmd`-based on macOS like the rest of the mod.
+
+Targets are chosen by capability, not simply by z-order: a transport key goes to the
+front-most window that `hasTransport()`, so a pinned image over a playing video does not
+swallow the space bar, and `Ctrl+F` goes to the front-most window that
+`supportsTheater()`.
+
+## Remembered window state (`gui/WindowStateStore`)
+
+`<gamedir>/liasmediaplayer/windows.json` keeps where the windows were left — position,
+size, and each player's queue panel, loop mode and shuffle. Same shape as
+`PlaylistStore`: lazily loaded, written through a temp file and an atomic move, never
+thrown from.
+
+State is kept **per kind** (`image` / `video` / `audio`) rather than per URL, because what
+is worth restoring is how someone arranges their screen, not the clip that happened to be
+playing — and it bounds the file at three objects forever. Two details are load-bearing:
+
+- The size is stored as the content's **width in pixels**, not the scale factor windows
+  work in. A scale is relative to the source's own resolution, so restoring 0.5 from a
+  1080p video onto a 360p one would give a quarter of the arranged box.
+- That width is only converted back into a scale once `sourceSizeKnown()` is true. A video
+  window exists before its player has decoded a frame and reports a 320×180 placeholder
+  until then, so the width waits in `pendingWidth` rather than being divided by a
+  stand-in.
+
+`MediaWindowOverlay.clientTick()` collects one state per kind (the front-most window of
+each wins) and offers it to the store, which rewrites the file only when the value it
+holds actually changes — so a quiet tick costs nothing. Nothing is offered mid-drag, or
+in theatre mode. On the way back, only a *lone* window of its kind takes the remembered
+position: a second video player falls back to the cascade in `computeAnchor` instead of
+landing exactly on the first.
+
 ## Windows, move & resize (`gui/MediaWindow`)
 
 The shared base for the image, video and audio windows owns:
@@ -781,6 +855,25 @@ The shared base for the image, video and audio windows owns:
 - **Resize** — drag the corner grip, or **`Ctrl`+mouse-wheel** to zoom; content is
   scaled between `MIN_CONTENT` (48 px) and 6× and always clamped so the whole box
   (with its control bar) stays on screen and the grip remains grabbable.
+- **Magnetism** — while a window is dragged its edges and centre snap to the screen's
+  edges and centre line and to those of every other visible window, within 6 px. The
+  geometry is one pure function, `gui/Snap.axis(start, length, guides, threshold)`, run
+  once per axis with the guides `MediaWindowOverlay` collects; three lines of the moving
+  box are candidates for each guide (leading edge, trailing edge, centre), which is what
+  makes one function do "flush against", "butted up to" and "centred on" without the
+  caller saying which it meant. Holding `Shift` turns it off.
+- **Theatre mode** — a double-click on the picture, or `Ctrl+F`, fills the screen with
+  the window; the geometry it had is put aside and restored on the way out. Nothing is
+  recomputed for it: `layout()` asks for `MAX_SCALE` and lets the existing on-screen cap
+  cut it down to "as big as fits", and centres the box. The chrome (title bar, corner
+  buttons, grip, control bar) disappears after 2 s of a still cursor and returns the
+  instant it moves — a clean cut rather than a fade, because the chrome is drawn by a
+  dozen `Glyphs` calls that take no alpha, and fading only the strips behind them would
+  leave the glyphs floating at full strength. `VideoWindow` folds its queue panel away on
+  the way in, since the panel docks beside the window and caps its width. `AudioWindow`
+  opts out (`supportsTheater()` is false): a 14 px bar has no picture to enlarge.
+  The idle timer is fed from `render()`, which is the only place the cursor position is
+  reported on every version and both loaders — there is no mouse-move hook.
 - **Z-order** — a monotonic counter hands out a stacking order; `bringToFront()`
   raises a window above all others. `MediaWindowOverlay` draws low-to-high and tests
   input high-to-low.

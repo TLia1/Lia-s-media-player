@@ -20,10 +20,10 @@ import java.util.function.Consumer;
  * applied to the loader itself. A bridge in {@code platform.neoforge} or
  * {@code platform.fabric} subscribes to that loader's events and forwards them here;
  * nothing below this package ever sees a {@code ScreenEvent}, a {@code Event<...>} or an
- * {@code @SubscribeEvent}. Twelve hooks are the mod's entire loader surface, which is
+ * {@code @SubscribeEvent}. Thirteen hooks are the mod's entire loader surface, which is
  * why two thin bridges beat pulling in a cross-loader abstraction layer.</p>
  *
- * <p>The boolean-returning mouse hooks answer "did the mod consume this?". NeoForge wants
+ * <p>The boolean-returning mouse and keyboard hooks answer "did the mod consume this?". NeoForge wants
  * that as {@code event.setCanceled(true)} and Fabric as {@code return false} from an
  * {@code allow*} callback; both bridges translate, this class does not care.</p>
  *
@@ -116,5 +116,25 @@ public final class ClientHooks {
     /** @return {@code true} when a window under the cursor took the scroll */
     public static boolean onMouseScrolled(Screen screen, double mouseX, double mouseY, double deltaY) {
         return MediaWindowOverlay.mouseScrolled(screen, mouseX, mouseY, deltaY);
+    }
+
+    // ------------------------------------------------------------------
+    // Keyboard
+    // ------------------------------------------------------------------
+
+    /**
+     * Offers a key press over an open screen to the window stack — pause, seek, volume
+     * and the rest, without reaching for the mouse.
+     *
+     * <p>Only the key code is passed on. The modifiers travel with the event on both
+     * loaders, but which of them the mod cares about is a question with a different
+     * answer on macOS ({@code Cmd} standing in for {@code Ctrl}), and
+     * {@code gui.Keys} is where that is already known — so the shortcut table asks it
+     * rather than reading raw GLFW bits that would be wrong on one platform.</p>
+     *
+     * @return {@code true} when the mod took the key and the screen must not see it
+     */
+    public static boolean onKeyPressed(Screen screen, int key) {
+        return MediaWindowOverlay.keyPressed(screen, key);
     }
 }

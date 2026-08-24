@@ -241,8 +241,11 @@ stack predictably.
 
 Audio links open a compact bar backed by an audio-only engine that reuses the same
 ffmpeg tooling (YouTube playlist entries play as sound only). Saved playlists persist to
-a JSON file in the game folder, and a few configurable keybinds drive the active audio
-player.
+a JSON file in the game folder, as does where each kind of window was last left, and
+configurable keybinds drive the players from the world — including one that plays
+whatever link is on the clipboard. While the chat is open a fixed set of shortcuts
+(space, the arrow keys, and `Ctrl` plus a letter) reaches the front-most player without
+getting in the way of typing.
 
 The code is organized into small, single-responsibility packages under
 `com.lia.mediaplayer`: `source` (what a link is — the extension point), `chat`
@@ -256,7 +259,7 @@ which exposes source registration, playback control, volume, playlists, and play
 events.
 
 Only `platform` knows which loader it is running on. Everything else talks to vanilla
-Minecraft and to `platform.ClientHooks`, a catalogue of twelve hooks written in vanilla
+Minecraft and to `platform.ClientHooks`, a catalogue of thirteen hooks written in vanilla
 types; a thin bridge per loader subscribes to that loader's events and forwards to it.
 That is why the same source tree produces both jars with no abstraction layer to install
 and no mixins.

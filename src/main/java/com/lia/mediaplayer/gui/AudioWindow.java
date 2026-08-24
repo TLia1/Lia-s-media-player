@@ -192,6 +192,80 @@ final class AudioWindow extends MediaWindow {
     }
 
     @Override
+    protected String stateKey() {
+        return WindowStateStore.AUDIO;
+    }
+
+    @Override
+    protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
+        return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
+                geometry.sized(), geometry.width(),
+                false, queue.repeat(), queue.shuffle());
+    }
+
+    @Override
+    protected void applyRestoredState(WindowStateStore.State state) {
+        queue.setRepeat(state.repeat());
+        queue.setShuffle(state.shuffle());
+    }
+
+    /**
+     * A bar of buttons has no picture to enlarge; filling the screen with one would be
+     * a 14 px strip stretched over a monitor.
+     */
+    @Override
+    boolean supportsTheater() {
+        return false;
+    }
+
+    // ------------------------------------------------------------------
+    // Transport (keyboard shortcuts; the control bar reaches the same actions)
+    // ------------------------------------------------------------------
+
+    @Override
+    boolean hasTransport() {
+        return true;
+    }
+
+    @Override
+    boolean togglePlayPause() {
+        player.togglePause();
+        return true;
+    }
+
+    @Override
+    boolean seekBy(long deltaMicros) {
+        long duration = player.durationMicros();
+        if (duration <= 0) {
+            return false; // a live stream has no position to seek within
+        }
+        player.seekTo(Mth.clamp(player.positionMicros() + deltaMicros, 0, duration));
+        return true;
+    }
+
+    @Override
+    boolean playNext() {
+        return advance();
+    }
+
+    @Override
+    boolean playPrevious() {
+        return previous();
+    }
+
+    @Override
+    boolean cycleRepeat() {
+        queue.cycleRepeat();
+        return true;
+    }
+
+    @Override
+    boolean toggleShuffle() {
+        queue.toggleShuffle();
+        return true;
+    }
+
+    @Override
     protected double computeAutoScale(int srcW, int srcH, int screenWidth, int screenHeight) {
         return 1.0; // the bar is already a sensible size; the user can resize/zoom
     }

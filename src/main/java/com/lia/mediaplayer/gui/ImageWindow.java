@@ -44,6 +44,11 @@ final class ImageWindow extends MediaWindow {
     }
 
     @Override
+    protected String stateKey() {
+        return WindowStateStore.IMAGE;
+    }
+
+    @Override
     protected int sourceWidth() {
         int w = entry().width;
         return w > 0 ? w : 320;
@@ -53,6 +58,16 @@ final class ImageWindow extends MediaWindow {
     protected int sourceHeight() {
         int h = entry().height;
         return h > 0 ? h : 180;
+    }
+
+    /**
+     * False while the picture is still downloading, when {@link #sourceWidth()} is the
+     * 320x180 stand-in rather than the image's own size.
+     */
+    @Override
+    protected boolean sourceSizeKnown() {
+        ImagePreviewCache.Entry e = entry();
+        return e.width > 0 && e.height > 0;
     }
 
     @Override

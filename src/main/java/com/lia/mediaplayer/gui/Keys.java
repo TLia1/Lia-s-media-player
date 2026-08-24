@@ -15,13 +15,18 @@ import net.minecraft.client.gui.screens.Screen;
  * <p>Both forms read the same GLFW key state; nothing about the semantics
  * changed. Like {@link Blit}, {@link TextureBridge} and {@link GuiLayer}, this
  * is a one-file, one-guard seam rather than five guarded call sites.</p>
+ *
+ * <p>Public, like {@link Screens} and unlike the other seams here, because the
+ * callers are spread across {@code gui} and {@code input}: the "play from
+ * clipboard" key binding reads the same alt/shift modifiers a click on a chat
+ * link does, and the two must agree on what they mean.</p>
  */
-final class Keys {
+public final class Keys {
     private Keys() {
     }
 
     /** True while either shift key is held. */
-    static boolean shiftDown() {
+    public static boolean shiftDown() {
         //? if <1.21.11 {
         return Screen.hasShiftDown();
         //?} else
@@ -29,7 +34,7 @@ final class Keys {
     }
 
     /** True while either control key is held (command on macOS). */
-    static boolean controlDown() {
+    public static boolean controlDown() {
         //? if <1.21.11 {
         return Screen.hasControlDown();
         //?} else
@@ -37,7 +42,7 @@ final class Keys {
     }
 
     /** True while either alt key is held. */
-    static boolean altDown() {
+    public static boolean altDown() {
         //? if <1.21.11 {
         return Screen.hasAltDown();
         //?} else

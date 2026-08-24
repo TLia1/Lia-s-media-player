@@ -117,6 +117,20 @@ public final class NeoForgeBridge {
     }
 
     // ------------------------------------------------------------------
+    // Keyboard
+    // ------------------------------------------------------------------
+
+    // 1.21.11 folded the key code, scancode and modifiers into a KeyEvent record, but
+    // NeoForge kept the three accessors on the event itself, so this needs no guard —
+    // unlike the Fabric side, where the callback signature itself changed.
+    @SubscribeEvent
+    public static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        if (ClientHooks.onKeyPressed(event.getScreen(), event.getKeyCode())) {
+            event.setCanceled(true);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Registration
     // ------------------------------------------------------------------
 

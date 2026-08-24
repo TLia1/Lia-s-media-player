@@ -4,7 +4,7 @@ plugins {
 
 // Which target the shared src/ tree is currently switched to. Rewritten by the
 // `Set active project to <mc>-<loader>` tasks — do not edit by hand.
-stonecutter active "1.21.1-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */
 
 // ---------------------------------------------------------------------------
 // Preprocessor parameters — shared by every target
