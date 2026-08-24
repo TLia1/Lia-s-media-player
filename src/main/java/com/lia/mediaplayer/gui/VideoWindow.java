@@ -72,12 +72,6 @@ final class VideoWindow extends MediaWindow {
      * Width of the scrollbar drawn when the queue overflows.
      */
     private static final int SCROLLBAR_W = 3;
-    private static final int PANEL_BG = 0xF0141414;
-    private static final int PANEL_HEADER_BG = 0xFF1E1E1E;
-    private static final int ROW_BG = 0xFF202020;
-    private static final int ROW_HOVER_BG = 0xFF2E2E38;
-    private static final int SCROLL_TRACK_BG = 0xFF333333;
-    private static final int SCROLL_THUMB_COLOR = 0xFF6A6A6A;
 
     private VideoPlayer player;
     /**
@@ -456,7 +450,7 @@ final class VideoWindow extends MediaWindow {
             Blit.textured(g, frame, contentX, contentY, contentW, contentH,
                     player.videoWidth(), player.videoHeight());
         } else {
-            g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);
+            g.fill(contentX, contentY, contentX + contentW, contentY + contentH, Theme.PLACEHOLDER);
             Component status = switch (player.state()) {
                 case FAILED -> Component.translatable("gui.liasmediaplayer.video.playback_failed");
                 case LOADING -> Component.translatable("gui.liasmediaplayer.video.loading");
@@ -467,7 +461,7 @@ final class VideoWindow extends MediaWindow {
             if (player.state() == VideoPlayer.State.FAILED) {
                 ty = contentY + 10;
             }
-            g.drawString(font, status, tx, ty, TEXT_COLOR);
+            g.drawString(font, status, tx, ty, Theme.TEXT);
 
             if (player.state() == VideoPlayer.State.FAILED) {
                 String msg = player.errorMessage();
@@ -476,7 +470,7 @@ final class VideoWindow extends MediaWindow {
                     int startY = ty + font.lineHeight + 8;
                     for (int i = 0; i < lines.size(); i++) {
                         if (startY + i * font.lineHeight > contentY + contentH - 4) break;
-                        g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, 0xFFFF6B6B);
+                        g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, Theme.DANGER);
                     }
                 }
             }
@@ -486,40 +480,60 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
         int barTop = contentY + contentH;
-        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, BAR_COLOR);
+        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, Theme.CONTROL_BAR_BG);
 
         // Play / pause button.
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
-        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? BTN_HOVER : BTN_COLOR);
+        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
+        if (overPlay) {
+            Tooltips.request(playTooltip(player.isPlaying()));
+        }
 
         // "Next" (skip to the next queued video) button.
         if (showNext) {
             boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
-            Glyphs.next(g, nextBtnX, nextBtnY, overNext ? BTN_HOVER : BTN_COLOR);
+            Glyphs.next(g, nextBtnX, nextBtnY, overNext ? Theme.ICON_HOVER : Theme.ICON);
+            if (overNext) {
+                Tooltips.request(Component.translatable("gui.liasmediaplayer.control.next"));
+            }
         }
 
         // "Queue" (show/hide the playlist panel) button.
         if (showQueueBtn) {
             boolean overQueue = inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON);
-            drawQueueIcon(g, (overQueue || queueOpen) ? BTN_HOVER : BTN_COLOR);
+            Glyphs.queue(g, queueBtnX, queueBtnY, (overQueue || queueOpen) ? Theme.ICON_HOVER : Theme.ICON);
+            if (overQueue) {
+                Tooltips.request(Component.translatable(queueOpen
+                        ? "gui.liasmediaplayer.control.queue.hide"
+                        : "gui.liasmediaplayer.control.queue.show"));
+            }
         }
 
         // Loop / shuffle toggles.
         RepeatMode repeat = queue.repeat();
         boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
         Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE, toggleColor(!repeat.isOff(), overLoop));
+        if (overLoop) {
+            Tooltips.request(loopTooltip(repeat));
+        }
         if (showShuffle) {
             boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
             Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
+            if (overShuffle) {
+                Tooltips.request(shuffleTooltip(queue.shuffle()));
+            }
         }
 
         // Volume: a speaker/mute button with a pop-up vertical slider on hover.
         if (showVolume) {
             boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
-            Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
+            Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? Theme.ICON_HOVER : Theme.ICON);
+            if (overVol) {
+                Tooltips.request(volumeTooltip(player.isMuted()));
+            }
             showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
             if (showVolumePopup) {
-                MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), TRACK_COLOR, FILL_COLOR, KNOB_COLOR);
+                MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), Theme.TRACK, Theme.FILL, Theme.KNOB);
             }
         } else {
             showVolumePopup = false;
@@ -527,17 +541,17 @@ final class VideoWindow extends MediaWindow {
 
         // Seek bar.
         double fraction = draggingSeek ? scrubFraction : player.progress();
-        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, TRACK_COLOR);
+        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, Theme.TRACK);
         if (player.durationMicros() > 0) {
             int fill = (int) Math.round(seekW * fraction);
-            g.fill(seekX, seekY, seekX + fill, seekY + seekH, FILL_COLOR);
+            g.fill(seekX, seekY, seekX + fill, seekY + seekH, Theme.FILL);
             int knobX = seekX + Mth.clamp(fill, 0, seekW);
-            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, KNOB_COLOR);
+            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, Theme.KNOB);
         }
 
         // Time read-out.
         g.drawString(font, Component.literal(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size())),
-                timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, TEXT_COLOR);
+                timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
 
         // The playlist panel floats above the window when open.
         if (queueOpen && !queue.isEmpty()) {
@@ -545,19 +559,6 @@ final class VideoWindow extends MediaWindow {
         }
     }
 
-
-    /**
-     * A "playlist" glyph: three stacked lines with a small bar on the left of each.
-     */
-    private void drawQueueIcon(GuiGraphics g, int color) {
-        int x = queueBtnX;
-        int y = queueBtnY;
-        for (int row = 0; row < 3; row++) {
-            int ry = y + 1 + row * 4;
-            g.fill(x + 1, ry, x + 3, ry + 2, color);          // bullet
-            g.fill(x + 4, ry, x + BUTTON - 1, ry + 1, color); // line
-        }
-    }
 
     // ------------------------------------------------------------------
     // Queue panel
@@ -608,14 +609,17 @@ final class VideoWindow extends MediaWindow {
         computePanelLayout();
         int rows = queue.size();
 
-        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, PANEL_BG);
-        g.fill(panelX, panelY, panelX + panelW, panelY + HEADER_H, PANEL_HEADER_BG);
+        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, Theme.PANEL_BG);
+        g.fill(panelX, panelY, panelX + panelW, panelY + HEADER_H, Theme.PANEL_HEADER_BG);
 
-        String header = panelMini ? ("(" + rows + ")") : ("Queue (" + rows + ")");
+        Component header = panelMini
+                ? Component.translatable("gui.liasmediaplayer.queue.header_mini", rows)
+                : Component.translatable("gui.liasmediaplayer.queue.header", rows);
         if (!panelMini && rows > panelVisibleRows) {
-            header += "  " + (queueScroll + 1) + "-" + (queueScroll + panelVisibleRows);
+            header = header.copy().append(Component.translatable("gui.liasmediaplayer.queue.range",
+                    queueScroll + 1, queueScroll + panelVisibleRows));
         }
-        g.drawString(font, Component.literal(header), panelX + 4, panelY + 2, TEXT_COLOR);
+        g.drawString(font, header, panelX + 4, panelY + 2, Theme.TEXT);
 
         for (int i = 0; i < panelVisibleRows; i++) {
             int index = queueScroll + i;
@@ -638,12 +642,12 @@ final class VideoWindow extends MediaWindow {
         int trackTop = panelRowsTop;
         int trackBot = panelY + panelH - PANEL_PAD;
         int trackH = Math.max(1, trackBot - trackTop);
-        g.fill(sbX, trackTop, sbX + SCROLLBAR_W, trackBot, SCROLL_TRACK_BG);
+        g.fill(sbX, trackTop, sbX + SCROLLBAR_W, trackBot, Theme.SCROLL_TRACK);
 
         int thumbH = Math.max(8, trackH * panelVisibleRows / rows);
         int maxScroll = Math.max(1, rows - panelVisibleRows);
         int thumbY = trackTop + (trackH - thumbH) * queueScroll / maxScroll;
-        g.fill(sbX, thumbY, sbX + SCROLLBAR_W, thumbY + thumbH, SCROLL_THUMB_COLOR);
+        g.fill(sbX, thumbY, sbX + SCROLLBAR_W, thumbY + thumbH, Theme.SCROLL_THUMB);
     }
 
     private void renderRow(GuiGraphics g, Font font, int index, int rowY, int mouseX, int mouseY) {
@@ -657,7 +661,7 @@ final class VideoWindow extends MediaWindow {
         boolean overButtons = mouseX >= upX - 2 && inRect(mouseX, mouseY, upX, btnY, BUTTON * 3 + 4, BUTTON);
         boolean overRow = inRect(mouseX, mouseY, rowX, rowY, rowW, ROW_H - 1);
 
-        g.fill(rowX, rowY, rowX + rowW, rowY + ROW_H - 1, (overRow && !overButtons) ? ROW_HOVER_BG : ROW_BG);
+        g.fill(rowX, rowY, rowX + rowW, rowY + ROW_H - 1, (overRow && !overButtons) ? Theme.ROW_HOVER_BG : Theme.ROW_BG);
 
         // Thumbnail.
         int tx = rowX + 2;
@@ -671,7 +675,7 @@ final class VideoWindow extends MediaWindow {
             int labelMaxW = upX - 4 - labelX;
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
             g.drawString(font, Component.literal(Glyphs.fit(font, label, labelMaxW)),
-                    labelX, rowY + (ROW_H - font.lineHeight) / 2, TEXT_COLOR);
+                    labelX, rowY + (ROW_H - font.lineHeight) / 2, Theme.TEXT);
         }
 
         // Reorder + remove buttons.
@@ -680,14 +684,13 @@ final class VideoWindow extends MediaWindow {
         boolean overUp = inRect(mouseX, mouseY, upX, btnY, BUTTON, BUTTON);
         boolean overDown = inRect(mouseX, mouseY, downBtnX(), btnY, BUTTON, BUTTON);
         boolean overRemove = inRect(mouseX, mouseY, removeBtnX(), btnY, BUTTON, BUTTON);
-        Glyphs.arrow(g, upX, btnY, true, canUp ? (overUp ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
-        Glyphs.arrow(g, downBtnX(), btnY, false, canDown ? (overDown ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
-        g.drawString(font, Component.literal("x"), removeBtnX() + 3, btnY + 2,
-                overRemove ? 0xFFFF6B6B : BTN_COLOR);
+        Glyphs.arrow(g, upX, btnY, true, canUp ? (overUp ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
+        Glyphs.arrow(g, downBtnX(), btnY, false, canDown ? (overDown ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
+        Glyphs.close(g, removeBtnX(), btnY, overRemove ? Theme.DANGER : Theme.ICON);
     }
 
     private void drawThumbnail(GuiGraphics g, Font font, String url, int tx, int ty) {
-        g.fill(tx, ty, tx + THUMB_W, ty + THUMB_H, 0xFF000000);
+        g.fill(tx, ty, tx + THUMB_W, ty + THUMB_H, Theme.PLACEHOLDER);
         VideoThumbnailCache.Thumb thumb = VideoThumbnailCache.getOrLoad(url);
         if (thumb.isLoaded()) {
             // Fit the (already-small) thumbnail inside the box, preserving aspect.
@@ -702,7 +705,7 @@ final class VideoWindow extends MediaWindow {
         } else {
             String dots = thumb.state == VideoThumbnailCache.State.FAILED ? "?" : "...";
             g.drawString(font, Component.literal(dots),
-                    tx + (THUMB_W - font.width(dots)) / 2, ty + (THUMB_H - font.lineHeight) / 2, 0xFF888888);
+                    tx + (THUMB_W - font.width(dots)) / 2, ty + (THUMB_H - font.lineHeight) / 2, Theme.TEXT_DIM);
         }
     }
 

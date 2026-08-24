@@ -35,21 +35,6 @@ abstract class MediaWindow {
     protected static final int MIN_CONTENT = 48;
     private static final double MAX_SCALE = 6.0;
 
-    protected static final int BG_COLOR = 0xD0101010;
-    protected static final int BAR_COLOR = 0xF0181818;
-    protected static final int TRACK_COLOR = 0xFF4A4A4A;
-    protected static final int FILL_COLOR = 0xFF4CA6FF;
-    protected static final int KNOB_COLOR = 0xFFFFFFFF;
-    protected static final int TEXT_COLOR = 0xFFFFFFFF;
-    protected static final int BTN_COLOR = 0xFFE0E0E0;
-    protected static final int BTN_HOVER = 0xFFFFD23F;
-    /**
-     * Colour of a toggle button whose mode is on (loop, shuffle) — distinct from
-     * {@link #BTN_HOVER} so "active" and "hovered" never read as the same state.
-     */
-    protected static final int BTN_ACTIVE = 0xFF4CA6FF;
-    protected static final int PLACEHOLDER = 0xFF000000;
-
     enum ClickResult {NONE, HANDLED, CLOSE}
 
     /**
@@ -202,7 +187,7 @@ abstract class MediaWindow {
     }
 
     /**
-     * Whether a hide ("_") button is shown next to the close button.
+     * Whether a "hide this window" button is shown next to the close button.
      */
     protected boolean hasHideButton() {
         return false;
@@ -395,7 +380,7 @@ abstract class MediaWindow {
     final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls) {
         Font font = Minecraft.getInstance().font;
 
-        g.fill(boxX, boxY, boxX + boxW, boxY + boxH, BG_COLOR);
+        g.fill(boxX, boxY, boxX + boxW, boxY + boxH, Theme.WINDOW_BG);
         drawContent(g, font);
 
         if (!withControls && !alwaysShowControls()) {
@@ -403,43 +388,40 @@ abstract class MediaWindow {
         }
 
         renderControls(g, font, mouseX, mouseY);
-        renderCornerButtons(g, font, mouseX, mouseY);
+        renderCornerButtons(g, mouseX, mouseY);
         renderGrip(g, mouseX, mouseY);
     }
 
-    private void renderCornerButtons(GuiGraphics g, Font font, int mouseX, int mouseY) {
+    private void renderCornerButtons(GuiGraphics g, int mouseX, int mouseY) {
         boolean overLink = inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON);
-        g.fill(linkBtnX, linkBtnY, linkBtnX + BUTTON, linkBtnY + BUTTON, 0x80000000);
-        drawLinkIcon(g, linkBtnX, linkBtnY, overLink ? BTN_HOVER : BTN_COLOR);
+        g.fill(linkBtnX, linkBtnY, linkBtnX + BUTTON, linkBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
+        Glyphs.externalLink(g, linkBtnX, linkBtnY, overLink ? Theme.ICON_HOVER : Theme.ICON);
+        if (overLink) {
+            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.open_browser"));
+        }
 
         boolean overClose = inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON);
-        g.fill(closeBtnX, closeBtnY, closeBtnX + BUTTON, closeBtnY + BUTTON, 0x80000000);
-        g.drawString(font, Component.literal("x"), closeBtnX + 3, closeBtnY + 2, overClose ? BTN_HOVER : BTN_COLOR);
+        g.fill(closeBtnX, closeBtnY, closeBtnX + BUTTON, closeBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
+        Glyphs.close(g, closeBtnX, closeBtnY, overClose ? Theme.ICON_HOVER : Theme.ICON);
+        if (overClose) {
+            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.close"));
+        }
+
         if (hasHideButton()) {
             boolean overHide = inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON);
-            g.fill(hideBtnX, hideBtnY, hideBtnX + BUTTON, hideBtnY + BUTTON, 0x80000000);
-            g.drawString(font, Component.literal("_"), hideBtnX + 3, hideBtnY + 1, overHide ? BTN_HOVER : BTN_COLOR);
+            g.fill(hideBtnX, hideBtnY, hideBtnX + BUTTON, hideBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
+            Glyphs.minimize(g, hideBtnX, hideBtnY, overHide ? Theme.ICON_HOVER : Theme.ICON);
+            if (overHide) {
+                Tooltips.request(Component.translatable("gui.liasmediaplayer.control.hide"));
+            }
         }
-    }
-
-    /**
-     * A small "open in browser" arrow (up-and-to-the-right).
-     */
-    private void drawLinkIcon(GuiGraphics g, int x, int y, int color) {
-        // Diagonal shaft from the bottom-left to the top-right.
-        for (int i = 0; i < 6; i++) {
-            g.fill(x + 2 + i, y + 8 - i, x + 3 + i, y + 9 - i, color);
-        }
-        // Arrow head at the top-right corner.
-        g.fill(x + 5, y + 2, x + 9, y + 3, color);
-        g.fill(x + 8, y + 2, x + 9, y + 6, color);
     }
 
     /**
      * A small diagonal grip in the bottom-right corner, highlighted on hover.
      */
     private void renderGrip(GuiGraphics g, int mouseX, int mouseY) {
-        int color = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize ? BTN_HOVER : BTN_COLOR;
+        int color = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize ? Theme.ICON_HOVER : Theme.ICON;
         for (int i = 1; i <= 3; i++) {
             int o = i * 2;
             g.fill(gripX + GRIP - o, gripY + GRIP - 1, gripX + GRIP, gripY + GRIP, color);
@@ -582,14 +564,46 @@ abstract class MediaWindow {
     }
 
     /**
+     * The tooltips for the controls both player windows share, so the two never drift
+     * apart on what a button claims to do. Each is looked up fresh from the current
+     * state: a tooltip that named the button rather than its effect ("loop") would say
+     * nothing the glyph does not already say.
+     */
+    protected static Component playTooltip(boolean playing) {
+        return Component.translatable(playing
+                ? "gui.liasmediaplayer.control.pause"
+                : "gui.liasmediaplayer.control.play");
+    }
+
+    protected static Component loopTooltip(RepeatMode mode) {
+        return Component.translatable(switch (mode) {
+            case OFF -> "gui.liasmediaplayer.control.loop.off";
+            case ALL -> "gui.liasmediaplayer.control.loop.all";
+            case ONE -> "gui.liasmediaplayer.control.loop.one";
+        });
+    }
+
+    protected static Component shuffleTooltip(boolean on) {
+        return Component.translatable(on
+                ? "gui.liasmediaplayer.control.shuffle.on"
+                : "gui.liasmediaplayer.control.shuffle.off");
+    }
+
+    protected static Component volumeTooltip(boolean muted) {
+        return Component.translatable(muted
+                ? "gui.liasmediaplayer.control.unmute"
+                : "gui.liasmediaplayer.control.mute");
+    }
+
+    /**
      * Colour for a toggle button (loop, shuffle) in each of its four states, so both
      * player windows draw their toggles the same way.
      */
     protected static int toggleColor(boolean active, boolean hovered) {
         if (active) {
-            return hovered ? BTN_HOVER : BTN_ACTIVE;
+            return hovered ? Theme.ICON_HOVER : Theme.ICON_ACTIVE;
         }
-        return hovered ? BTN_HOVER : 0xFF8A8A8A;
+        return hovered ? Theme.ICON_HOVER : Theme.ICON_INACTIVE;
     }
 
     static boolean inRect(double mx, double my, int x, int y, int w, int h) {

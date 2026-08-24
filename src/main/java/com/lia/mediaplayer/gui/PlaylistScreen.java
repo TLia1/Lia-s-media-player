@@ -32,12 +32,6 @@ public final class PlaylistScreen extends Screen {
 
     private static final int ROW_PL = 14;
     private static final int ROW_EN = 16;
-    private static final int PANEL_BG = 0xC0101010;
-    private static final int ROW_BG = 0xFF202020;
-    private static final int ROW_HOVER_BG = 0xFF2E2E38;
-    private static final int ROW_SELECTED_BG = 0xFF394A6B;
-    private static final int TEXT = 0xFFFFFFFF;
-    private static final int SUBTLE = 0xFFAAAAAA;
 
     @Nullable
     private Playlist selected;
@@ -139,8 +133,10 @@ public final class PlaylistScreen extends Screen {
         newNameBox.setMaxLength(64);
         newNameBox.setHint(Component.translatable("gui.liasmediaplayer.playlists.new_name"));
         addRenderableWidget(newNameBox);
-        addRenderableWidget(Button.builder(Component.literal("+"), b -> createPlaylist())
-                .bounds(leftX() + leftW() - 46, height - 58, 20, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.create"), b -> createPlaylist())
+                .bounds(leftX() + leftW() - 46, height - 58, 20, 18)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.create")))
+                .build());
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.import"), b -> importClipboard())
                 .bounds(leftX() + leftW() - 22, height - 58, 22, 18)
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.import")))
@@ -353,22 +349,22 @@ public final class PlaylistScreen extends Screen {
 
     private void draw(GuiGraphics g, int mouseX, int mouseY) {
 
-        g.drawCenteredString(font, title, width / 2, 14, TEXT);
+        g.drawCenteredString(font, title, width / 2, 14, Theme.TEXT);
 
         renderPlaylistList(g, mouseX, mouseY);
 
         if (pendingImports > 0) {
             g.drawCenteredString(font, Component.translatable("gui.liasmediaplayer.playlists.importing"),
-                    width / 2, height - 70, SUBTLE);
+                    width / 2, height - 70, Theme.TEXT_SUBTLE);
         }
 
         if (selected != null) {
             g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.entries", selected.size()),
-                    rightX(), entriesTop() - 12, SUBTLE);
+                    rightX(), entriesTop() - 12, Theme.TEXT_SUBTLE);
             renderEntries(g, mouseX, mouseY);
         } else {
             g.drawCenteredString(font, Component.translatable("gui.liasmediaplayer.playlists.select"),
-                    rightX() + rightW() / 2, height / 2, SUBTLE);
+                    rightX() + rightW() / 2, height / 2, Theme.TEXT_SUBTLE);
         }
     }
 
@@ -377,8 +373,8 @@ public final class PlaylistScreen extends Screen {
         int x = leftX();
         int w = leftW();
         int top = listTop();
-        g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.count", playlists.size()), x, top - 12, SUBTLE);
-        g.fill(x, top, x + w, listBottom(), PANEL_BG);
+        g.drawString(font, Component.translatable("gui.liasmediaplayer.playlists.count", playlists.size()), x, top - 12, Theme.TEXT_SUBTLE);
+        g.fill(x, top, x + w, listBottom(), Theme.LIST_BG);
 
         int rows = visiblePlaylistRows();
         for (int i = 0; i < rows; i++) {
@@ -390,10 +386,10 @@ public final class PlaylistScreen extends Screen {
             Playlist playlist = playlists.get(index);
             boolean isSel = playlist == selected;
             boolean over = MediaWindow.inRect(mouseX, mouseY, x, rowY, w, ROW_PL - 1);
-            int bg = isSel ? ROW_SELECTED_BG : (over ? ROW_HOVER_BG : ROW_BG);
+            int bg = isSel ? Theme.ROW_SELECTED_BG : (over ? Theme.ROW_HOVER_BG : Theme.ROW_BG);
             g.fill(x + 1, rowY, x + w - 1, rowY + ROW_PL - 1, bg);
             String label = playlist.name() + "  (" + playlist.size() + ")";
-            g.drawString(font, Component.literal(Glyphs.fit(font, label, w - 8)), x + 4, rowY + 3, TEXT);
+            g.drawString(font, Component.literal(Glyphs.fit(font, label, w - 8)), x + 4, rowY + 3, Theme.TEXT);
         }
     }
 
@@ -405,7 +401,7 @@ public final class PlaylistScreen extends Screen {
         int x = rightX();
         int w = rightW();
         int top = entriesTop();
-        g.fill(x, top, x + w, entriesBottom(), PANEL_BG);
+        g.fill(x, top, x + w, entriesBottom(), Theme.LIST_BG);
 
         int rows = visibleEntryRows();
         for (int i = 0; i < rows; i++) {
@@ -423,17 +419,17 @@ public final class PlaylistScreen extends Screen {
             boolean overDown = MediaWindow.inRect(mouseX, mouseY, downX, rowY, ROW_EN, ROW_EN - 1);
             boolean overRemove = MediaWindow.inRect(mouseX, mouseY, removeX, rowY, ROW_EN, ROW_EN - 1);
             boolean overRow = MediaWindow.inRect(mouseX, mouseY, x, rowY, w, ROW_EN - 1);
-            g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1, (overRow && !overRemove && !overDown && !overUp) ? ROW_HOVER_BG : ROW_BG);
+            g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1, (overRow && !overRemove && !overDown && !overUp) ? Theme.ROW_HOVER_BG : Theme.ROW_BG);
 
             String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
             g.drawString(font, Component.literal(Glyphs.fit(font, label, w - (ROW_EN * 3) - 8)),
-                    x + 4, rowY + 4, TEXT);
+                    x + 4, rowY + 4, Theme.TEXT);
 
             boolean canUp = index > 0;
             boolean canDown = index < urls.size() - 1;
-            Glyphs.arrow(g, upX + 2, rowY + 2, true, canUp ? (overUp ? TEXT : SUBTLE) : 0xFF555555);
-            Glyphs.arrow(g, downX + 2, rowY + 2, false, canDown ? (overDown ? TEXT : SUBTLE) : 0xFF555555);
-            g.drawString(font, Component.literal("x"), removeX + 5, rowY + 4, overRemove ? 0xFFFF6B6B : SUBTLE);
+            Glyphs.arrow(g, upX + 2, rowY + 2, true, canUp ? (overUp ? Theme.TEXT : Theme.TEXT_SUBTLE) : Theme.ICON_DISABLED);
+            Glyphs.arrow(g, downX + 2, rowY + 2, false, canDown ? (overDown ? Theme.TEXT : Theme.TEXT_SUBTLE) : Theme.ICON_DISABLED);
+            Glyphs.close(g, removeX + 2, rowY + 2, overRemove ? Theme.DANGER : Theme.TEXT_SUBTLE);
         }
     }
 

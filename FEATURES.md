@@ -77,10 +77,11 @@ name), so you can tell what's coming up at a glance.
 and queues every video in it, in order — alt-click to listen to it as audio only. Turn on **loop** and it plays
 forever; turn on **shuffle** as well and each new round is **reshuffled**, so you never get the same order twice.
 
-**In-Game Playlists GUI** (`/liasmediaplayer playlists`)
+**In-Game Playlists GUI** — open it with the **Playlists** button at the top of the chat screen, or bind the
+*Open playlists* key (see [Keybinds](#keybinds)).
 
 - Create, manage, and rename multiple personal playlists.
-- Reorder tracks effortlessly (click the up/down arrows or use the swap buttons next to tracks).
+- Reorder tracks with the up/down arrows next to each one.
 - One-click shuffle play, and a loop toggle for endless playback.
 - Import playlists directly from your clipboard (lines of URLs) and export playlists to your clipboard for easy sharing.
 
@@ -142,8 +143,8 @@ Your playlists are **saved to disk**, so they're still there next time you play.
 
 The mod now features a configurable options menu where you can tailor its behavior to your liking.
 
-- You can access it by clicking the **Options** button in the Playlists menu, or via the **Config** button in the game's
-Mods list.
+- You can access it from the **Media Player Settings** button in the pause menu, or via the **Config** button in the
+game's Mods list (the wrench in ModMenu, on Fabric).
 - **Default Window Position:** Choose where new windows appear by default. Options include `Center`, `Top Left`, `Top Right`, `Bottom Left`, and `Bottom Right`. The default is `Center`, which keeps the classic cascading behavior.
 - **Video Resolution:** Choose the maximum resolution for video playback (from 144p up to 720p).
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF

@@ -119,6 +119,9 @@ public final class MediaWindowOverlay {
         renderPlaylistsButton(g, mouseX, mouseY);
         renderRevealButton(g, mouseX, mouseY);
         ImageHoverPreview.render(g, mouseX, mouseY, screen.width, screen.height);
+        // Last, so a window control's tooltip lands on top of every window and of the
+        // chat preview — and so the request the topmost window made is the one drawn.
+        Tooltips.renderPending(g, mouseX, mouseY);
     }
 
     private static void renderPlaylistsButton(GuiGraphics g, int mouseX, int mouseY) {
@@ -131,9 +134,9 @@ public final class MediaWindowOverlay {
         plBtnY = 4;
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
-        int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
+        int fg = over ? Theme.ICON_HOVER : Theme.TEXT;
         GuiLayer.push(g, 500);
-        g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? 0xF0303030 : 0xD0181818);
+        g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
         Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
         g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
         GuiLayer.popAndFlush(g);
@@ -156,9 +159,9 @@ public final class MediaWindowOverlay {
         revealY = 22;
 
         boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
-        int fg = over ? 0xFFFFD23F : 0xFFFFFFFF;
+        int fg = over ? Theme.ICON_HOVER : Theme.TEXT;
         GuiLayer.push(g, 500);
-        g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? 0xF0303030 : 0xD0181818);
+        g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
         int tx = revealX + 5;
         int ty = revealY + 3;
         for (int i = 0; i < 8; i++) {

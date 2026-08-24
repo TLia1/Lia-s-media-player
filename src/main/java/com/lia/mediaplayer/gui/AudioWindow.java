@@ -266,21 +266,25 @@ final class AudioWindow extends MediaWindow {
     protected void drawContent(GuiGraphics g, Font font) {
         // A music note, then the track name (or a status), centred in the content row.
         int ty = contentY + (contentH - font.lineHeight) / 2;
-        Glyphs.note(g, contentX, ty - 1, BTN_COLOR);
+        Glyphs.note(g, contentX, ty - 1, Theme.ICON);
         int textX = contentX + 12;
         // Stop the title before the three corner buttons (link, hide, close), which are
         // laid out right-to-left from closeBtnX.
         int titleRight = closeBtnX - 2 * (BUTTON + 2) - 2;
         int maxW = Math.max(10, titleRight - textX);
 
+        // The bar is one line of plain text that has to be measured and ellipsised to
+        // fit, so the translated strings are resolved here rather than composed as
+        // components.
         String text;
-        int color = TEXT_COLOR;
+        int color = Theme.TEXT;
         switch (player.state()) {
             case FAILED -> {
-                text = "playback failed";
-                color = 0xFFFF6B6B;
+                text = Component.translatable("gui.liasmediaplayer.audio.playback_failed").getString();
+                color = Theme.DANGER;
             }
-            case LOADING -> text = MediaTitleCache.getOrLoad(player.url()) + "  (loading…)";
+            case LOADING -> text = Component.translatable("gui.liasmediaplayer.audio.loading",
+                    MediaTitleCache.getOrLoad(player.url())).getString();
             default -> text = MediaTitleCache.getOrLoad(player.url());
         }
         g.drawString(font, Component.literal(Glyphs.fit(font, text, maxW)), textX, ty, color);
@@ -289,46 +293,64 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
         int barTop = contentY + contentH;
-        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, BAR_COLOR);
+        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, Theme.CONTROL_BAR_BG);
 
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
-        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? BTN_HOVER : BTN_COLOR);
+        Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
+        if (overPlay) {
+            Tooltips.request(playTooltip(player.isPlaying()));
+        }
 
         boolean canPrev = queue.hasPrevious();
         boolean overPrev = inRect(mouseX, mouseY, prevBtnX, prevBtnY, BUTTON, BUTTON);
-        Glyphs.previous(g, prevBtnX, prevBtnY, canPrev ? (overPrev ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
+        Glyphs.previous(g, prevBtnX, prevBtnY, canPrev ? (overPrev ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
+        if (overPrev && canPrev) {
+            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.previous"));
+        }
 
         boolean canNext = queue.hasNext();
         boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
-        Glyphs.next(g, nextBtnX, nextBtnY, canNext ? (overNext ? BTN_HOVER : BTN_COLOR) : 0xFF555555);
+        Glyphs.next(g, nextBtnX, nextBtnY, canNext ? (overNext ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
+        if (overNext && canNext) {
+            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.next"));
+        }
 
         RepeatMode repeat = queue.repeat();
         boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
         Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE,
                 toggleColor(!repeat.isOff(), overLoop));
+        if (overLoop) {
+            Tooltips.request(loopTooltip(repeat));
+        }
 
         boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
         Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
+        if (overShuffle) {
+            Tooltips.request(shuffleTooltip(queue.shuffle()));
+        }
 
         boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
-        Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? BTN_HOVER : BTN_COLOR);
+        Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? Theme.ICON_HOVER : Theme.ICON);
+        if (overVol) {
+            Tooltips.request(volumeTooltip(player.isMuted()));
+        }
         showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
         if (showVolumePopup) {
-            MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), TRACK_COLOR, FILL_COLOR, KNOB_COLOR);
+            MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), Theme.TRACK, Theme.FILL, Theme.KNOB);
         }
 
         // Seek bar.
         double fraction = draggingSeek ? scrubFraction : player.progress();
-        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, TRACK_COLOR);
+        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, Theme.TRACK);
         if (player.durationMicros() > 0) {
             int fill = (int) Math.round(seekW * fraction);
-            g.fill(seekX, seekY, seekX + fill, seekY + seekH, FILL_COLOR);
+            g.fill(seekX, seekY, seekX + fill, seekY + seekH, Theme.FILL);
             int knobX = seekX + Mth.clamp(fill, 0, seekW);
-            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, KNOB_COLOR);
+            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, Theme.KNOB);
         }
 
         g.drawString(font, Component.literal(timeText(player.positionMicros(), player.durationMicros(), queue.size())),
-                timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, TEXT_COLOR);
+                timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
     }
 
     // ------------------------------------------------------------------

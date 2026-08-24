@@ -80,14 +80,14 @@ final class ImageWindow extends MediaWindow {
             Blit.textured(g, frame, contentX, contentY, contentW, contentH, e.width, e.height);
             return;
         }
-        g.fill(contentX, contentY, contentX + contentW, contentY + contentH, PLACEHOLDER);
+        g.fill(contentX, contentY, contentX + contentW, contentY + contentH, Theme.PLACEHOLDER);
         Component status = switch (e.state) {
             case FAILED -> Component.translatable("gui.liasmediaplayer.image.load_failed");
             default -> Component.translatable("gui.liasmediaplayer.image.loading");
         };
         int tx = contentX + (contentW - font.width(status)) / 2;
         int ty = contentY + (contentH - font.lineHeight) / 2;
-        g.drawString(font, status, tx, ty, TEXT_COLOR);
+        g.drawString(font, status, tx, ty, Theme.TEXT);
     }
 
     /**

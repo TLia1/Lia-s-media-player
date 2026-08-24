@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 final class MediaControls {
@@ -13,7 +14,7 @@ final class MediaControls {
     static String timeText(long positionMicros, long durationMicros, int queuedSize) {
         String suffix = queuedSize > 0 ? "  +" + queuedSize : "";
         if (durationMicros <= 0) {
-            return "LIVE" + suffix;
+            return Component.translatable("gui.liasmediaplayer.time.live").getString() + suffix;
         }
         return format(positionMicros) + " / " + format(durationMicros) + suffix;
     }
@@ -35,7 +36,7 @@ final class MediaControls {
     }
 
     static void drawVolumePopup(GuiGraphics g, int volBarX, int volBarY, float volume, int trackColor, int fillColor, int knobColor) {
-        g.fill(volBarX - 3, volBarY - 3, volBarX + VOL_BAR_W + 3, volBarY + VOL_BAR_H + 3, 0xE0101010);
+        g.fill(volBarX - 3, volBarY - 3, volBarX + VOL_BAR_W + 3, volBarY + VOL_BAR_H + 3, Theme.POPUP_BG);
         g.fill(volBarX, volBarY, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, trackColor);
         int fillH = Math.round(VOL_BAR_H * volume);
         g.fill(volBarX, volBarY + VOL_BAR_H - fillH, volBarX + VOL_BAR_W, volBarY + VOL_BAR_H, fillColor);
