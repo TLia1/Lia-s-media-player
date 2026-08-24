@@ -59,21 +59,39 @@ public class ConfigStore {
                 RESOLUTION_HEIGHTS,
                 height -> height + "p"
         );
-        MAX_PINNED_IMAGES = new IntSliderOption("liasmediaplayer:max_pinned_images", "liasmediaplayer", "config.liasmediaplayer.max_pinned_images", 6, 1, 20);
-        MAX_VIDEO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
-        MAX_AUDIO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
-        MAX_GIF_FRAMES = new IntSliderOption("liasmediaplayer:max_gif_frames", "liasmediaplayer", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000);
-        MAX_IMAGE_CACHE_ENTRIES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100).withWidth(OptionWidth.HALF);
+        // Set separately rather than chained: withDescription is declared on
+        // ConfigOption<T> and returns it, so chaining it onto a generic option would
+        // need an unchecked cast back to the concrete type. The IntSliderOptions below
+        // can chain because IntSliderOption is not generic.
+        VIDEO_RESOLUTION.withDescription("config.liasmediaplayer.video_resolution.description");
+        MAX_PINNED_IMAGES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_pinned_images", "liasmediaplayer", "config.liasmediaplayer.max_pinned_images", 6, 1, 20)
+                .withDescription("config.liasmediaplayer.max_pinned_images.description");
+        MAX_VIDEO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10)
+                .withDescription("config.liasmediaplayer.max_video_windows.description")
+                .withWidth(OptionWidth.HALF);
+        MAX_AUDIO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10)
+                .withDescription("config.liasmediaplayer.max_audio_windows.description")
+                .withWidth(OptionWidth.HALF);
+        MAX_GIF_FRAMES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_gif_frames", "liasmediaplayer", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000)
+                .withDescription("config.liasmediaplayer.max_gif_frames.description");
+        MAX_IMAGE_CACHE_ENTRIES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100)
+                .withDescription("config.liasmediaplayer.max_image_cache_entries.description")
+                .withWidth(OptionWidth.HALF);
         FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "liasmediaplayer", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
+                .withDescription("config.liasmediaplayer.frame_queue_capacity.description")
                 .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
-        MAX_IMAGE_CACHE_MEGABYTES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024).withWidth(OptionWidth.HALF);
-        YT_DLP_TIMEOUT_SECONDS = new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60);
+        MAX_IMAGE_CACHE_MEGABYTES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024)
+                .withDescription("config.liasmediaplayer.max_image_cache_mb.description")
+                .withWidth(OptionWidth.HALF);
+        YT_DLP_TIMEOUT_SECONDS = (IntSliderOption) new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60)
+                .withDescription("config.liasmediaplayer.yt_dlp_timeout.description");
         DEFAULT_WINDOW_POSITION = new EnumOption<>(
                 "liasmediaplayer:default_window_position",
                 "liasmediaplayer",
                 "config.liasmediaplayer.default_window_position",
                 WindowPosition.CENTER
         );
+        DEFAULT_WINDOW_POSITION.withDescription("config.liasmediaplayer.default_window_position.description");
     }
 
     public ConfigStore() {

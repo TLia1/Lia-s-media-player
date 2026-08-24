@@ -34,6 +34,20 @@ import java.util.function.Consumer;
 public final class MediaWindowOverlay {
     private static final int BASE_Z = 300;
     private static final int Z_STEP = 5;
+    /** How long the outline of a closed (or hidden) window lingers. */
+    private static final int GHOST_MS = 180;
+    /** A stuck ghost is invisible after GHOST_MS anyway; this only bounds the list. */
+    private static final int MAX_GHOSTS = 8;
+
+    /**
+     * The outline left behind by a window that was just closed or hidden — see
+     * {@link MediaWindow#closeWithFade()} for why the window itself cannot be the thing
+     * that fades.
+     */
+    private record Ghost(int x, int y, int w, int h, long startedAt) {
+    }
+
+    private static final List<Ghost> ghosts = new ArrayList<>();
 
     private static boolean revealVisible;
     private static int revealX, revealY, revealW, revealH;
@@ -91,9 +105,21 @@ public final class MediaWindowOverlay {
 
     private static void renderAll(GuiGraphics g, int screenWidth, int screenHeight,
                                   int mouseX, int mouseY, boolean withControls) {
-        List<MediaWindow> all = orderedWindows();
-        if (all.isEmpty()) {
+        renderGhosts(g);
+        // Checked before the snapshot below allocates: the HUD path calls this every
+        // frame, windows or not, so that a closing outline still has somewhere to draw.
+        if (noWindows()) {
             return;
+        }
+        List<MediaWindow> all = orderedWindows();
+        // The last visible window in z-order is the one a click would reach, and the
+        // only one that gets the bright edge. Found up front because the windows are
+        // drawn bottom-up, so "the one drawn last" is not known until it is too late.
+        MediaWindow front = null;
+        for (MediaWindow window : all) {
+            if (window.isVisible()) {
+                front = window;
+            }
         }
         Map<Integer, Integer> slotByGroup = new HashMap<>();
         int depth = 0;
@@ -104,10 +130,51 @@ public final class MediaWindowOverlay {
             int slot = slotByGroup.merge(window.anchorGroup(), 1, Integer::sum) - 1;
             GuiLayer.push(g, BASE_Z + depth * Z_STEP);
             window.layout(screenWidth, screenHeight, slot);
-            window.render(g, mouseX, mouseY, withControls);
+            window.render(g, mouseX, mouseY, withControls, window == front);
             GuiLayer.popAndFlush(g);
             depth++;
         }
+    }
+
+    /**
+     * Records the outline of a window that is going away, so
+     * {@link #renderGhosts} can fade it out after the window itself is gone.
+     */
+    static void noteClosed(int x, int y, int w, int h) {
+        if (ghosts.size() >= MAX_GHOSTS) {
+            ghosts.removeFirst();
+        }
+        ghosts.add(new Ghost(x, y, w, h, Anim.now()));
+    }
+
+    /**
+     * Drops every pending outline (leaving a server takes the windows with it).
+     */
+    public static void clearGhosts() {
+        ghosts.clear();
+        NowPlayingBanner.clear();
+    }
+
+    private static void renderGhosts(GuiGraphics g) {
+        if (ghosts.isEmpty()) {
+            return;
+        }
+        GuiLayer.push(g, BASE_Z - Z_STEP);
+        ghosts.removeIf(ghost -> {
+            double t = Anim.progress(ghost.startedAt(), GHOST_MS);
+            if (t >= 1.0) {
+                return true;
+            }
+            double fade = 1.0 - Anim.easeOut(t);
+            // Shrinking as it fades reads as "it went away" rather than "it turned
+            // transparent" — the reverse of how a window arrives.
+            int inset = (int) Math.round(4 * (1.0 - fade));
+            Panels.border(g, ghost.x() + inset, ghost.y() + inset,
+                    ghost.x() + ghost.w() - inset, ghost.y() + ghost.h() - inset,
+                    Theme.withAlpha(Theme.BORDER, fade));
+            return false;
+        });
+        GuiLayer.popAndFlush(g);
     }
 
     /** Draws the window stack and its two overlay buttons over an open chat screen. */
@@ -118,6 +185,7 @@ public final class MediaWindowOverlay {
         renderAll(g, screen.width, screen.height, mouseX, mouseY, true);
         renderPlaylistsButton(g, mouseX, mouseY);
         renderRevealButton(g, mouseX, mouseY);
+        NowPlayingBanner.render(g, screen.width);
         ImageHoverPreview.render(g, mouseX, mouseY, screen.width, screen.height);
         // Last, so a window control's tooltip lands on top of every window and of the
         // chat preview — and so the request the topmost window made is the one drawn.
@@ -136,7 +204,7 @@ public final class MediaWindowOverlay {
         boolean over = MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH);
         int fg = over ? Theme.ICON_HOVER : Theme.TEXT;
         GuiLayer.push(g, 500);
-        g.fill(plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
+        Panels.fill(g, plBtnX, plBtnY, plBtnX + plBtnW, plBtnY + plBtnH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
         Glyphs.note(g, plBtnX + 2, plBtnY + 2, fg);
         g.drawString(font, label, plBtnX + 2 + noteW, plBtnY + 3, fg);
         GuiLayer.popAndFlush(g);
@@ -161,7 +229,7 @@ public final class MediaWindowOverlay {
         boolean over = MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH);
         int fg = over ? Theme.ICON_HOVER : Theme.TEXT;
         GuiLayer.push(g, 500);
-        g.fill(revealX, revealY, revealX + revealW, revealY + revealH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
+        Panels.fill(g, revealX, revealY, revealX + revealW, revealY + revealH, over ? Theme.CHIP_HOVER_BG : Theme.CHIP_BG);
         int tx = revealX + 5;
         int ty = revealY + 3;
         for (int i = 0; i < 8; i++) {
@@ -175,11 +243,14 @@ public final class MediaWindowOverlay {
     /** Draws the window stack over the in-world HUD, without controls and without a cursor. */
     public static void hudRender(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
-        if (Screens.current() != null || noWindows()) {
+        if (Screens.current() != null) {
             return;
         }
-        renderAll(g, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
-                -1, -1, false);
+        int width = mc.getWindow().getGuiScaledWidth();
+        // Not gated on there being windows: the closing outline and the "now playing"
+        // banner both exist precisely when nothing is on screen to show them.
+        renderAll(g, width, mc.getWindow().getGuiScaledHeight(), -1, -1, false);
+        NowPlayingBanner.render(g, width);
     }
 
     // ------------------------------------------------------------------
@@ -217,7 +288,7 @@ public final class MediaWindowOverlay {
             }
             MediaWindow.ClickResult result = window.mouseClicked(mouseX, mouseY, button);
             if (result == MediaWindow.ClickResult.CLOSE) {
-                window.close();
+                window.closeWithFade();
                 return true;
             }
             if (result == MediaWindow.ClickResult.HANDLED) {
@@ -336,8 +407,15 @@ public final class MediaWindowOverlay {
 
         if (!ctx.getVideoManager().isEmpty()) {
             for (VideoWindow window : ctx.getVideoManager().getWindows()) {
+                if (!window.isVisible()) {
+                    // Nothing is drawing this one, and drawing is what empties the frame
+                    // queue. Without this the decode thread jams against a full queue and
+                    // the track never reaches its end, so the loop below never advances a
+                    // hidden player to its next video. See VideoPlayer.discardDueFrames.
+                    window.player().discardDueFrames();
+                }
                 if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {
-                    ctx.getVideoManager().close(window);
+                    window.closeWithFade();
                 }
             }
         }
@@ -345,7 +423,7 @@ public final class MediaWindowOverlay {
             for (AudioWindow window : ctx.getAudioManager().getWindows()) {
                 AudioPlayer ap = window.player();
                 if (ap.state() == AudioPlayer.State.ENDED && !ap.isPaused() && !window.advance()) {
-                    ctx.getAudioManager().close(window);
+                    window.closeWithFade();
                 }
             }
         }

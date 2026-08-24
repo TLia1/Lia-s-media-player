@@ -60,8 +60,13 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 
 **The player window** gives you full controls:
 
+- A **title bar** naming what is playing — the real YouTube title, or the file name — with the window buttons on it
+  instead of sitting on top of the picture
 - **Play / pause**
-- A **seek bar** with elapsed and total time, so you can scrub to any point
+- A **seek bar** with elapsed and total time, so you can scrub to any point. It grows and shows its handle when you
+  point at it, so you can tell a bar you can drag from one that is only reporting progress. Seeking (and resuming after
+  a pause) restarts the decoder, which takes about a second — the bar stays where you put it and a spinner says the
+  player is loading, so a held picture never looks like a frozen one
 - A **speaker toggle** and a pop-up **volume slider**
 - A **next** button when more than one video is lined up
 - A **loop** button that cycles through *off → loop the queue → loop this video*
@@ -85,8 +90,14 @@ forever; turn on **shuffle** as well and each new round is **reshuffled**, so yo
 - One-click shuffle play, and a loop toggle for endless playback.
 - Import playlists directly from your clipboard (lines of URLs) and export playlists to your clipboard for easy sharing.
 
+**You can see which window you are talking to.** Windows have softened corners and a thin edge that lights up on the
+front one — the one your next click will reach. They grow into place when they open and leave a fading outline behind
+when they close, and a click leaves a brief mark where it landed, so you can tell a button that responded from one you
+missed.
+
 **Keeps playing in the background.** Hide a player, and it keeps running — audio and all — so you can listen while you
-play. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay
+play. When a hidden player moves on to the next track, a small **now playing** banner names it at the top of the
+screen, whether or not the chat is open. Close it with the **×** button when you're done. While no menu or chat screen is open, visible video windows stay
 drawn on your HUD so a clip keeps showing during normal gameplay.
 
 **Everything just works.** Video playback relies on two small helper tools: `ffmpeg` (to decode video and sound) and
@@ -145,6 +156,10 @@ The mod now features a configurable options menu where you can tailor its behavi
 
 - You can access it from the **Media Player Settings** button in the pause menu, or via the **Config** button in the
 game's Mods list (the wrench in ModMenu, on Fabric).
+- Groups are listed down the left and their options sit right beside them, so switching between them never changes
+screen. A **search box** above the options filters them by name as you type.
+- Every option explains itself: hover it for a description, and use the **⟲** button beside it to put it back to its
+default. The button is greyed out while the option is already at its default.
 - **Default Window Position:** Choose where new windows appear by default. Options include `Center`, `Top Left`, `Top Right`, `Bottom Left`, and `Bottom Right`. The default is `Center`, which keeps the classic cascading behavior.
 - **Video Resolution:** Choose the maximum resolution for video playback (from 144p up to 720p).
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF

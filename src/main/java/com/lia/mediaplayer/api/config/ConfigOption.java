@@ -16,6 +16,7 @@ public abstract class ConfigOption<T> {
     private final T defaultValue;
     private T currentValue;
     private String warningKey;
+    private String descriptionKey;
     private OptionWidth width = OptionWidth.FULL;
 
     public ConfigOption(String id, String group, String translationKey, T defaultValue) {
@@ -37,6 +38,26 @@ public abstract class ConfigOption<T> {
 
     public String getWarningKey() {
         return warningKey;
+    }
+
+    /**
+     * Sets a translation key describing what this option does, shown as a tooltip in
+     * the configuration menu.
+     *
+     * <p>Distinct from {@link #withWarning}: a description explains the setting, a
+     * warning cautions about a particular value. An option may carry both, and the
+     * config screen shows the description first with the warning under it.</p>
+     */
+    public ConfigOption<T> withDescription(String descriptionKey) {
+        this.descriptionKey = descriptionKey;
+        return this;
+    }
+
+    /**
+     * The description translation key, or {@code null} if this option has none.
+     */
+    public String getDescriptionKey() {
+        return descriptionKey;
     }
 
     /**
@@ -83,6 +104,25 @@ public abstract class ConfigOption<T> {
     public void setValue(T value) {
         this.currentValue = value;
         // Optionally trigger a save, but currently ConfigStore handles save when UI closes or updates
+    }
+
+    /**
+     * Restores the value this option was declared with.
+     *
+     * <p>It lives here rather than at the call site because {@code setValue} is typed
+     * on {@code T}: a screen holding a {@code ConfigOption<?>} cannot hand its own
+     * default back to it without an unchecked cast. The option can, so it does.</p>
+     */
+    public void resetToDefault() {
+        this.currentValue = defaultValue;
+    }
+
+    /**
+     * Whether this option is still at its default value — what the config screen uses
+     * to decide if there is anything for its reset button to undo.
+     */
+    public boolean isDefault() {
+        return java.util.Objects.equals(currentValue, defaultValue);
     }
 
     /**

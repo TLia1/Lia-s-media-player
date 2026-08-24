@@ -278,7 +278,9 @@ IntSliderOption myOption = new IntSliderOption(
     10,                     // Default value
     1,                      // Min value
     100                     // Max value
-).withWarning("myaddon.custom_limit.warning"); // Optional red tooltip for sensitive settings
+)
+    .withDescription("myaddon.custom_limit.description") // Optional tooltip explaining the option
+    .withWarning("myaddon.custom_limit.warning");       // Optional red tooltip for sensitive settings
 
 // Example of a button that cycles through enum values
 public enum MyEnum {
@@ -297,6 +299,12 @@ EnumOption<MyEnum> myEnumOption = new EnumOption<>(
 LiasMediaPlayerApi.getInstance().registerConfigOption(myOption);
 LiasMediaPlayerApi.getInstance().registerConfigOption(myEnumOption);
 ```
+
+Every option in the menu gets a reset button beside it, which puts it back to the default value the
+constructor was given. `resetToDefault()` and `isDefault()` are on `ConfigOption<T>` if an addon
+wants to do the same from its own code — they live there rather than at the call site because
+`setValue` is typed on `T`, and a caller holding a `ConfigOption<?>` cannot hand its own default
+back to it without an unchecked cast.
 
 Once registered, your option will automatically appear in the Options menu under the specified group. You can access its current value at any
 time:

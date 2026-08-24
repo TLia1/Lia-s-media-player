@@ -58,7 +58,17 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
 
             @Override
             protected void applyValue() {
-                setValue(getIntValue());
+                // Qualified deliberately, and it must stay that way. From 1.21.11 on,
+                // AbstractSliderButton made its own setValue(double) protected instead of
+                // private, so inside this anonymous subclass the bare name `setValue`
+                // resolves to the *inherited* slider method: an int widens to a double with
+                // no boxing, and an inherited member shadows the enclosing class's method
+                // outright rather than overloading with it. The option's value was then
+                // never written — nothing saved, and the reset button stayed greyed out —
+                // while the slider fed its own raw integer back in as a 0..1 fraction and
+                // clamped the handle to one end. Naming the outer instance is what keeps
+                // the two apart, on every version.
+                StepSliderOption.this.setValue(getIntValue());
                 saveCallback.run();
             }
 

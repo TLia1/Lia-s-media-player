@@ -51,7 +51,15 @@ public final class AudioPlayer {
      */
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
     /**
-     * A pause longer than this may have let a network stream go stale; relaunch on resume.
+     * How long a pause has to last before resuming relaunches the session rather than
+     * un-pausing the line.
+     *
+     * <p>Kept at the value it has always shipped with. Sound does not have the video
+     * side's problem — {@link com.lia.mediaplayer.video.VideoPlayer} has to relaunch on
+     * <em>every</em> resume, because a video session blocked on its pipes never produces
+     * a picture again — and raising this has not been tested against a real stream. The
+     * failure it would cause is silence after a pause, which is exactly what the video
+     * side just demonstrated in its own form.</p>
      */
     private static final long STALE_PAUSE_NANOS = 3_000_000_000L; // 3s
     private static final int MAX_AUDIO_CHANNELS = 2;
@@ -90,6 +98,14 @@ public final class AudioPlayer {
     private final Condition gateSignal = gate.newCondition();
     private volatile boolean seekRequested;
     private volatile long seekTargetMicros;
+    /**
+     * Where playback is going while a seek is in flight, or {@code -1} — the same
+     * mechanism, and for the same reason, as
+     * {@link com.lia.mediaplayer.video.VideoPlayer}'s: a seek relaunches ffmpeg, and
+     * until it lands the line's clock still reports the old position, so a seek bar
+     * reading the clock would snap back before jumping to where it was put.
+     */
+    private volatile long pendingSeekMicros = -1;
     private volatile long pausedAtNanos;
 
     // --- Pump pause gate (pump thread waits here while paused) ---------------
@@ -271,11 +287,23 @@ public final class AudioPlayer {
             target = Math.min(target, Math.max(0, duration - SEEK_END_MARGIN_MICROS));
         }
         seekTargetMicros = target;
+        pendingSeekMicros = target;
         seekRequested = true;
         signalGate();
     }
 
+    /**
+     * Whether a seek has been asked for and the sound has not caught up yet.
+     */
+    public boolean isSeeking() {
+        return pendingSeekMicros >= 0;
+    }
+
     public long positionMicros() {
+        long pending = pendingSeekMicros;
+        if (pending >= 0) {
+            return pending;
+        }
         synchronized (clockLock) {
             SourceDataLine line = audioLine;
             if (line != null) {
@@ -374,6 +402,7 @@ public final class AudioPlayer {
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
             errorMessage = t.getMessage() != null ? t.getMessage() : t.toString();
+            pendingSeekMicros = -1;
             state = State.FAILED;
             LiasMediaPlayer.LOGGER.warn("Audio playback failed for {}: {}", url, errorMessage);
         } finally {
@@ -396,12 +425,18 @@ public final class AudioPlayer {
             startSession(target / 1_000_000.0);
         } catch (IOException e) {
             LiasMediaPlayer.LOGGER.warn("Audio seek failed for {}: {}", url, e.toString());
+            // No session means no PCM will ever arrive to end the seek.
+            pendingSeekMicros = -1;
         }
         synchronized (clockLock) {
             SourceDataLine l = audioLine;
             clockOffsetMicros = target;
             lineBaseMicros = l != null ? l.getMicrosecondPosition() : 0;
         }
+        // Note what is *not* here: the seek is not over because ffmpeg has been
+        // launched. It is over when the first PCM of the new session reaches the line —
+        // about a second later — which is what pumpLoop reports. Ending it here stopped
+        // the bar's spinner while the silence was still going on.
         if (state == State.ENDED) {
             state = State.PLAYING;
         }
@@ -422,6 +457,7 @@ public final class AudioPlayer {
         if (line != null) {
             line.drain();
         }
+        pendingSeekMicros = -1; // nothing more is coming to end a seek that was in flight
         state = State.ENDED;
     }
 
@@ -469,6 +505,7 @@ public final class AudioPlayer {
      */
     private void pumpLoop(int gen, InputStream in, SourceDataLine line) {
         byte[] buffer = new byte[8192];
+        boolean firstWrite = true;
         try {
             int read;
             while (running && gen == sessionGen && (read = in.read(buffer)) >= 0) {
@@ -483,6 +520,15 @@ public final class AudioPlayer {
                 }
                 lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
                 line.write(buffer, 0, read);
+                if (firstWrite) {
+                    firstWrite = false;
+                    // Sound from this session is now on the line, so the seek that
+                    // started it is genuinely over: the clock it drives means something
+                    // again, and the bar can stop saying it is loading.
+                    if (gen == sessionGen && !seekRequested) {
+                        pendingSeekMicros = -1;
+                    }
+                }
             }
             // Clean end-of-stream for the current session: let the control thread react.
             if (running && gen == sessionGen) {

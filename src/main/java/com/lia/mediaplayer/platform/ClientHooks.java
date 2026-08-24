@@ -59,6 +59,10 @@ public final class ClientHooks {
         ImageChatHandler.onDisconnect();
         VideoChatHandler.onDisconnect();
         AudioChatHandler.onDisconnect();
+        // The windows those handlers just disposed leave a fading outline behind, and a
+        // "now playing" banner may still be counting down. Neither should survive into
+        // the next world.
+        MediaWindowOverlay.clearGhosts();
     }
 
     // ------------------------------------------------------------------

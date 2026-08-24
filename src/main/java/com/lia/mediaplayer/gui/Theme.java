@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.gui;
 
+import net.minecraft.util.Mth;
+
 /**
  * The mod's whole palette, in one place — the colour equivalent of {@link Glyphs}.
  *
@@ -25,6 +27,8 @@ final class Theme {
 
     /** The body of a media window, behind the picture. */
     static final int WINDOW_BG = 0xD0101010;
+    /** The strip above a window's content, carrying its title and corner buttons. */
+    static final int TITLE_BAR_BG = 0xF01C1C1C;
     /** The control bar strip below a player's content. */
     static final int CONTROL_BAR_BG = 0xF0181818;
     /** Backdrop behind a corner button (link / hide / close), over the picture. */
@@ -45,6 +49,23 @@ final class Theme {
     static final int CHIP_BG = 0xD0181818;
     /** The same chip under the cursor. */
     static final int CHIP_HOVER_BG = 0xF0303030;
+    /** The "now playing" banner that announces a track no window is showing. */
+    static final int BANNER_BG = 0xE0141414;
+
+    // ------------------------------------------------------------------
+    // Outlines
+    // ------------------------------------------------------------------
+
+    /** The 1 px edge of a window that is not the front one. */
+    static final int BORDER = 0x60FFFFFF;
+    /**
+     * The same edge on the front window. The z-stack has always existed; this is the
+     * only thing that makes it visible, so the two values have to read apart at a
+     * glance rather than being two shades of the same grey.
+     */
+    static final int BORDER_FOCUSED = 0xFF4CA6FF;
+    /** The edge of a panel that is not a window (the banner, the queue panel). */
+    static final int BORDER_SUBTLE = 0x40FFFFFF;
 
     // ------------------------------------------------------------------
     // Rows
@@ -94,6 +115,13 @@ final class Theme {
     static final int ICON_INACTIVE = 0xFF8A8A8A;
     /** A control that cannot be used right now (no previous track, first row, …). */
     static final int ICON_DISABLED = 0xFF555555;
+    /**
+     * The flash left behind by a click. Windows are not screen widgets, so a button has
+     * no held state to draw from; the flash is drawn at the point that was clicked and
+     * fades out, which reports the press wherever it landed — a button, the seek bar or
+     * a queue row alike.
+     */
+    static final int PRESS_FLASH = 0x90FFFFFF;
 
     // ------------------------------------------------------------------
     // Accents
@@ -103,4 +131,19 @@ final class Theme {
     static final int DANGER = 0xFFFF6B6B;
     /** The cross drawn over a muted speaker; brighter, because it is tiny. */
     static final int MUTED = 0xFFFF5555;
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    /**
+     * The same colour at a fraction of its opacity, for anything that fades. Only the
+     * alpha channel moves, so a colour keeps its identity all the way down to
+     * invisible — fading towards the background instead would tie every animation to
+     * whatever happens to be behind it.
+     */
+    static int withAlpha(int argb, double factor) {
+        int alpha = (int) Math.round(((argb >>> 24) & 0xFF) * Mth.clamp(factor, 0.0, 1.0));
+        return (alpha << 24) | (argb & 0x00FFFFFF);
+    }
 }

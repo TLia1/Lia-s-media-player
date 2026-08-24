@@ -234,6 +234,7 @@ final class VideoWindow extends MediaWindow {
         draggingVolume = false;
         player = new VideoPlayer(url);
         player.start();
+        announceIfHidden(url);
     }
 
     /**
@@ -432,7 +433,7 @@ final class VideoWindow extends MediaWindow {
         }
 
         seekX = cursor;
-        seekH = 4;
+        seekH = MediaControls.SEEK_H;
         seekY = barTop + (CONTROL_BAR_HEIGHT - seekH) / 2;
 
         // Reserve room on the right of the bar for the time read-out and the
@@ -449,38 +450,60 @@ final class VideoWindow extends MediaWindow {
         if (frame != null) {
             Blit.textured(g, frame, contentX, contentY, contentW, contentH,
                     player.videoWidth(), player.videoHeight());
+            if (player.isSeeking()) {
+                // A seek — and a resume, which relaunches the same way — holds this frame
+                // on screen for about a second. Without something moving over it, a held
+                // frame and a dead player look exactly alike.
+                drawLoadingNotice(g, font, Component.translatable("gui.liasmediaplayer.video.seeking"));
+            }
         } else {
             g.fill(contentX, contentY, contentX + contentW, contentY + contentH, Theme.PLACEHOLDER);
-            Component status = switch (player.state()) {
-                case FAILED -> Component.translatable("gui.liasmediaplayer.video.playback_failed");
-                case LOADING -> Component.translatable("gui.liasmediaplayer.video.loading");
-                default -> Component.translatable("gui.liasmediaplayer.video.buffering");
-            };
-            int tx = contentX + (contentW - font.width(status)) / 2;
-            int ty = contentY + (contentH - font.lineHeight) / 2;
-            if (player.state() == VideoPlayer.State.FAILED) {
-                ty = contentY + 10;
+            if (player.state() != VideoPlayer.State.FAILED) {
+                // Loading, buffering, or waiting on a seek that has nothing to hold over:
+                // all of them are "working", and all of them get the spinner that says so.
+                drawLoadingNotice(g, font, Component.translatable(
+                        player.state() == VideoPlayer.State.LOADING
+                                ? "gui.liasmediaplayer.video.loading"
+                                : "gui.liasmediaplayer.video.buffering"));
+                return;
             }
+
+            Component status = Component.translatable("gui.liasmediaplayer.video.playback_failed");
+            int tx = contentX + (contentW - font.width(status)) / 2;
+            int ty = contentY + 10;
             g.drawString(font, status, tx, ty, Theme.TEXT);
 
-            if (player.state() == VideoPlayer.State.FAILED) {
-                String msg = player.errorMessage();
-                if (msg != null) {
-                    List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(msg), Math.max(10, contentW - 20));
-                    int startY = ty + font.lineHeight + 8;
-                    for (int i = 0; i < lines.size(); i++) {
-                        if (startY + i * font.lineHeight > contentY + contentH - 4) break;
-                        g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, Theme.DANGER);
-                    }
+            String msg = player.errorMessage();
+            if (msg != null) {
+                List<net.minecraft.util.FormattedCharSequence> lines = font.split(Component.literal(msg), Math.max(10, contentW - 20));
+                int startY = ty + font.lineHeight + 8;
+                for (int i = 0; i < lines.size(); i++) {
+                    if (startY + i * font.lineHeight > contentY + contentH - 4) break;
+                    g.drawString(font, lines.get(i), contentX + 10, startY + i * font.lineHeight, Theme.DANGER);
                 }
             }
         }
     }
 
+    /**
+     * A chip carrying a turning spinner and a word, centred over the content — what the
+     * player shows whenever it is working and has nothing new to show for it yet.
+     */
+    private void drawLoadingNotice(GuiGraphics g, Font font, Component status) {
+        int spinner = BUTTON;
+        int w = spinner + font.width(status) + 14;
+        int h = Math.max(spinner, font.lineHeight) + 8;
+        int x = contentX + (contentW - w) / 2;
+        int y = contentY + (contentH - h) / 2;
+        Panels.fill(g, x, y, x + w, y + h, Theme.POPUP_BG);
+        Panels.border(g, x, y, x + w, y + h, Theme.BORDER_SUBTLE);
+        Glyphs.spinner(g, x + 5, y + (h - spinner) / 2, Theme.ICON_ACTIVE, Anim.now());
+        g.drawString(font, status, x + 5 + spinner + 4, y + (h - font.lineHeight) / 2 + 1, Theme.TEXT);
+    }
+
     @Override
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
         int barTop = contentY + contentH;
-        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, Theme.CONTROL_BAR_BG);
 
         // Play / pause button.
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
@@ -539,15 +562,10 @@ final class VideoWindow extends MediaWindow {
             showVolumePopup = false;
         }
 
-        // Seek bar.
+        // Seek bar: taller, with its handle showing, while it is live.
         double fraction = draggingSeek ? scrubFraction : player.progress();
-        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, Theme.TRACK);
-        if (player.durationMicros() > 0) {
-            int fill = (int) Math.round(seekW * fraction);
-            g.fill(seekX, seekY, seekX + fill, seekY + seekH, Theme.FILL);
-            int knobX = seekX + Mth.clamp(fill, 0, seekW);
-            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, Theme.KNOB);
-        }
+        boolean overSeek = draggingSeek || MediaControls.overSeek(mouseX, mouseY, seekX, seekY, seekW);
+        MediaControls.drawSeekBar(g, seekX, seekY, seekW, fraction, player.durationMicros() > 0, overSeek);
 
         // Time read-out.
         g.drawString(font, Component.literal(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size())),
@@ -609,8 +627,9 @@ final class VideoWindow extends MediaWindow {
         computePanelLayout();
         int rows = queue.size();
 
-        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, Theme.PANEL_BG);
-        g.fill(panelX, panelY, panelX + panelW, panelY + HEADER_H, Theme.PANEL_HEADER_BG);
+        Panels.fill(g, panelX, panelY, panelX + panelW, panelY + panelH, Theme.PANEL_BG);
+        Panels.fillTop(g, panelX, panelY, panelX + panelW, panelY + HEADER_H, Theme.PANEL_HEADER_BG);
+        Panels.border(g, panelX, panelY, panelX + panelW, panelY + panelH, Theme.BORDER_SUBTLE);
 
         Component header = panelMini
                 ? Component.translatable("gui.liasmediaplayer.queue.header_mini", rows)
@@ -790,7 +809,7 @@ final class VideoWindow extends MediaWindow {
             player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
         }
-        if (player.durationMicros() > 0 && inRect(mouseX, mouseY, seekX, seekY - 3, seekW, seekH + 6)) {
+        if (player.durationMicros() > 0 && MediaControls.overSeek(mouseX, mouseY, seekX, seekY, seekW)) {
             draggingSeek = true;
             scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return ClickResult.HANDLED;

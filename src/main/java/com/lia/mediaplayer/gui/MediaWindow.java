@@ -21,10 +21,31 @@ import net.minecraft.util.Mth;
  * bar below the content. Layout is recomputed every frame and the hit regions
  * are cached so the mouse handlers (which fire between renders) can test against
  * the last drawn position.</p>
+ *
+ * <p>The chrome around that content — the softened box, the title bar carrying the
+ * media's name and the corner buttons, the 1 px edge that marks the front window, the
+ * control bar strip and the open animation — is drawn here and only here, so a new
+ * window type inherits the whole look by implementing {@link #drawContent}.</p>
  */
 abstract class MediaWindow {
     protected static final int PADDING = 3;
     protected static final int BUTTON = 11;
+    /**
+     * Height of the title bar above the content, for the windows that have one.
+     */
+    protected static final int TITLE_BAR = 12;
+    /**
+     * How long a window takes to settle into place when it appears.
+     */
+    private static final int OPEN_MS = 160;
+    /**
+     * How long the mark left by a click stays on screen.
+     */
+    private static final int FLASH_MS = 220;
+    /**
+     * How much smaller a window starts before it grows into its real size.
+     */
+    private static final double OPEN_SCALE = 0.92;
     /**
      * Size of the square resize grip in the bottom-right corner.
      */
@@ -63,6 +84,15 @@ abstract class MediaWindow {
 
     protected boolean visible = true;
 
+    /**
+     * When this window appeared, driving the open animation (see {@link Anim}).
+     */
+    private final long openedAt = Anim.now();
+
+    // Where the last click landed and when, for the flash that reports it.
+    private int flashX, flashY;
+    private long flashAt;
+
     MediaWindow() {
         bringToFront();
     }
@@ -88,6 +118,15 @@ abstract class MediaWindow {
     protected int hideBtnX, hideBtnY;
     private int linkBtnX, linkBtnY;
     private int gripX, gripY;
+    /**
+     * {@link #TITLE_BAR} or {@code 0}, resolved once per layout so every derived
+     * coordinate agrees with what {@link #render} draws.
+     */
+    private int titleBarH;
+    /**
+     * Right edge available to the title text: the leftmost corner button.
+     */
+    private int titleTextRight;
 
     // Manual placement / sizing: once the user drags or resizes the window it
     // stops auto-anchoring and uses these values instead.
@@ -194,6 +233,30 @@ abstract class MediaWindow {
     }
 
     /**
+     * Whether the window carries a title bar above its content.
+     *
+     * <p>On by default: the corner buttons used to float <em>over</em> the top-right of
+     * the picture, which put three opaque squares on the part of an image or a video
+     * most likely to matter. A strip of its own gives them somewhere to live and gives
+     * the window room to say what it is playing.</p>
+     *
+     * <p>A window whose content already <em>is</em> a title row — the audio bar — turns
+     * it off rather than showing the same name twice.</p>
+     */
+    protected boolean hasTitleBar() {
+        return true;
+    }
+
+    /**
+     * The name shown in the title bar. Defaults to the media's resolved title, which
+     * {@link com.lia.mediaplayer.media.MediaTitleCache} already keeps for the queue
+     * panels — so a YouTube window is named by its video, and a direct link by its file.
+     */
+    protected String windowTitle() {
+        return com.lia.mediaplayer.media.MediaTitleCache.getOrLoad(mediaUrl());
+    }
+
+    /**
      * Lays out the subclass' control bar using the current content rect.
      */
     protected void layoutControls(Font font) {
@@ -286,27 +349,40 @@ abstract class MediaWindow {
         int srcH = Math.max(1, sourceHeight());
 
         double scale = userSized ? userScale : computeAutoScale(srcW, srcH, screenWidth, screenHeight);
+        titleBarH = hasTitleBar() ? TITLE_BAR : 0;
 
-        // Cap the content size so the whole box (with its control bar / padding)
-        // always fits on screen — otherwise a tall image or an over-sized resize
-        // pushes the bottom-right grip off-screen where it can't be grabbed again.
+        // Cap the content size so the whole box (with its title bar, control bar and
+        // padding) always fits on screen — otherwise a tall image or an over-sized
+        // resize pushes the bottom-right grip off-screen where it can't be grabbed
+        // again.
         int minContentW = minContentWidth();
-        int chromeH = controlBarHeight() + PADDING * 2;
+        int chromeH = titleBarH + controlBarHeight() + PADDING * 2;
         int maxContentW = Math.max(minContentW, maxContentWidth(screenWidth));
         int maxContentH = Math.max(MIN_CONTENT, screenHeight - chromeH - 2);
         // Width that keeps the (aspect-locked) height within maxContentH.
         int widthCapFromHeight = Math.max(minContentW, (int) Math.floor(maxContentH * (double) srcW / srcH));
         int widthCap = Math.min(maxContentW, widthCapFromHeight);
 
-        contentW = Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
+        int settledW = Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
+        // The scale the window *is* at, recorded before the opening animation scales it
+        // down: a wheel-zoom in the first frames must start from the real size, not from
+        // the momentary one.
+        lastScale = settledW / (double) srcW;
+
+        contentW = Math.max(MIN_CONTENT / 2, (int) Math.round(settledW * openScale()));
         contentH = Math.max(1, (int) Math.round(contentW * (double) srcH / srcW));
-        lastScale = contentW / (double) srcW;
 
         boxW = contentW + PADDING * 2;
-        boxH = contentH + controlBarHeight() + PADDING * 2;
+        boxH = contentH + titleBarH + controlBarHeight() + PADDING * 2;
 
         if (!userPlaced && !initialPositionApplied) {
-            applyInitialPosition(screenWidth, screenHeight);
+            // Placed from the size the window is *settling* into, not the smaller one it
+            // is drawn at on this first frame: the corner positions pin userX/userY once
+            // and never recompute them, so animating them would leave the window parked
+            // a few pixels short of the corner it was asked for.
+            int settledBoxH = Math.max(1, (int) Math.round(settledW * (double) srcH / srcW))
+                    + titleBarH + controlBarHeight() + PADDING * 2;
+            applyInitialPosition(screenWidth, screenHeight, settledW + PADDING * 2, settledBoxH);
             initialPositionApplied = true;
         }
 
@@ -322,12 +398,18 @@ abstract class MediaWindow {
         constrainPosition(screenWidth, screenHeight);
 
         contentX = boxX + PADDING;
-        contentY = boxY + PADDING;
+        contentY = boxY + titleBarH + PADDING;
 
-        // Corner buttons over the top-right of the content (right to left:
-        // close, then hide if present, then the open-in-browser link).
-        closeBtnX = contentX + contentW - BUTTON - 1;
-        closeBtnY = contentY + 1;
+        // Buttons at the right end of the title bar (right to left: close, then hide
+        // if present, then the open-in-browser link). A window without a title bar
+        // keeps them where they have always been, over the top-right of the content.
+        if (titleBarH > 0) {
+            closeBtnX = boxX + boxW - PADDING - BUTTON;
+            closeBtnY = boxY + (titleBarH - BUTTON) / 2;
+        } else {
+            closeBtnX = contentX + contentW - BUTTON - 1;
+            closeBtnY = contentY + 1;
+        }
         int next = closeBtnX;
         if (hasHideButton()) {
             hideBtnX = next - BUTTON - 2;
@@ -336,6 +418,7 @@ abstract class MediaWindow {
         }
         linkBtnX = next - BUTTON - 2;
         linkBtnY = closeBtnY;
+        titleTextRight = linkBtnX - 3;
 
         gripX = boxX + boxW - GRIP;
         gripY = boxY + boxH - GRIP;
@@ -343,7 +426,7 @@ abstract class MediaWindow {
         layoutControls(Minecraft.getInstance().font);
     }
 
-    private void applyInitialPosition(int screenWidth, int screenHeight) {
+    private void applyInitialPosition(int screenWidth, int screenHeight, int settledBoxW, int settledBoxH) {
         WindowPosition position = ((MediaPlayerContext) LiasMediaPlayerApi.getInstance()).getConfigStore().defaultWindowPosition();
         if (position == WindowPosition.CENTER) {
             // Leave userPlaced as false to allow default cascading behavior
@@ -356,16 +439,16 @@ abstract class MediaWindow {
                 userY = PADDING;
             }
             case TOP_RIGHT -> {
-                userX = screenWidth - boxW - PADDING;
+                userX = screenWidth - settledBoxW - PADDING;
                 userY = PADDING;
             }
             case BOTTOM_LEFT -> {
                 userX = PADDING;
-                userY = screenHeight - boxH - PADDING;
+                userY = screenHeight - settledBoxH - PADDING;
             }
             case BOTTOM_RIGHT -> {
-                userX = screenWidth - boxW - PADDING;
-                userY = screenHeight - boxH - PADDING;
+                userX = screenWidth - settledBoxW - PADDING;
+                userY = screenHeight - settledBoxH - PADDING;
             }
         }
     }
@@ -375,41 +458,104 @@ abstract class MediaWindow {
     // ------------------------------------------------------------------
 
     /**
-     * Draws the window. {@code withControls} is false for the in-world HUD overlay.
+     * How far through its opening animation this window is, eased.
      */
-    final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls) {
-        Font font = Minecraft.getInstance().font;
+    private double openEase() {
+        return Anim.easeOut(Anim.progress(openedAt, OPEN_MS));
+    }
 
-        g.fill(boxX, boxY, boxX + boxW, boxY + boxH, Theme.WINDOW_BG);
+    /**
+     * The factor the content is scaled by right now: the window grows from
+     * {@link #OPEN_SCALE} to its real size as it opens.
+     */
+    private double openScale() {
+        return OPEN_SCALE + (1.0 - OPEN_SCALE) * openEase();
+    }
+
+    /**
+     * Draws the window.
+     *
+     * @param withControls {@code false} for the in-world HUD overlay, which has no
+     *                     cursor and shows just the picture
+     * @param focused      whether this is the front window of the stack; only the front
+     *                     one gets the bright edge
+     */
+    final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls, boolean focused) {
+        Font font = Minecraft.getInstance().font;
+        double fade = openEase();
+        boolean controls = withControls || alwaysShowControls();
+
+        Panels.fill(g, boxX, boxY, boxX + boxW, boxY + boxH, Theme.withAlpha(Theme.WINDOW_BG, fade));
+        if (titleBarH > 0) {
+            renderTitleBar(g, font, fade);
+        }
+        if (controls && controlBarHeight() > 0) {
+            int barTop = contentY + contentH;
+            Panels.fillBottom(g, boxX, barTop, boxX + boxW, boxY + boxH,
+                    Theme.withAlpha(Theme.CONTROL_BAR_BG, fade));
+        }
+
         drawContent(g, font);
 
-        if (!withControls && !alwaysShowControls()) {
-            return; // HUD overlay shows just the picture.
+        // The edge goes over the content, so a picture that fills its rect still ends
+        // on a clean outline rather than bleeding into the window behind it. Only a
+        // screen that routes clicks to the stack gets the bright "this one is in front"
+        // edge — on the bare HUD nothing can be clicked, so there is no front to mark.
+        boolean marked = focused && withControls;
+        Panels.border(g, boxX, boxY, boxX + boxW, boxY + boxH,
+                Theme.withAlpha(marked ? Theme.BORDER_FOCUSED : Theme.BORDER, fade));
+
+        if (!controls) {
+            return; // HUD overlay: no cursor, so nothing below would be readable.
         }
 
         renderControls(g, font, mouseX, mouseY);
         renderCornerButtons(g, mouseX, mouseY);
         renderGrip(g, mouseX, mouseY);
+        renderClickFlash(g);
+    }
+
+    /**
+     * The strip above the content: the media's name on the left, the corner buttons on
+     * the right (drawn by {@link #renderCornerButtons}).
+     */
+    private void renderTitleBar(GuiGraphics g, Font font, double fade) {
+        Panels.fillTop(g, boxX, boxY, boxX + boxW, boxY + titleBarH,
+                Theme.withAlpha(Theme.TITLE_BAR_BG, fade));
+        int textX = boxX + 4;
+        int maxW = titleTextRight - textX;
+        if (maxW < 8) {
+            return; // too narrow to say anything; the buttons win
+        }
+        // Vanilla's font renderer reads a near-zero alpha as "fully opaque", so the
+        // first frame of the fade would show the title at full strength. See
+        // NowPlayingBanner, which has the same floor for the same reason.
+        if (fade * 255 < 8) {
+            return;
+        }
+        g.drawString(font, Component.literal(Glyphs.fit(font, windowTitle(), maxW)),
+                textX, boxY + (titleBarH - font.lineHeight) / 2 + 1,
+                Theme.withAlpha(Theme.TEXT_SUBTLE, fade));
     }
 
     private void renderCornerButtons(GuiGraphics g, int mouseX, int mouseY) {
         boolean overLink = inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON);
-        g.fill(linkBtnX, linkBtnY, linkBtnX + BUTTON, linkBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
+        drawButtonBackdrop(g, linkBtnX, linkBtnY);
         Glyphs.externalLink(g, linkBtnX, linkBtnY, overLink ? Theme.ICON_HOVER : Theme.ICON);
         if (overLink) {
             Tooltips.request(Component.translatable("gui.liasmediaplayer.control.open_browser"));
         }
 
         boolean overClose = inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON);
-        g.fill(closeBtnX, closeBtnY, closeBtnX + BUTTON, closeBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
-        Glyphs.close(g, closeBtnX, closeBtnY, overClose ? Theme.ICON_HOVER : Theme.ICON);
+        drawButtonBackdrop(g, closeBtnX, closeBtnY);
+        Glyphs.close(g, closeBtnX, closeBtnY, overClose ? Theme.DANGER : Theme.ICON);
         if (overClose) {
             Tooltips.request(Component.translatable("gui.liasmediaplayer.control.close"));
         }
 
         if (hasHideButton()) {
             boolean overHide = inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON);
-            g.fill(hideBtnX, hideBtnY, hideBtnX + BUTTON, hideBtnY + BUTTON, Theme.CORNER_BUTTON_BG);
+            drawButtonBackdrop(g, hideBtnX, hideBtnY);
             Glyphs.minimize(g, hideBtnX, hideBtnY, overHide ? Theme.ICON_HOVER : Theme.ICON);
             if (overHide) {
                 Tooltips.request(Component.translatable("gui.liasmediaplayer.control.hide"));
@@ -418,10 +564,28 @@ abstract class MediaWindow {
     }
 
     /**
+     * The dark square behind a corner button — needed only when the button sits over
+     * the picture. In a title bar the strip is already the backdrop, and painting a
+     * second one there just puts three darker squares on it.
+     */
+    private void drawButtonBackdrop(GuiGraphics g, int x, int y) {
+        if (titleBarH == 0) {
+            g.fill(x, y, x + BUTTON, y + BUTTON, Theme.CORNER_BUTTON_BG);
+        }
+    }
+
+    /**
      * A small diagonal grip in the bottom-right corner, highlighted on hover.
      */
     private void renderGrip(GuiGraphics g, int mouseX, int mouseY) {
-        int color = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize ? Theme.ICON_HOVER : Theme.ICON;
+        boolean active = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize;
+        // The cursor cannot be swapped for a resize arrow — that is a GLFW window-level
+        // call with no vanilla seam behind it, and a stuck cursor outlives the window —
+        // so the affordance is drawn instead: the grip lights up and gains a backdrop.
+        if (active) {
+            g.fill(gripX, gripY, gripX + GRIP, gripY + GRIP, Theme.CORNER_BUTTON_BG);
+        }
+        int color = active ? Theme.ICON_HOVER : Theme.ICON;
         for (int i = 1; i <= 3; i++) {
             int o = i * 2;
             g.fill(gripX + GRIP - o, gripY + GRIP - 1, gripX + GRIP, gripY + GRIP, color);
@@ -429,11 +593,43 @@ abstract class MediaWindow {
         }
     }
 
+    /**
+     * The mark a click leaves behind: a small square that expands from where the cursor
+     * was and fades out.
+     *
+     * <p>This is the window equivalent of a button's pressed state. A window is not a
+     * screen widget, so its controls are hit-tested rectangles rather than widgets with
+     * a held state to draw from — a real "pressed" look would mean every one of the
+     * dozen control glyphs in the two player windows tracking the mouse button itself.
+     * Marking the point that was clicked instead reports the press from one place, and
+     * covers the controls that are not buttons at all (the seek bar, a queue row).</p>
+     */
+    private void renderClickFlash(GuiGraphics g) {
+        double t = Anim.progress(flashAt, FLASH_MS);
+        if (t >= 1.0) {
+            return;
+        }
+        double eased = Anim.easeOut(t);
+        int half = (int) Math.round(3 + 6 * eased);
+        Panels.fill(g, flashX - half, flashY - half, flashX + half, flashY + half,
+                Theme.withAlpha(Theme.PRESS_FLASH, 1.0 - eased));
+    }
+
     // ------------------------------------------------------------------
     // Input (return value tells the caller whether the event was consumed)
     // ------------------------------------------------------------------
 
     final ClickResult mouseClicked(double mouseX, double mouseY, int button) {
+        ClickResult result = routeClick(mouseX, mouseY, button);
+        if (result != ClickResult.NONE) {
+            flashX = (int) Math.round(mouseX);
+            flashY = (int) Math.round(mouseY);
+            flashAt = Anim.now();
+        }
+        return result;
+    }
+
+    private ClickResult routeClick(double mouseX, double mouseY, int button) {
         if (button != 0 || !visible) {
             return ClickResult.NONE;
         }
@@ -446,6 +642,9 @@ abstract class MediaWindow {
         }
         if (hasHideButton() && inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON)) {
             visible = false;
+            // Same outline a close leaves: from the screen's point of view the window
+            // went away, and it should go away the same way either time.
+            MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
             return ClickResult.HANDLED;
         }
         if (inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
@@ -537,6 +736,34 @@ abstract class MediaWindow {
         userSized = true;
         double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());
         userScale = Mth.clamp(lastScale * (1.0 + 0.1 * steps), minScale, MAX_SCALE);
+    }
+
+    /**
+     * Raises the "now playing" banner for {@code url} when this window is hidden.
+     *
+     * <p>A hidden player keeps playing — that is what the hide button means — so a
+     * queue moving on to its next track is otherwise completely silent about what
+     * started. A visible window needs no banner: its title bar (or, for the audio bar,
+     * its content row) already carries the name.</p>
+     */
+    protected final void announceIfHidden(String url) {
+        if (!visible) {
+            NowPlayingBanner.show(com.lia.mediaplayer.media.MediaTitleCache.getOrLoad(url));
+        }
+    }
+
+    /**
+     * Closes this window and leaves a fading outline of it behind.
+     *
+     * <p>The window itself cannot fade out: closing disposes its player and its
+     * texture, and keeping either alive to be looked at for another fifth of a second
+     * would mean a window that has been closed still decoding and still holding an
+     * audio line. What is left instead is the shape it occupied — enough for the eye to
+     * follow what disappeared, with nothing behind it.</p>
+     */
+    final void closeWithFade() {
+        MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
+        close();
     }
 
     /**

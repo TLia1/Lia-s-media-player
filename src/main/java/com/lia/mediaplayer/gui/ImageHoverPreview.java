@@ -94,7 +94,7 @@ final class ImageHoverPreview {
         int y = Mth.clamp(mouseY - height - CURSOR_OFFSET, 2, screenHeight - height - 2);
 
         GuiLayer.push(guiGraphics, PREVIEW_Z);
-        guiGraphics.fill(x - 2, y - 2, x + width + 2, y + height + 2, Theme.PREVIEW_BG);
+        Panels.fill(guiGraphics, x - 2, y - 2, x + width + 2, y + height + 2, Theme.PREVIEW_BG);
         Blit.textured(guiGraphics, frame, x, y, width, height, entry.width, entry.height);
         GuiLayer.pop(guiGraphics);
     }

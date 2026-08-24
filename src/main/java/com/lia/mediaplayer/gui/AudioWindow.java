@@ -151,6 +151,7 @@ final class AudioWindow extends MediaWindow {
         draggingSeek = false;
         player = new AudioPlayer(url);
         player.start();
+        announceIfHidden(url);
     }
 
     /**
@@ -226,6 +227,16 @@ final class AudioWindow extends MediaWindow {
         return true;
     }
 
+    /**
+     * The bar's content row already <em>is</em> a title row — a note glyph and the
+     * track name — so a title bar above it would print the same string twice and
+     * double the height of a window whose whole point is to be small.
+     */
+    @Override
+    protected boolean hasTitleBar() {
+        return false;
+    }
+
     @Override
     protected boolean alwaysShowControls() {
         return true; // the audio bar's controls should stay visible on the HUD
@@ -253,7 +264,7 @@ final class AudioWindow extends MediaWindow {
         volBarY = volBtnY - 4 - MediaControls.VOL_BAR_H;
 
         seekX = volBtnX + BUTTON + 4;
-        seekH = 4;
+        seekH = MediaControls.SEEK_H;
         seekY = barTop + (CONTROL_BAR_HEIGHT - seekH) / 2;
 
         int timeWidth = font.width(timeText(player.positionMicros(), player.durationMicros(), queueSize()));
@@ -265,8 +276,16 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected void drawContent(GuiGraphics g, Font font) {
         // A music note, then the track name (or a status), centred in the content row.
+        // While the track is being fetched — including a seek or a resume, both of which
+        // relaunch ffmpeg — the note gives way to a turning spinner, so a bar that has
+        // gone quiet for a second is visibly working rather than visibly stuck.
         int ty = contentY + (contentH - font.lineHeight) / 2;
-        Glyphs.note(g, contentX, ty - 1, Theme.ICON);
+        boolean working = player.isSeeking() || player.state() == AudioPlayer.State.LOADING;
+        if (working) {
+            Glyphs.spinner(g, contentX, ty - 1, Theme.ICON_ACTIVE, Anim.now());
+        } else {
+            Glyphs.note(g, contentX, ty - 1, Theme.ICON);
+        }
         int textX = contentX + 12;
         // Stop the title before the three corner buttons (link, hide, close), which are
         // laid out right-to-left from closeBtnX.
@@ -278,14 +297,14 @@ final class AudioWindow extends MediaWindow {
         // components.
         String text;
         int color = Theme.TEXT;
-        switch (player.state()) {
-            case FAILED -> {
-                text = Component.translatable("gui.liasmediaplayer.audio.playback_failed").getString();
-                color = Theme.DANGER;
-            }
-            case LOADING -> text = Component.translatable("gui.liasmediaplayer.audio.loading",
+        if (player.state() == AudioPlayer.State.FAILED) {
+            text = Component.translatable("gui.liasmediaplayer.audio.playback_failed").getString();
+            color = Theme.DANGER;
+        } else if (working) {
+            text = Component.translatable("gui.liasmediaplayer.audio.loading",
                     MediaTitleCache.getOrLoad(player.url())).getString();
-            default -> text = MediaTitleCache.getOrLoad(player.url());
+        } else {
+            text = MediaTitleCache.getOrLoad(player.url());
         }
         g.drawString(font, Component.literal(Glyphs.fit(font, text, maxW)), textX, ty, color);
     }
@@ -293,7 +312,6 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected void renderControls(GuiGraphics g, Font font, int mouseX, int mouseY) {
         int barTop = contentY + contentH;
-        g.fill(boxX, barTop, boxX + boxW, boxY + boxH, Theme.CONTROL_BAR_BG);
 
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
         Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
@@ -339,15 +357,10 @@ final class AudioWindow extends MediaWindow {
             MediaControls.drawVolumePopup(g, volBarX, volBarY, player.volume(), Theme.TRACK, Theme.FILL, Theme.KNOB);
         }
 
-        // Seek bar.
+        // Seek bar: taller, with its handle showing, while it is live.
         double fraction = draggingSeek ? scrubFraction : player.progress();
-        g.fill(seekX, seekY, seekX + seekW, seekY + seekH, Theme.TRACK);
-        if (player.durationMicros() > 0) {
-            int fill = (int) Math.round(seekW * fraction);
-            g.fill(seekX, seekY, seekX + fill, seekY + seekH, Theme.FILL);
-            int knobX = seekX + Mth.clamp(fill, 0, seekW);
-            g.fill(knobX - 1, seekY - 2, knobX + 1, seekY + seekH + 2, Theme.KNOB);
-        }
+        boolean overSeek = draggingSeek || MediaControls.overSeek(mouseX, mouseY, seekX, seekY, seekW);
+        MediaControls.drawSeekBar(g, seekX, seekY, seekW, fraction, player.durationMicros() > 0, overSeek);
 
         g.drawString(font, Component.literal(timeText(player.positionMicros(), player.durationMicros(), queue.size())),
                 timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
@@ -388,7 +401,7 @@ final class AudioWindow extends MediaWindow {
             player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
         }
-        if (player.durationMicros() > 0 && inRect(mouseX, mouseY, seekX, seekY - 3, seekW, seekH + 6)) {
+        if (player.durationMicros() > 0 && MediaControls.overSeek(mouseX, mouseY, seekX, seekY, seekW)) {
             draggingSeek = true;
             scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
             return ClickResult.HANDLED;

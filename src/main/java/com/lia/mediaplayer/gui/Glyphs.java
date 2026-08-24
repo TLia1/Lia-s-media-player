@@ -302,6 +302,40 @@ final class Glyphs {
     }
 
     /**
+     * The eight dot positions of {@link #spinner}, clockwise from the right, on a circle
+     * of radius 4 about the middle of the button box.
+     */
+    private static final int[] SPIN_X = {9, 8, 5, 2, 1, 2, 5, 8};
+    private static final int[] SPIN_Y = {5, 8, 9, 8, 5, 2, 1, 2};
+    /** How long each dot takes to hand the lead to the next one. */
+    private static final long SPIN_STEP_MILLIS = 90L;
+
+    /**
+     * A ring of eight dots with a bright head that walks around it: work in progress.
+     *
+     * <p>This is the one glyph that has to <em>move</em>. A seek — and a resume, which
+     * relaunches the same way — holds the last decoded frame on screen for about a
+     * second, and a still picture with a caption over it is indistinguishable from a
+     * player that has crashed. Motion is the only thing that says otherwise, so the
+     * position is taken from the wall clock rather than from a frame or tick counter:
+     * the thing it is reassuring you about is precisely that no frames are arriving.</p>
+     *
+     * @param millis the current {@link Anim#now()} reading
+     */
+    static void spinner(GuiGraphics g, int x, int y, int color, long millis) {
+        int head = (int) Math.floorMod(millis / SPIN_STEP_MILLIS, 8);
+        for (int i = 0; i < 8; i++) {
+            // How far behind the head this dot is; the tail fades out but never vanishes,
+            // so the ring stays readable as a ring.
+            int age = Math.floorMod(head - i, 8);
+            double alpha = 1.0 - age * 0.11;
+            int dx = x + SPIN_X[i];
+            int dy = y + SPIN_Y[i];
+            g.fill(dx - 1, dy - 1, dx + 1, dy + 1, Theme.withAlpha(color, alpha));
+        }
+    }
+
+    /**
      * Truncates {@code text} with an ellipsis so it fits within {@code maxWidth} pixels.
      */
     static String fit(Font font, String text, int maxWidth) {

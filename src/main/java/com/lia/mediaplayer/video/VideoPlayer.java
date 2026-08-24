@@ -22,7 +22,6 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class VideoPlayer {
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
-    private static final long STALE_PAUSE_NANOS = 500_000_000L; // 0.5s
     private static final AtomicInteger PLAYER_ID = new AtomicInteger(0);
 
     public enum State {LOADING, PLAYING, PAUSED, ENDED, FAILED}
@@ -63,8 +62,23 @@ public final class VideoPlayer {
     private final Condition gateSignal = gate.newCondition();
     private volatile boolean seekRequested;
     private volatile long seekTargetMicros;
-
-    private volatile long pausedAtNanos; // used to detect stale sessions
+    /**
+     * Where playback is <em>going</em> while a seek is in flight, or {@code -1}.
+     *
+     * <p>A seek is not instant: it hands a target to the decode thread, which kills
+     * ffmpeg and starts it again at the new offset — the better part of a second. Until
+     * that lands the clock still reports the old position, so a seek bar reading the
+     * clock would snap back to where playback was and only jump to the requested spot
+     * once ffmpeg came up. Reporting the target for the whole of that gap is what makes
+     * the bar stay where it was put.</p>
+     */
+    private volatile long pendingSeekMicros = -1;
+    /**
+     * The newest session that existed when the pending seek was asked for. Only frames
+     * from a <em>later</em> one may be shown while the seek is in flight — see
+     * {@link VideoFrame#gen()}.
+     */
+    private volatile int seekBarrierGen;
 
     public VideoPlayer(String url) {
         this.url = url;
@@ -181,28 +195,43 @@ public final class VideoPlayer {
             return;
         }
         clock.pause(hasAudio, audioOutput.getLine());
-        pausedAtNanos = System.nanoTime();
         state = State.PAUSED;
         audioOutput.stopLine();
     }
 
+    /**
+     * Resumes playback, <em>always</em> relaunching the ffmpeg session from the paused
+     * position when coming back from a pause.
+     *
+     * <p>Un-pausing a session in place does not work. While paused nobody reads ffmpeg's
+     * pipes, so the process blocks against a full one; letting it continue afterwards
+     * leaves the picture frozen for good rather than for a moment. This was written as a
+     * staleness check with a half-second threshold, which every real pause exceeded — so
+     * it always relaunched and the in-place path was never actually exercised. Raising
+     * the threshold to a value that looked more sensible is what brought it to light:
+     * pause for a few seconds, resume, and the video never comes back.</p>
+     *
+     * <p>So the relaunch is unconditional, and named for what it is rather than dressed
+     * up as an optimisation with a threshold that must never be raised. It costs about a
+     * second, which {@link #isSeeking()} reports so the window can say it is loading
+     * instead of looking hung.</p>
+     *
+     * <p>Resuming from {@link State#ENDED} is the exception: {@link #togglePause} has
+     * already asked for a seek back to the start, and relaunching at the <em>end</em>
+     * position here would override it.</p>
+     */
     public void resume() {
         if (state != State.PAUSED && state != State.ENDED) {
             return;
         }
-        long pausedAt = pausedAtNanos;
-        boolean stale = state == State.PAUSED
-                && pausedAt != 0
-                && (System.nanoTime() - pausedAt) > STALE_PAUSE_NANOS;
-        pausedAtNanos = 0;
-
+        boolean fromPause = state == State.PAUSED;
         long resumePos = clock.currentPositionMicros(hasAudio, audioOutput.getLine(), false);
 
         clock.resume(audioOutput.getLine());
         audioOutput.startLine();
 
         state = State.PLAYING;
-        if (stale) {
+        if (fromPause) {
             seekTo(resumePos);
         } else {
             signalGate();
@@ -225,11 +254,32 @@ public final class VideoPlayer {
             target = Math.min(target, maxTarget);
         }
         seekTargetMicros = target;
+        // Raised before the request so the render thread stops accepting the outgoing
+        // session's frames from this moment, not from whenever the decode thread wakes.
+        seekBarrierGen = sessionGen;
+        pendingSeekMicros = target;
         seekRequested = true;
         signalGate();
     }
 
+    /**
+     * Whether a seek has been asked for and the picture has not caught up yet.
+     *
+     * <p>True until a frame from the <em>new</em> session is on screen — not merely
+     * until ffmpeg has been launched. Launching takes a moment; producing the first
+     * frame takes about a second, and that second is the whole of what the viewer
+     * experiences. Ending the state at the launch left the last frame frozen on screen
+     * with nothing to explain it, which is exactly what the state exists to prevent.</p>
+     */
+    public boolean isSeeking() {
+        return pendingSeekMicros >= 0;
+    }
+
     public long positionMicros() {
+        long pending = pendingSeekMicros;
+        if (pending >= 0) {
+            return pending;
+        }
         return clock.currentPositionMicros(hasAudio, audioOutput.getLine(), state == State.PLAYING);
     }
 
@@ -252,7 +302,68 @@ public final class VideoPlayer {
 
     @Nullable
     public ResourceLocation prepareFrame() {
+        if (pendingSeekMicros >= 0) {
+            if (renderer.showFirstFrameAfter(seekBarrierGen, frameQueue, freeBuffers)) {
+                // The new session is on screen: the clock is authoritative again and the
+                // window can stop saying it is loading.
+                clearPendingSeek();
+            }
+            return renderer.getTextureLocation();
+        }
         return renderer.prepareFrame(positionMicros(), frameQueue, freeBuffers);
+    }
+
+    /**
+     * Ends the "seeking" state. Called when the new session's first frame is shown, and
+     * as a backstop whenever the session ends or fails — otherwise a seek that produces
+     * no frame at all (past the end of the stream, or a session that would not start)
+     * would leave the window loading forever and its position frozen at the target.
+     */
+    private void clearPendingSeek() {
+        pendingSeekMicros = -1;
+    }
+
+    /**
+     * Throws away the frames that are already due, without drawing any of them.
+     *
+     * <p>{@link #prepareFrame} is the only thing that takes frames off the queue, and it
+     * is called from the window's draw. A window that is hidden is never drawn, so its
+     * queue filled up, the decode thread blocked in {@code enqueue} waiting for room,
+     * ffmpeg blocked behind it, and the video simply stopped — never reaching its end,
+     * so a queue of tracks in a hidden player never moved on. Discarding the due frames
+     * on each client tick keeps the pipeline running at the clock's own pace, which is
+     * what lets the end of the track arrive.</p>
+     *
+     * <p>Decoding pictures nobody will see is waste, and the honest fix is to restart
+     * the session without a video stream while hidden. That is a bigger change than
+     * this, and this is what makes a hidden queue work at all.</p>
+     *
+     * <p>Render thread only, like {@link #prepareFrame} — the two share the queue.</p>
+     */
+    public void discardDueFrames() {
+        if (pendingSeekMicros >= 0) {
+            // Mid-seek, and with nothing drawing there is no picture to hold: drop the
+            // old session's leftovers and treat the first frame of the new one as having
+            // been "shown", so a hidden player gets past its seek like a visible one.
+            VideoFrame frame;
+            while ((frame = frameQueue.poll()) != null) {
+                freeBuffers.offer(frame.rgbaBuffer());
+                if (frame.gen() > seekBarrierGen) {
+                    clearPendingSeek();
+                    return;
+                }
+            }
+            return;
+        }
+        long position = positionMicros();
+        VideoFrame head;
+        while ((head = frameQueue.peek()) != null && head.tsMicros() <= position) {
+            VideoFrame frame = frameQueue.poll();
+            if (frame == null) {
+                break;
+            }
+            freeBuffers.offer(frame.rgbaBuffer());
+        }
     }
 
     private void decodeLoop() {
@@ -316,6 +427,7 @@ public final class VideoPlayer {
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
             errorMessage = t.getMessage() != null ? t.getMessage() : t.toString();
+            clearPendingSeek();
             state = State.FAILED;
             LiasMediaPlayer.LOGGER.warn("Video playback failed for {}: {}", url, errorMessage);
         } finally {
@@ -354,7 +466,7 @@ public final class VideoPlayer {
 
         long ts = sessionBaseMicros + frameIndex * frameDurationMicros;
         frameIndex++;
-        return new VideoFrame(ts, videoWidth, videoHeight, buffer);
+        return new VideoFrame(ts, sessionGen, videoWidth, videoHeight, buffer);
     }
 
     private boolean awaitResumeOrSeek() throws InterruptedException {
@@ -382,9 +494,14 @@ public final class VideoPlayer {
             startSession(target / 1_000_000.0);
         } catch (IOException e) {
             LiasMediaPlayer.LOGGER.warn("Seek failed for {}: {}", url, e.toString());
+            // No session means no frame will ever arrive to end the seek.
+            clearPendingSeek();
         }
 
         clock.seekTo(target, audioOutput.getLine());
+        // Note what is *not* here: the seek is not over because ffmpeg has been
+        // launched. It is over when the first frame it produces reaches the screen,
+        // which prepareFrame decides.
         if (state == State.ENDED) {
             state = State.PLAYING;
         }
@@ -392,6 +509,7 @@ public final class VideoPlayer {
 
     private void onEndOfStream() throws InterruptedException {
         audioOutput.drainLine();
+        clearPendingSeek(); // nothing more is coming to end a seek that was in flight
         state = State.ENDED;
         gate.lock();
         try {
