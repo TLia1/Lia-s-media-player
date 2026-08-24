@@ -73,11 +73,34 @@ public final class MediaUrlResolver {
         if (!com.lia.mediaplayer.source.Urls.isHttp(url)) {
             throw new IOException("Refusing to play a non-http(s) link: " + url);
         }
-        if (YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url)) {
+        if (requiresExtractor(url)) {
             return resolveYtDlp(url);
         }
         // Direct files and HLS/DASH manifests are opened by ffmpeg as-is.
         return url;
+    }
+
+    /**
+     * Whether {@code url} is a page that has to go through yt-dlp, asked of the source
+     * registry rather than decided here.
+     *
+     * <p>This method used to name YouTube and Twitch itself, which meant every new
+     * page-based source had to be taught to the playback engine as well as registered.
+     * {@link com.lia.mediaplayer.api.MediaSource#requiresExtractor()} moved that answer
+     * to the source, so adding one now really does touch nothing else.</p>
+     *
+     * <p>The two originals stay as the fallback for the window before the context
+     * exists: playback cannot start that early, but the resolver is also reachable from
+     * the caches, and answering "no extractor" there would send a YouTube page straight
+     * to ffmpeg.</p>
+     */
+    private static boolean requiresExtractor(String url) {
+        com.lia.mediaplayer.MediaPlayerContext context =
+                (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        if (context == null) {
+            return YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url);
+        }
+        return context.getMediaSources().requiresExtractor(url);
     }
 
     private static String resolveYtDlp(String url) throws IOException {

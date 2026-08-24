@@ -31,6 +31,11 @@ public final class TwitchSource implements com.lia.mediaplayer.api.MediaSource {
         return LABEL;
     }
 
+    @Override
+    public boolean requiresExtractor() {
+        return true;
+    }
+
     /**
      * Whether {@code url} is a recognized Twitch link. Exposed statically because the
      * playback engine ({@code MediaUrlResolver}, the thumbnail and title caches) also

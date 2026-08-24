@@ -27,6 +27,7 @@ public class ImageWindowManager {
      * Ensures a (visible) pinned window exists for the URL.
      */
     public ImageWindow show(String url) {
+        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.IMAGE);
         ImageWindow window = windows.get(url);
         if (window == null) {
             evictIfFull();

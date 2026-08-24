@@ -39,6 +39,11 @@ public final class YouTubePlaylistSource implements com.lia.mediaplayer.api.Medi
         return LABEL;
     }
 
+    @Override
+    public boolean requiresExtractor() {
+        return true;
+    }
+
     /**
      * Whether {@code url} is a YouTube playlist page. Exposed statically because the
      * click routing and the playlist editor both need to single these links out before

@@ -129,6 +129,7 @@ abstract class MediaWindow {
     protected int closeBtnX, closeBtnY;
     protected int hideBtnX, hideBtnY;
     private int linkBtnX, linkBtnY;
+    private int favBtnX, favBtnY;
     private int gripX, gripY;
     /**
      * {@link #TITLE_BAR} or {@code 0}, resolved once per layout so every derived
@@ -165,6 +166,9 @@ abstract class MediaWindow {
     // mode whether anyone is still looking for the controls.
     private int lastMouseX = Integer.MIN_VALUE, lastMouseY = Integer.MIN_VALUE;
     private long lastMouseMoveAt = Anim.now();
+
+    /** Set every frame from {@code render}'s {@code withControls}; see {@link #isInteractive()}. */
+    private boolean interactive;
 
     // The previous click, for spotting a double-click on the picture.
     private long lastClickAt;
@@ -251,12 +255,27 @@ abstract class MediaWindow {
 
     /**
      * Smallest the scaled content is allowed to get, in pixels of width. Defaults to
-     * {@link #MIN_CONTENT}; subclasses with a fixed-width control bar (e.g. the video
-     * player) raise this so the window can't shrink small enough for its controls to
-     * spill outside the box.
+     * {@link #MIN_CONTENT} or the room the corner buttons need, whichever is larger;
+     * subclasses with a fixed-width control bar (e.g. the video player) raise this
+     * further so the window can't shrink small enough for its controls to spill outside
+     * the box — and should keep {@code super}'s figure as their own floor.
      */
     protected int minContentWidth() {
-        return MIN_CONTENT;
+        return Math.max(MIN_CONTENT, cornerButtonsWidth());
+    }
+
+    /**
+     * How wide the row of corner buttons is: close, the browser link and the favourite
+     * heart, plus the hide button on the windows that have one.
+     *
+     * <p>It is part of the minimum because they are laid out right-to-left from the
+     * window's right edge and nothing stops them running past its left one: a window
+     * narrower than its own buttons draws them over each other and over whatever is to
+     * its left.</p>
+     */
+    private int cornerButtonsWidth() {
+        int buttons = 3 + (hasHideButton() ? 1 : 0);
+        return buttons * (BUTTON + 2) + 4;
     }
 
     /**
@@ -354,6 +373,19 @@ abstract class MediaWindow {
      */
     protected boolean alwaysShowControls() {
         return false;
+    }
+
+    /**
+     * Whether this frame is being drawn on a screen that routes clicks to the window
+     * stack, rather than on the bare HUD.
+     *
+     * <p>Only one thing needs it, and only because {@link #alwaysShowControls()} exists:
+     * the audio bar keeps its transport row on the HUD, but a queue panel is a
+     * two-hundred-pixel list of rows nobody out there can click, and it has no business
+     * being drawn over the world.</p>
+     */
+    protected final boolean isInteractive() {
+        return interactive;
     }
 
     /**
@@ -567,7 +599,9 @@ abstract class MediaWindow {
         }
         linkBtnX = next - BUTTON - 2;
         linkBtnY = closeBtnY;
-        titleTextRight = linkBtnX - 3;
+        favBtnX = linkBtnX - BUTTON - 2;
+        favBtnY = closeBtnY;
+        titleTextRight = favBtnX - 3;
 
         gripX = boxX + boxW - GRIP;
         gripY = boxY + boxH - GRIP;
@@ -752,6 +786,7 @@ abstract class MediaWindow {
             return; // HUD overlay: no cursor, so nothing below would be readable.
         }
 
+        interactive = withControls;
         renderControls(g, font, mouseX, mouseY);
         renderCornerButtons(g, mouseX, mouseY);
         if (!theater) {
@@ -822,6 +857,25 @@ abstract class MediaWindow {
     }
 
     private void renderCornerButtons(GuiGraphics g, int mouseX, int mouseY) {
+        // The heart: what turns "this played once" into something the library keeps.
+        // It is a window button rather than a history-screen one because the moment you
+        // know you want to keep a track is while it is playing.
+        boolean favorite = isFavorite();
+        boolean overFav = inRect(mouseX, mouseY, favBtnX, favBtnY, BUTTON, BUTTON);
+        drawButtonBackdrop(g, favBtnX, favBtnY);
+        // Filled once it is kept, hollow while it is not — the same pair the history
+        // screen draws, so the button means one thing in both places.
+        if (favorite) {
+            Glyphs.heart(g, favBtnX, favBtnY, overFav ? Theme.ICON_HOVER : Theme.DANGER);
+        } else {
+            Glyphs.heartOutline(g, favBtnX, favBtnY, overFav ? Theme.ICON_HOVER : Theme.ICON);
+        }
+        if (overFav) {
+            Tooltips.request(Component.translatable(favorite
+                    ? "gui.liasmediaplayer.control.unfavorite"
+                    : "gui.liasmediaplayer.control.favorite"));
+        }
+
         boolean overLink = inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON);
         drawButtonBackdrop(g, linkBtnX, linkBtnY);
         Glyphs.externalLink(g, linkBtnX, linkBtnY, overLink ? Theme.ICON_HOVER : Theme.ICON);
@@ -927,6 +981,10 @@ abstract class MediaWindow {
             }
             if (inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON)) {
                 openLink();
+                return ClickResult.HANDLED;
+            }
+            if (inRect(mouseX, mouseY, favBtnX, favBtnY, BUTTON, BUTTON)) {
+                toggleFavorite();
                 return ClickResult.HANDLED;
             }
             if (hasHideButton() && inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON)) {
@@ -1149,6 +1207,37 @@ abstract class MediaWindow {
     }
 
     /**
+     * Right edge available to the title, i.e. the left edge of the corner buttons.
+     * A window that draws its own name in the content row (the audio bar) stops it here
+     * rather than counting the buttons itself.
+     */
+    protected final int titleTextRight() {
+        return titleTextRight;
+    }
+
+    /**
+     * Which player this window's media belongs to, for the history entry the heart
+     * creates. Asked of the source registry rather than hard-coded per subclass, so an
+     * addon's own source lands in the library under its own kind.
+     */
+    private com.lia.mediaplayer.api.MediaKind mediaKind() {
+        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        return context == null ? null : context.getMediaSources().kindOf(mediaUrl());
+    }
+
+    private boolean isFavorite() {
+        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        return context != null && context.getHistoryStore().isFavorite(mediaUrl());
+    }
+
+    private void toggleFavorite() {
+        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        if (context != null) {
+            context.getHistoryStore().toggleFavorite(mediaUrl(), mediaKind());
+        }
+    }
+
+    /**
      * Opens the media's source URL in the system browser.
      */
     private void openLink() {
@@ -1196,6 +1285,28 @@ abstract class MediaWindow {
         return Component.translatable(on
                 ? "gui.liasmediaplayer.control.shuffle.on"
                 : "gui.liasmediaplayer.control.shuffle.off");
+    }
+
+    /**
+     * The two "jump {@value MediaControls#SKIP_MICROS} micros" buttons, drawn the same
+     * way by both player windows: greyed out (and inert) when there is no duration to
+     * jump within, which is what a live stream has.
+     */
+    protected final void renderSkipButton(GuiGraphics g, int x, int y, boolean forward,
+                                          boolean seekable, int mouseX, int mouseY) {
+        boolean over = inRect(mouseX, mouseY, x, y, BUTTON, BUTTON);
+        Glyphs.seekStep(g, x, y, forward,
+                seekable ? (over ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
+        if (over && seekable) {
+            Tooltips.request(skipTooltip(forward));
+        }
+    }
+
+    protected static Component skipTooltip(boolean forward) {
+        return Component.translatable(forward
+                        ? "gui.liasmediaplayer.control.skip_forward"
+                        : "gui.liasmediaplayer.control.skip_back",
+                MediaControls.SKIP_MICROS / 1_000_000L);
     }
 
     protected static Component volumeTooltip(boolean muted) {

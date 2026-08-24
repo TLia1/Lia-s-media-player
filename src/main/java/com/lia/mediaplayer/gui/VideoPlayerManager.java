@@ -36,6 +36,7 @@ public class VideoPlayerManager {
      */
     public VideoWindow open(String url) {
         evictIfFull();
+        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.VIDEO);
         VideoPlayer player = new VideoPlayer(url);
         VideoWindow window = new VideoWindow(player);
         windows.add(window);

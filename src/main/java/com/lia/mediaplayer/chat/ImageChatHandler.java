@@ -24,7 +24,7 @@ public final class ImageChatHandler {
         @Override
         public boolean matches(String url) {
             com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
-            return ctx != null && ctx.getMediaSources().isImage(url);
+            return ctx != null && ctx.getMediaSources().isImage(url) && MediaFilters.allowsUrl(url);
         }
 
         @Override

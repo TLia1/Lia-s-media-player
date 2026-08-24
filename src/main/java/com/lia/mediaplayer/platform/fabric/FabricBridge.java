@@ -69,16 +69,21 @@ public final class FabricBridge implements ClientModInitializer {
     // ------------------------------------------------------------------
 
     private static void registerChat() {
-        // System messages have a modify event, so they are a straight swap.
+        // System messages have a modify event, so they are a straight swap. They have no
+        // sender to filter on either, which is what the null says.
         ClientReceiveMessageEvents.MODIFY_GAME.register(
-                (message, overlay) -> ClientHooks.onChatReceived(message));
+                (message, overlay) -> ClientHooks.onChatReceived(message, null));
 
         // Player messages do not: modifying a signed message would break its signature
         // chain, so Fabric only offers allow/cancel. Messages that hold no media link —
         // the overwhelming majority — are left to vanilla untouched, so the hand-off only
         // ever applies to a message the mod actually rewrote.
         ClientReceiveMessageEvents.ALLOW_CHAT.register((message, signed, sender, params, timestamp) -> {
-            Component rewritten = ClientHooks.onChatReceived(message);
+            // The bound chat type carries the display name, the same field the NeoForge
+            // bridge reads — rather than the GameProfile beside it, whose account name
+            // is not what a server with rank prefixes shows in chat.
+            Component rewritten = ClientHooks.onChatReceived(message,
+                    params == null ? null : params.name().getString());
             if (rewritten == message) {
                 return true;
             }

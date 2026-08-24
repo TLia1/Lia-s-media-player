@@ -23,6 +23,11 @@ import static com.lia.mediaplayer.gui.MediaControls.timeText;
  * {@link MediaWindow}; the play queue is the shared {@link PlayQueue} (same model the
  * video player uses), which also holds the history behind the "previous" control and
  * the loop / shuffle modes the two right-hand toggles drive.</p>
+ *
+ * <p>The queue is also <em>shown</em> the same way: the {@link QueuePanel} that docks
+ * beside the video player docks beside this bar too, in its text layout. Before that
+ * the bar could only say "+49" in its time read-out, which was the whole of what a
+ * fifty-track playlist looked like from here.</p>
  */
 final class AudioWindow extends MediaWindow {
     private static final int CONTROL_BAR_HEIGHT = 16;
@@ -39,6 +44,11 @@ final class AudioWindow extends MediaWindow {
 
     private AudioPlayer player;
     private final PlayQueue queue = new PlayQueue();
+    /**
+     * What plays next, in the text layout: an audio bar has no thumbnails to show, so
+     * its rows are the names alone (see {@link QueuePanel.Mode#TEXT}).
+     */
+    private final QueuePanel panel = new QueuePanel(queue, this::jumpTo);
 
     private boolean draggingSeek;
     private boolean draggingVolume;
@@ -47,9 +57,13 @@ final class AudioWindow extends MediaWindow {
     // Control-bar hit regions cached from the last layout.
     private int playBtnX, playBtnY;
     private int prevBtnX, prevBtnY;
+    private int backBtnX, backBtnY;
+    private int fwdBtnX, fwdBtnY;
     private int nextBtnX, nextBtnY;
     private int loopBtnX, loopBtnY;
     private int shuffleBtnX, shuffleBtnY;
+    private boolean showQueueBtn;
+    private int queueBtnX, queueBtnY;
     private int volBtnX, volBtnY;
     private boolean showVolumePopup;
     private int volBarX, volBarY;
@@ -131,6 +145,17 @@ final class AudioWindow extends MediaWindow {
     }
 
     /**
+     * Plays a specific queued entry now (the others keep their order) — what a click on
+     * a row of the queue panel means.
+     */
+    void jumpTo(int index) {
+        if (index < 0 || index >= queue.size()) {
+            return;
+        }
+        playUrl(queue.remove(index));
+    }
+
+    /**
      * Goes back to the previously played track, re-queuing the current one at the front
      * so "next" returns to it. Returns {@code false} when there is no history.
      */
@@ -147,6 +172,7 @@ final class AudioWindow extends MediaWindow {
      * Swaps in a new player for the given URL, disposing the current one.
      */
     private void playUrl(String url) {
+        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.AUDIO);
         player.dispose();
         draggingSeek = false;
         player = new AudioPlayer(url);
@@ -200,11 +226,12 @@ final class AudioWindow extends MediaWindow {
     protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
         return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
                 geometry.sized(), geometry.width(),
-                false, queue.repeat(), queue.shuffle());
+                panel.isOpen(), queue.repeat(), queue.shuffle());
     }
 
     @Override
     protected void applyRestoredState(WindowStateStore.State state) {
+        panel.setOpen(state.queuePanel());
         queue.setRepeat(state.repeat());
         queue.setShuffle(state.shuffle());
     }
@@ -289,11 +316,14 @@ final class AudioWindow extends MediaWindow {
     @Override
     protected int minContentWidth() {
         Font font = Minecraft.getInstance().font;
-        int buttons = 6; // play, prev, next, loop, shuffle, speaker
+        int buttons = 8; // play, prev, -10s, +10s, next, loop, shuffle, speaker
+        if (!queue.isEmpty()) {
+            buttons += 1; // the queue panel toggle, shown only when there is a queue
+        }
         int buttonsW = buttons * (BUTTON + 4);
         int timeW = font.width(timeText(player.positionMicros(), player.durationMicros(), queueSize()));
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
-        return Math.max(MIN_CONTENT, needed);
+        return Math.max(super.minContentWidth(), needed);
     }
 
     @Override
@@ -321,15 +351,31 @@ final class AudioWindow extends MediaWindow {
         int barTop = contentY + contentH;
         playBtnY = barTop + (CONTROL_BAR_HEIGHT - BUTTON) / 2;
         prevBtnY = playBtnY;
+        backBtnY = playBtnY;
+        fwdBtnY = playBtnY;
         nextBtnY = playBtnY;
         loopBtnY = playBtnY;
         shuffleBtnY = playBtnY;
         volBtnY = playBtnY;
 
+        // Track controls on the outside, within-the-track skips on the inside, so the
+        // row reads prev · -10s · +10s · next around the pair they belong to.
         playBtnX = contentX;
         prevBtnX = playBtnX + BUTTON + 4;
-        nextBtnX = prevBtnX + BUTTON + 4;
-        loopBtnX = nextBtnX + BUTTON + 4;
+        backBtnX = prevBtnX + BUTTON + 4;
+        fwdBtnX = backBtnX + BUTTON + 4;
+        nextBtnX = fwdBtnX + BUTTON + 4;
+
+        int cursor = nextBtnX + BUTTON + 4;
+        showQueueBtn = !queue.isEmpty();
+        if (showQueueBtn) {
+            queueBtnX = cursor;
+            queueBtnY = playBtnY;
+            cursor = queueBtnX + BUTTON + 4;
+        } else {
+            panel.closeIfEmpty();
+        }
+        loopBtnX = cursor;
         shuffleBtnX = loopBtnX + BUTTON + 4;
         volBtnX = shuffleBtnX + BUTTON + 4;
 
@@ -361,9 +407,9 @@ final class AudioWindow extends MediaWindow {
             Glyphs.note(g, contentX, ty - 1, Theme.ICON);
         }
         int textX = contentX + 12;
-        // Stop the title before the three corner buttons (link, hide, close), which are
-        // laid out right-to-left from closeBtnX.
-        int titleRight = closeBtnX - 2 * (BUTTON + 2) - 2;
+        // Stop the title before the corner buttons (heart, link, hide, close), whose
+        // left edge the base class already knows.
+        int titleRight = titleTextRight();
         int maxW = Math.max(10, titleRight - textX);
 
         // The bar is one line of plain text that has to be measured and ellipsised to
@@ -400,11 +446,25 @@ final class AudioWindow extends MediaWindow {
             Tooltips.request(Component.translatable("gui.liasmediaplayer.control.previous"));
         }
 
+        boolean seekable = player.durationMicros() > 0;
+        renderSkipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
+        renderSkipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
+
         boolean canNext = queue.hasNext();
         boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
         Glyphs.next(g, nextBtnX, nextBtnY, canNext ? (overNext ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
         if (overNext && canNext) {
             Tooltips.request(Component.translatable("gui.liasmediaplayer.control.next"));
+        }
+
+        if (showQueueBtn) {
+            boolean overQueue = inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON);
+            Glyphs.queue(g, queueBtnX, queueBtnY, (overQueue || panel.isOpen()) ? Theme.ICON_HOVER : Theme.ICON);
+            if (overQueue) {
+                Tooltips.request(Component.translatable(panel.isOpen()
+                        ? "gui.liasmediaplayer.control.queue.hide"
+                        : "gui.liasmediaplayer.control.queue.show"));
+            }
         }
 
         RepeatMode repeat = queue.repeat();
@@ -438,6 +498,13 @@ final class AudioWindow extends MediaWindow {
 
         g.drawString(font, Component.literal(timeText(player.positionMicros(), player.durationMicros(), queue.size())),
                 timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
+
+        // The bar keeps its controls on the HUD; the panel is for the screen that can
+        // actually click it.
+        if (panel.isOpen() && isInteractive()) {
+            panel.layout(boxX, boxY, boxW, boxH, QueuePanel.Mode.TEXT);
+            panel.render(g, font, mouseX, mouseY);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -454,8 +521,24 @@ final class AudioWindow extends MediaWindow {
             previous();
             return ClickResult.HANDLED;
         }
+        if (inRect(mouseX, mouseY, backBtnX, backBtnY, BUTTON, BUTTON)) {
+            seekBy(-MediaControls.SKIP_MICROS);
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, fwdBtnX, fwdBtnY, BUTTON, BUTTON)) {
+            seekBy(MediaControls.SKIP_MICROS);
+            return ClickResult.HANDLED;
+        }
         if (inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON)) {
             advance();
+            return ClickResult.HANDLED;
+        }
+        if (showQueueBtn && inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON)) {
+            panel.toggle();
+            return ClickResult.HANDLED;
+        }
+        if (panel.contains(mouseX, mouseY)) {
+            panel.click(mouseX, mouseY);
             return ClickResult.HANDLED;
         }
         if (inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON)) {
@@ -517,12 +600,50 @@ final class AudioWindow extends MediaWindow {
     }
 
     /**
-     * Plain mouse wheel over the bar changes the volume in 10% steps.
+     * Mouse-wheel: scrolls the queue panel when the cursor is over it, otherwise adjusts
+     * the volume in 10% steps.
      */
     @Override
     protected boolean onControlScroll(double mouseX, double mouseY, double scrollY) {
+        if (panel.scroll(mouseX, mouseY, scrollY)) {
+            return true;
+        }
         player.changeVolume((float) (scrollY * 0.1));
         return true;
+    }
+
+    @Override
+    protected boolean overExtraRegion(double mouseX, double mouseY) {
+        return panel.contains(mouseX, mouseY);
+    }
+
+    /**
+     * Keeps the bar far enough from the right edge for the docked panel to fit beside
+     * it — the same clamp the video player applies, and for the same reason: without it
+     * a bar dragged into the corner would have the panel drawn on top of it.
+     */
+    @Override
+    protected void constrainPosition(int screenWidth, int screenHeight) {
+        if (!panel.isOpen()) {
+            return;
+        }
+        int maxX = screenWidth - boxW - QueuePanel.reserveFor(QueuePanel.Mode.TEXT);
+        if (maxX >= 2) {
+            boxX = Mth.clamp(boxX, 2, maxX);
+        }
+    }
+
+    /**
+     * Caps the bar's width so the panel still fits beside it on a narrow screen.
+     */
+    @Override
+    protected int maxContentWidth(int screenWidth) {
+        int base = screenWidth - PADDING * 2 - 2;
+        if (!panel.isOpen()) {
+            return base;
+        }
+        return Math.max(minContentWidth(),
+                base - QueuePanel.reserveFor(QueuePanel.Mode.TEXT));
     }
 
 }

@@ -40,38 +40,11 @@ final class VideoWindow extends MediaWindow {
     private static final int WARM_AHEAD = 10;
 
     /**
-     * Queue panel geometry.
-     */
-    private static final int ROW_H = 30;
-    private static final int THUMB_W = 48;
-    private static final int THUMB_H = 27;
-    private static final int HEADER_H = 12;
-    private static final int PANEL_PAD = 3;
-    /**
-     * Fixed width of the side panel and the gap between it and the player.
-     */
-    private static final int PANEL_W = 200;
-    /**
-     * Compact panel width used next to a small player (thumbnails only, no titles).
-     */
-    private static final int PANEL_W_MINI = 104;
-    /**
-     * A player box this wide (or narrower) gets the compact "mini" queue panel.
+     * A player box this wide (or narrower) gets the compact {@link QueuePanel.Mode#MINI}
+     * queue panel: beside a small player, a full-width one would be wider than the
+     * video it belongs to.
      */
     private static final int MINI_PANEL_MAX_BOX_W = 200;
-    private static final int PANEL_GAP = 4;
-    /**
-     * Horizontal room kept to the right of the player for the open panel (panel width
-     * + gap + a 2px margin), for the full and the compact ("mini") panel respectively.
-     * Used both to cap the player's width and to clamp its position, so the docked
-     * panel always fits on the right and never overlaps it.
-     */
-    private static final int PANEL_RESERVE = PANEL_W + PANEL_GAP + 2;
-    private static final int PANEL_RESERVE_MINI = PANEL_W_MINI + PANEL_GAP + 2;
-    /**
-     * Width of the scrollbar drawn when the queue overflows.
-     */
-    private static final int SCROLLBAR_W = 3;
 
     private VideoPlayer player;
     /**
@@ -84,6 +57,8 @@ final class VideoWindow extends MediaWindow {
 
     // Control-bar hit regions cached from the last layout.
     private int playBtnX, playBtnY;
+    private int backBtnX, backBtnY;
+    private int fwdBtnX, fwdBtnY;
     private boolean showNext;
     private int nextBtnX, nextBtnY;
     private int loopBtnX, loopBtnY;
@@ -98,14 +73,12 @@ final class VideoWindow extends MediaWindow {
     private boolean showQueueBtn;
     private int queueBtnX, queueBtnY;
 
-    // Queue panel state + last-laid-out geometry (for input hit-testing).
-    private boolean queueOpen;
-    private int queueScroll;        // first visible row index
-    private int panelX, panelY, panelW, panelH;
-    private int panelRowsTop;       // y of the first row
-    private int panelVisibleRows;   // rows that fit in the panel
-    private boolean panelScrollable; // true when there are more rows than fit
-    private boolean panelMini;       // compact layout (no titles) for a small player
+    /**
+     * The list of what plays next, docked beside the player. Shared with the audio bar
+     * (see {@link QueuePanel}); this window only says which layout it has room for and
+     * what "play this one" means.
+     */
+    private final QueuePanel panel = new QueuePanel(queue, this::jumpTo);
 
     VideoWindow(VideoPlayer player) {
         this.player = player;
@@ -229,6 +202,7 @@ final class VideoWindow extends MediaWindow {
      * Swaps in a new player for the given URL, disposing the current one.
      */
     private void playUrl(String url) {
+        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.VIDEO);
         player.dispose();
         draggingSeek = false;
         draggingVolume = false;
@@ -292,12 +266,12 @@ final class VideoWindow extends MediaWindow {
     protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
         return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
                 geometry.sized(), geometry.width(),
-                queueOpen, queue.repeat(), queue.shuffle());
+                panel.isOpen(), queue.repeat(), queue.shuffle());
     }
 
     @Override
     protected void applyRestoredState(WindowStateStore.State state) {
-        queueOpen = state.queuePanel();
+        panel.setOpen(state.queuePanel());
         queue.setRepeat(state.repeat());
         queue.setShuffle(state.shuffle());
     }
@@ -309,7 +283,7 @@ final class VideoWindow extends MediaWindow {
      */
     @Override
     protected void onEnterTheater() {
-        queueOpen = false;
+        panel.setOpen(false);
     }
 
     // ------------------------------------------------------------------
@@ -367,7 +341,7 @@ final class VideoWindow extends MediaWindow {
         // chat text / link you are hovering. When the queue panel is open we leave
         // room for it on the right so the player slides left instead of being
         // covered by the panel.
-        int rightReserve = (queueOpen && !queue.isEmpty()) ? panelWidthFor(boxW) + PANEL_GAP : 0;
+        int rightReserve = panel.isOpen() ? panelMode(boxW).width + QueuePanel.GAP : 0;
         int x = screenWidth - boxW - PADDING - rightReserve - slot * (boxW + 6);
         boxX = Mth.clamp(x, 2, Math.max(2, screenWidth - boxW - 2));
         // Sit above the chat input line at the bottom of the screen.
@@ -390,7 +364,7 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected int minContentWidth() {
         Font font = Minecraft.getInstance().font;
-        int buttons = 2;                       // play/pause and loop are always shown
+        int buttons = 4;                       // play/pause, the two skips and loop are always shown
         if (queue.hasNext()) {
             buttons += 1;                      // next
         }
@@ -404,7 +378,7 @@ final class VideoWindow extends MediaWindow {
         int timeW = font.width(MediaControls.timeText(player.positionMicros(), player.durationMicros(), queue.size()));
         // buttons + minimal seek + gap + time + grip margin (matches layoutControls).
         int needed = buttonsW + MIN_SEEK_W + 6 + timeW + GRIP + 2;
-        return Math.max(MIN_CONTENT, needed);
+        return Math.max(super.minContentWidth(), needed);
     }
 
     /**
@@ -415,7 +389,7 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected int maxContentWidth(int screenWidth) {
         int base = screenWidth - PADDING * 2 - 2;
-        if (!queueOpen || queue.isEmpty()) {
+        if (!panel.isOpen()) {
             return base;
         }
         // The panel beside the player is full-size for a large player and compact for
@@ -423,12 +397,12 @@ final class VideoWindow extends MediaWindow {
         // If the screen is wide enough to fit the full panel beside a player larger
         // than the mini threshold, allow that; otherwise keep the player within the
         // mini range so only the compact panel needs reserving (giving it more room).
-        int largeBoxCap = base + PADDING * 2 - PANEL_RESERVE;
+        int largeBoxCap = base + PADDING * 2 - QueuePanel.reserveFor(QueuePanel.Mode.FULL);
         int boxCap;
         if (largeBoxCap > MINI_PANEL_MAX_BOX_W) {
             boxCap = largeBoxCap;
         } else {
-            int miniBoxCap = base + PADDING * 2 - PANEL_RESERVE_MINI;
+            int miniBoxCap = base + PADDING * 2 - QueuePanel.reserveFor(QueuePanel.Mode.MINI);
             boxCap = Math.min(MINI_PANEL_MAX_BOX_W, miniBoxCap);
         }
         return Math.max(minContentWidth(), boxCap - PADDING * 2);
@@ -444,10 +418,10 @@ final class VideoWindow extends MediaWindow {
      */
     @Override
     protected void constrainPosition(int screenWidth, int screenHeight) {
-        if (!queueOpen || queue.isEmpty()) {
+        if (!panel.isOpen()) {
             return;
         }
-        int reserve = boxW <= MINI_PANEL_MAX_BOX_W ? PANEL_RESERVE_MINI : PANEL_RESERVE;
+        int reserve = QueuePanel.reserveFor(panelMode(boxW));
         int maxX = screenWidth - boxW - reserve;
         if (maxX >= 2) {
             boxX = Mth.clamp(boxX, 2, maxX);
@@ -455,10 +429,10 @@ final class VideoWindow extends MediaWindow {
     }
 
     /**
-     * The panel width that pairs with a player of the given box width.
+     * The panel layout that pairs with a player of the given box width.
      */
-    private static int panelWidthFor(int playerBoxW) {
-        return playerBoxW <= MINI_PANEL_MAX_BOX_W ? PANEL_W_MINI : PANEL_W;
+    private static QueuePanel.Mode panelMode(int playerBoxW) {
+        return playerBoxW <= MINI_PANEL_MAX_BOX_W ? QueuePanel.Mode.MINI : QueuePanel.Mode.FULL;
     }
 
     @Override
@@ -474,6 +448,15 @@ final class VideoWindow extends MediaWindow {
 
         int cursor = playBtnX + BUTTON + 4;
 
+        // The two fixed-step skips, next to play: they act inside the current video, so
+        // they belong on its side of the "next track" control rather than past it.
+        backBtnX = cursor;
+        backBtnY = playBtnY;
+        cursor = backBtnX + BUTTON + 4;
+        fwdBtnX = cursor;
+        fwdBtnY = playBtnY;
+        cursor = fwdBtnX + BUTTON + 4;
+
         // "Next" and "queue" buttons: only while something is queued (or a loop mode
         // will bring the round back around).
         showNext = queue.hasNext();
@@ -488,7 +471,7 @@ final class VideoWindow extends MediaWindow {
             queueBtnY = playBtnY;
             cursor = queueBtnX + BUTTON + 4;
         } else {
-            queueOpen = false; // nothing left to show
+            panel.closeIfEmpty(); // nothing left to show
         }
 
         // Loop applies to a lone video too; shuffle only means something with a queue.
@@ -592,6 +575,11 @@ final class VideoWindow extends MediaWindow {
             Tooltips.request(playTooltip(player.isPlaying()));
         }
 
+        // The two fixed-step skips.
+        boolean seekable = player.durationMicros() > 0;
+        renderSkipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
+        renderSkipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
+
         // "Next" (skip to the next queued video) button.
         if (showNext) {
             boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
@@ -604,9 +592,9 @@ final class VideoWindow extends MediaWindow {
         // "Queue" (show/hide the playlist panel) button.
         if (showQueueBtn) {
             boolean overQueue = inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON);
-            Glyphs.queue(g, queueBtnX, queueBtnY, (overQueue || queueOpen) ? Theme.ICON_HOVER : Theme.ICON);
+            Glyphs.queue(g, queueBtnX, queueBtnY, (overQueue || panel.isOpen()) ? Theme.ICON_HOVER : Theme.ICON);
             if (overQueue) {
-                Tooltips.request(Component.translatable(queueOpen
+                Tooltips.request(Component.translatable(panel.isOpen()
                         ? "gui.liasmediaplayer.control.queue.hide"
                         : "gui.liasmediaplayer.control.queue.show"));
             }
@@ -652,200 +640,10 @@ final class VideoWindow extends MediaWindow {
                 timeTextX, barTop + (CONTROL_BAR_HEIGHT - font.lineHeight) / 2, Theme.TEXT);
 
         // The playlist panel floats above the window when open.
-        if (queueOpen && !queue.isEmpty()) {
-            renderQueuePanel(g, font, mouseX, mouseY);
+        if (panel.isOpen()) {
+            panel.layout(boxX, boxY, boxW, boxH, panelMode(boxW));
+            panel.render(g, font, mouseX, mouseY);
         }
-    }
-
-
-    // ------------------------------------------------------------------
-    // Queue panel
-    // ------------------------------------------------------------------
-
-    /**
-     * Recomputes the panel geometry (cached for input hit-testing).
-     */
-    private void computePanelLayout() {
-        var window = Minecraft.getInstance().getWindow();
-        int screenW = window.getGuiScaledWidth();
-        int screenH = window.getGuiScaledHeight();
-        int rows = queue.size();
-
-        // A small player gets the compact panel (thumbnails only, no titles).
-        panelMini = boxW <= MINI_PANEL_MAX_BOX_W;
-        panelW = panelWidthFor(boxW);
-        // Sit to the right of the player; if there is no room there, fall back to
-        // the left of it, and as a last resort clamp onto the screen.
-        panelX = boxX + boxW + PANEL_GAP;
-        if (panelX + panelW > screenW - 2) {
-            int leftX = boxX - PANEL_GAP - panelW;
-            panelX = leftX >= 2 ? leftX : Math.max(2, screenW - panelW - 2);
-        }
-
-        // Match the player's height; when there are more rows than fit, the extra
-        // ones scroll. The panel is never taller than the screen.
-        panelH = Mth.clamp(boxH, HEADER_H + PANEL_PAD * 2 + ROW_H, screenH - 4);
-        int rowsRoom = Math.max(1, (panelH - HEADER_H - PANEL_PAD * 2) / ROW_H);
-        panelVisibleRows = Mth.clamp(rows, 1, rowsRoom);
-        panelScrollable = rows > panelVisibleRows;
-
-        int maxScroll = Math.max(0, rows - panelVisibleRows);
-        queueScroll = Mth.clamp(queueScroll, 0, maxScroll);
-
-        panelY = Mth.clamp(boxY, 2, Math.max(2, screenH - panelH - 2));
-        panelRowsTop = panelY + HEADER_H + PANEL_PAD;
-    }
-
-    /**
-     * Right edge available for row content (excludes the scrollbar gutter).
-     */
-    private int panelContentRight() {
-        return panelX + panelW - (panelScrollable ? SCROLLBAR_W + 2 : 0);
-    }
-
-    private void renderQueuePanel(GuiGraphics g, Font font, int mouseX, int mouseY) {
-        computePanelLayout();
-        int rows = queue.size();
-
-        Panels.fill(g, panelX, panelY, panelX + panelW, panelY + panelH, Theme.PANEL_BG);
-        Panels.fillTop(g, panelX, panelY, panelX + panelW, panelY + HEADER_H, Theme.PANEL_HEADER_BG);
-        Panels.border(g, panelX, panelY, panelX + panelW, panelY + panelH, Theme.BORDER_SUBTLE);
-
-        Component header = panelMini
-                ? Component.translatable("gui.liasmediaplayer.queue.header_mini", rows)
-                : Component.translatable("gui.liasmediaplayer.queue.header", rows);
-        if (!panelMini && rows > panelVisibleRows) {
-            header = header.copy().append(Component.translatable("gui.liasmediaplayer.queue.range",
-                    queueScroll + 1, queueScroll + panelVisibleRows));
-        }
-        g.drawString(font, header, panelX + 4, panelY + 2, Theme.TEXT);
-
-        for (int i = 0; i < panelVisibleRows; i++) {
-            int index = queueScroll + i;
-            if (index >= rows) {
-                break;
-            }
-            renderRow(g, font, index, rowTop(i), mouseX, mouseY);
-        }
-
-        if (panelScrollable) {
-            renderScrollbar(g, rows);
-        }
-    }
-
-    /**
-     * A thin scrollbar on the right gutter showing the scroll position.
-     */
-    private void renderScrollbar(GuiGraphics g, int rows) {
-        int sbX = panelX + panelW - SCROLLBAR_W - 1;
-        int trackTop = panelRowsTop;
-        int trackBot = panelY + panelH - PANEL_PAD;
-        int trackH = Math.max(1, trackBot - trackTop);
-        g.fill(sbX, trackTop, sbX + SCROLLBAR_W, trackBot, Theme.SCROLL_TRACK);
-
-        int thumbH = Math.max(8, trackH * panelVisibleRows / rows);
-        int maxScroll = Math.max(1, rows - panelVisibleRows);
-        int thumbY = trackTop + (trackH - thumbH) * queueScroll / maxScroll;
-        g.fill(sbX, thumbY, sbX + SCROLLBAR_W, thumbY + thumbH, Theme.SCROLL_THUMB);
-    }
-
-    private void renderRow(GuiGraphics g, Font font, int index, int rowY, int mouseX, int mouseY) {
-        int rows = queue.size();
-        String url = queue.get(index);
-        int rowX = panelX + PANEL_PAD;
-        int rowW = panelContentRight() - PANEL_PAD - rowX;
-
-        int upX = upBtnX();
-        int btnY = rowY + (ROW_H - BUTTON) / 2;
-        boolean overButtons = mouseX >= upX - 2 && inRect(mouseX, mouseY, upX, btnY, BUTTON * 3 + 4, BUTTON);
-        boolean overRow = inRect(mouseX, mouseY, rowX, rowY, rowW, ROW_H - 1);
-
-        g.fill(rowX, rowY, rowX + rowW, rowY + ROW_H - 1, (overRow && !overButtons) ? Theme.ROW_HOVER_BG : Theme.ROW_BG);
-
-        // Thumbnail.
-        int tx = rowX + 2;
-        int ty = rowY + (ROW_H - THUMB_H) / 2;
-        drawThumbnail(g, font, url, tx, ty);
-
-        // Position number + label. The compact panel shows neither (the thumbnail
-        // and play order are enough), leaving room for a narrower panel.
-        if (!panelMini) {
-            int labelX = tx + THUMB_W + 4;
-            int labelMaxW = upX - 4 - labelX;
-            String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
-            g.drawString(font, Component.literal(Glyphs.fit(font, label, labelMaxW)),
-                    labelX, rowY + (ROW_H - font.lineHeight) / 2, Theme.TEXT);
-        }
-
-        // Reorder + remove buttons.
-        boolean canUp = index > 0;
-        boolean canDown = index < rows - 1;
-        boolean overUp = inRect(mouseX, mouseY, upX, btnY, BUTTON, BUTTON);
-        boolean overDown = inRect(mouseX, mouseY, downBtnX(), btnY, BUTTON, BUTTON);
-        boolean overRemove = inRect(mouseX, mouseY, removeBtnX(), btnY, BUTTON, BUTTON);
-        Glyphs.arrow(g, upX, btnY, true, canUp ? (overUp ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
-        Glyphs.arrow(g, downBtnX(), btnY, false, canDown ? (overDown ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
-        Glyphs.close(g, removeBtnX(), btnY, overRemove ? Theme.DANGER : Theme.ICON);
-    }
-
-    private void drawThumbnail(GuiGraphics g, Font font, String url, int tx, int ty) {
-        g.fill(tx, ty, tx + THUMB_W, ty + THUMB_H, Theme.PLACEHOLDER);
-        VideoThumbnailCache.Thumb thumb = VideoThumbnailCache.getOrLoad(url);
-        if (thumb.isLoaded()) {
-            // Fit the (already-small) thumbnail inside the box, preserving aspect.
-            int tw = Math.max(1, thumb.width);
-            int th = Math.max(1, thumb.height);
-            double scale = Math.min(THUMB_W / (double) tw, THUMB_H / (double) th);
-            int w = Math.max(1, (int) Math.round(tw * scale));
-            int h = Math.max(1, (int) Math.round(th * scale));
-            int ox = tx + (THUMB_W - w) / 2;
-            int oy = ty + (THUMB_H - h) / 2;
-            Blit.textured(g, thumb.texture, ox, oy, w, h, tw, th);
-        } else {
-            String dots = thumb.state == VideoThumbnailCache.State.FAILED ? "?" : "...";
-            g.drawString(font, Component.literal(dots),
-                    tx + (THUMB_W - font.width(dots)) / 2, ty + (THUMB_H - font.lineHeight) / 2, Theme.TEXT_DIM);
-        }
-    }
-
-    private void handlePanelClick(double mouseX, double mouseY) {
-        for (int i = 0; i < panelVisibleRows; i++) {
-            int index = queueScroll + i;
-            if (index >= queue.size()) {
-                break;
-            }
-            int rowY = rowTop(i);
-            if (mouseY < rowY || mouseY >= rowY + ROW_H) {
-                continue;
-            }
-            int btnY = rowY + (ROW_H - BUTTON) / 2;
-            if (inRect(mouseX, mouseY, removeBtnX(), btnY, BUTTON, BUTTON)) {
-                removeAt(index);
-            } else if (inRect(mouseX, mouseY, downBtnX(), btnY, BUTTON, BUTTON)) {
-                moveDown(index);
-            } else if (inRect(mouseX, mouseY, upBtnX(), btnY, BUTTON, BUTTON)) {
-                moveUp(index);
-            } else {
-                jumpTo(index);
-            }
-            return;
-        }
-    }
-
-    private int rowTop(int visibleRow) {
-        return panelRowsTop + visibleRow * ROW_H;
-    }
-
-    private int removeBtnX() {
-        return panelContentRight() - PANEL_PAD - BUTTON;
-    }
-
-    private int downBtnX() {
-        return removeBtnX() - BUTTON - 2;
-    }
-
-    private int upBtnX() {
-        return downBtnX() - BUTTON - 2;
     }
 
 
@@ -857,6 +655,14 @@ final class VideoWindow extends MediaWindow {
     protected ClickResult onControlClick(double mouseX, double mouseY) {
         if (inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON)) {
             player.togglePause();
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, backBtnX, backBtnY, BUTTON, BUTTON)) {
+            seekBy(-MediaControls.SKIP_MICROS);
+            return ClickResult.HANDLED;
+        }
+        if (inRect(mouseX, mouseY, fwdBtnX, fwdBtnY, BUTTON, BUTTON)) {
+            seekBy(MediaControls.SKIP_MICROS);
             return ClickResult.HANDLED;
         }
         if (showNext && inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON)) {
@@ -872,12 +678,11 @@ final class VideoWindow extends MediaWindow {
             return ClickResult.HANDLED;
         }
         if (showQueueBtn && inRect(mouseX, mouseY, queueBtnX, queueBtnY, BUTTON, BUTTON)) {
-            queueOpen = !queueOpen;
-            queueScroll = 0;
+            panel.toggle();
             return ClickResult.HANDLED;
         }
-        if (queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH)) {
-            handlePanelClick(mouseX, mouseY);
+        if (panel.contains(mouseX, mouseY)) {
+            panel.click(mouseX, mouseY);
             return ClickResult.HANDLED;
         }
         if (showVolume && inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON)) {
@@ -930,9 +735,7 @@ final class VideoWindow extends MediaWindow {
      */
     @Override
     protected boolean onControlScroll(double mouseX, double mouseY, double scrollY) {
-        if (queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH)) {
-            int maxScroll = Math.max(0, queue.size() - panelVisibleRows);
-            queueScroll = Mth.clamp(queueScroll - (int) Math.signum(scrollY), 0, maxScroll);
+        if (panel.scroll(mouseX, mouseY, scrollY)) {
             return true;
         }
         if (!player.hasAudio()) {
@@ -950,7 +753,7 @@ final class VideoWindow extends MediaWindow {
 
     @Override
     protected boolean overExtraRegion(double mouseX, double mouseY) {
-        return queueOpen && inRect(mouseX, mouseY, panelX, panelY, panelW, panelH);
+        return panel.contains(mouseX, mouseY);
     }
 
 }

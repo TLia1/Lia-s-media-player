@@ -29,10 +29,16 @@ public class MediaSources {
      */
     private final List<com.lia.mediaplayer.api.MediaSource> registered = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
+            new GiphySource(),       // a giphy.com/gifs page (rewritten to a GIF)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
             new YouTubePlaylistSource(), // a youtube.com/playlist page (expanded on click)
             new YouTubeSource(),     // a youtube.com / youtu.be link
             new TwitchSource(),      // a twitch.tv link
+            new VimeoSource(),       // a vimeo.com/<id> page
+            new StreamableSource(),  // a streamable.com/<id> page
+            new RedditVideoSource(), // a v.redd.it link or a Reddit comment page
+            new SoundCloudSource(),  // a soundcloud.com track page
+            new BandcampSource(),    // a *.bandcamp.com track/album page
             new StreamSource(),      // an .m3u8 / .mpd manifest
             new DirectVideoSource(), // a direct .mp4/.webm/... file
             new AudioFileSource()    // a direct .mp3/.ogg/.wav/... file
@@ -106,6 +112,17 @@ public class MediaSources {
      */
     public boolean isSupported(String url) {
         return find(url).isPresent();
+    }
+
+    /**
+     * Whether the source claiming {@code url} needs the external extractor
+     * ({@code yt-dlp}) to turn it into something ffmpeg can open — see
+     * {@link com.lia.mediaplayer.api.MediaSource#requiresExtractor()}. {@code false}
+     * for a link nothing recognizes, which is the same answer a direct file gives:
+     * hand it to ffmpeg and let it say why it could not be opened.
+     */
+    public boolean requiresExtractor(String url) {
+        return find(url).map(com.lia.mediaplayer.api.MediaSource::requiresExtractor).orElse(false);
     }
 
     /**

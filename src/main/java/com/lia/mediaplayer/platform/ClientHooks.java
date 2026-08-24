@@ -2,6 +2,7 @@ package com.lia.mediaplayer.platform;
 
 import com.lia.mediaplayer.chat.AudioChatHandler;
 import com.lia.mediaplayer.chat.ImageChatHandler;
+import com.lia.mediaplayer.chat.MediaFilters;
 import com.lia.mediaplayer.chat.VideoChatHandler;
 import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import com.lia.mediaplayer.input.KeybindHandler;
@@ -9,6 +10,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.function.Consumer;
 
@@ -45,10 +47,22 @@ public final class ClientHooks {
      * <p>Order does not matter: the image, video and audio sources are disjoint, so each
      * rule only claims links the other two ignore, and they compose on one message.</p>
      *
+     * @param sender the display name the message arrived with, or {@code null} for a
+     *               system message (and for any message whose sender the loader could
+     *               not name). Only the sender filter reads it — see
+     *               {@link com.lia.mediaplayer.chat.MediaFilters}. It is a name rather
+     *               than a UUID because that is what both loaders can produce from the
+     *               same field ({@code ChatType.Bound#name()}) on every target version,
+     *               and because a name is what someone writing a filter list has.
      * @return the message to display, which is {@code message} itself when it holds no
      *         media link
      */
-    public static Component onChatReceived(Component message) {
+    public static Component onChatReceived(Component message, @Nullable String sender) {
+        // A blocked sender's message is returned untouched — the same instance, so the
+        // Fabric bridge leaves it to vanilla exactly as it does an ordinary line.
+        if (!MediaFilters.allowsSender(sender)) {
+            return message;
+        }
         Component result = ImageChatHandler.rewrite(message);
         result = VideoChatHandler.rewrite(result);
         return AudioChatHandler.rewrite(result);

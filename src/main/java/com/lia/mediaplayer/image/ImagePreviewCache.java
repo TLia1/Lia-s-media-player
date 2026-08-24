@@ -112,8 +112,17 @@ public final class ImagePreviewCache {
      */
     private static GifDecoder.Result download(String url) {
         try {
-            // Tenor share links are HTML pages; resolve them to the real GIF first.
-            String mediaUrl = TenorSource.isTenorPage(url) ? TenorResolver.resolve(url) : url;
+            // Share links are HTML pages; turn them into the real GIF first. Tenor needs
+            // the page fetched to find its media id, Giphy carries the id in the link.
+            String mediaUrl = url;
+            if (TenorSource.isTenorPage(url)) {
+                mediaUrl = TenorResolver.resolve(url);
+            } else {
+                String giphy = com.lia.mediaplayer.source.GiphySource.directGif(url);
+                if (giphy != null) {
+                    mediaUrl = giphy;
+                }
+            }
             if (!com.lia.mediaplayer.source.Urls.isHttp(mediaUrl)) {
                 throw new IOException("Refusing to fetch a non-http(s) image: " + mediaUrl);
             }

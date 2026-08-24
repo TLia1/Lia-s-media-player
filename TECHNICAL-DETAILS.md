@@ -63,10 +63,11 @@ concern:
 | `audio`    | Audio-only playback engine (probe, PCM pump, clock, seek).                                                                                                         | `source`, `tools`, `media`                                         |
 | `tools`    | Locating/downloading and invoking the external `ffmpeg`/`ffprobe`/`yt-dlp` binaries.                                                                               | (root)                                                             |
 | `playlist` | Saved named playlists and their JSON persistence.                                                                                                                  | (Minecraft only)                                                   |
-| `gui`      | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the hover preview, playlists and config hub. | `source`, `image`, `video`, `audio`, `media`, `playlist`, `config` |
+| `history`  | What has been played and what was kept (the favourites), and their JSON persistence.                                                                               | `api`, `source`, *(root)*                                          |
+| `gui`      | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the shared queue panel, the hover preview, playlists, history and config hub. | `source`, `image`, `video`, `audio`, `media`, `playlist`, `history`, `config` |
 | `input`    | The configurable keybinds and the handler that drives the active audio player.                                                                                     | `gui`                                                              |
 | `command`  | Registers client commands (like `/show`) to launch media directly.                                                                                                 | `api`                                                              |
-| `chat`     | Rewriting links into labels, as plain functions on `Component`.                                                                                                    | `source`, `image`, `video`, `audio`, `gui`                         |
+| `chat`     | Rewriting links into labels, as plain functions on `Component`, and the filters deciding whose links and which hosts get rewritten at all.                          | `source`, `image`, `video`, `audio`, `gui`, `config`               |
 | `platform` | **The loader seam.** `ClientHooks` is the mod's whole catalogue of client hooks in vanilla types; `platform/neoforge` and `platform/fabric` subscribe to their loader's events and forward to it. The only package that imports a loader. | `chat`, `gui`, `input`, `command`, `api`, *(root)*                 |
 | *(root)*   | `LiasMediaPlayer` — loader-neutral startup: builds the context, publishes the API singleton, starts the tool download, and applies addon-supplied sources.          | `tools`, `api`, `gui`                                              |
 
@@ -88,18 +89,28 @@ and nothing *below* it may import `net.neoforged` or `net.fabricmc`.
 
 Adding a new kind of media link is the most common way the mod grows, so it is the
 one thing made trivially extensible. A `MediaSource` answers three questions about a
-URL — does it `matches(...)`, what `kind()` is it (`IMAGE` or `VIDEO`), and what chat
-`label(...)` should it show — and nothing else. The built-in sources are:
+URL — does it `matches(...)`, what `kind()` is it (`IMAGE`, `VIDEO` or `AUDIO`), and what
+chat `label(...)` should it show — plus one optional fourth, `requiresExtractor()`, which
+says whether a claimed link is a web page yt-dlp has to resolve before ffmpeg can open it.
+That last one is what keeps a new source from also having to be taught to the playback
+engine: `MediaUrlResolver` asks the registry rather than naming the page sites itself. The
+built-in sources are:
 
 | Source              | Recognizes                                                                                               | Kind  | Label       |
 |---------------------|----------------------------------------------------------------------------------------------------------|-------|-------------|
 | `ImageFileSource`   | a path ending in `.png`/`.jpg`/`.jpeg`/`.gif`/`.bmp`                                                     | IMAGE | `[picture]` |
 | `TenorSource`       | a `tenor.com/view/...` share page (locale prefix allowed)                                                | IMAGE | `[gif]`     |
+| `GiphySource`       | a `giphy.com/gifs|clips|stickers/...` share page                                                         | IMAGE | `[gif]`     |
 | `DirectVideoSource` | a path ending in `.mp4`/`.webm`/`.mov`/`.mkv`/`.m4v`/`.avi`/`.flv`/`.ogv`/`.ts`                          | VIDEO | `[video]`   |
 | `StreamSource`      | an `.m3u8` (HLS) or `.mpd` (DASH) manifest                                                               | VIDEO | `[video]`   |
 | `YouTubeSource`     | a `youtube.com`/`youtu.be`/Shorts/embed/live link                                                        | VIDEO | `[youtube]` |
 | `TwitchSource`      | a `twitch.tv` stream or VOD link                                                                         | VIDEO | `[twitch]`  |
+| `VimeoSource`       | a `vimeo.com/<id>` page or a `player.vimeo.com/video/<id>` embed                                         | VIDEO | `[vimeo]`   |
+| `StreamableSource`  | a `streamable.com/<id>` clip (or its `/e/<id>` embed)                                                    | VIDEO | `[streamable]` |
+| `RedditVideoSource` | a `v.redd.it` link, or a `reddit.com/.../comments/...` page                                              | VIDEO | `[reddit]`  |
 | `AudioFileSource`   | a path ending in `.mp3`/`.wav`/`.ogg`/`.oga`/`.flac`/`.m4a`/`.aac`/`.opus`/`.weba`/`.wma`/`.aiff`/`.aif` | AUDIO | `[audio]`   |
+| `SoundCloudSource`  | a `soundcloud.com` (or `snd.sc`) track page                                                              | AUDIO | `[soundcloud]` |
+| `BandcampSource`    | a `*.bandcamp.com/track/...` or `/album/...` page                                                        | AUDIO | `[bandcamp]` |
 
 `MediaSources` is the registry: it holds the ordered list of sources and exposes
 the lookups everyone else uses — `find`, `kindOf`, `isImage`, `isVideo`, `isAudio`,
@@ -131,7 +142,7 @@ the loader's business and the interface an addon implements became the same on b
 | **`api/`**                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `LiasMediaPlayerApi.java`                                                                   | The API front door: holds the live `IMediaPlayerAPI` singleton and the `MediaSourceProvider` registry addons register with. No loader imports — the NeoForge `@Mod` entry that gives the API its own line in the Mods menu lives in `platform/neoforge/NeoForgeApiMod`.                                                                                                                                                        |
 | `IMediaPlayerAPI.java`                                                                      | The public façade interface. Methods for source registration, playback control, volume, media queries, and playlist access. Exposes unique player IDs for fine-grained control of specific windows.                                                                                                                                                                                                                           |
-| `MediaSource.java`                                                                          | The public extension interface: `matches` / `kind` / `label`. Other mods implement this to teach the player about new link formats.                                                                                                                                                                                                                                                                                           |
+| `MediaSource.java`                                                                          | The public extension interface: `matches` / `kind` / `label`, plus the `default` `requiresExtractor()` that says whether a claimed link is a web page yt-dlp has to resolve first. Other mods implement this to teach the player about new link formats.                                                                                                                                                                                                                                                                                           |
 | `MediaKind.java`                                                                            | Public enum: `IMAGE`, `VIDEO`, `AUDIO`.                                                                                                                                                                                                                                                                                                                                                                                       |
 | `PlaybackState.java`                                                                        | Public enum: `LOADING`, `PLAYING`, `PAUSED`, `ENDED`, `FAILED`.                                                                                                                                                                                                                                                                                                                                                               |
 | `MediaSourceProvider.java`                                                                  | The extension point addons implement to contribute `MediaSource`s. Registered with `LiasMediaPlayerApi.registerSourceProvider` on either loader, or through the `liasmediaplayer:sources` entrypoint on Fabric.                                                                                                                                                                                                                |
@@ -141,17 +152,19 @@ the loader's business and the interface an addon implements became the same on b
 | `config/ConfigOption.java`                                                                  | Base class for an extensible configuration option. Subclasses like `IntSliderOption`, `StepSliderOption`, `EnumOption` and `BooleanOption` are provided.                                                                                                         |
 | `config/EnumOption.java`                                                                    | A `ConfigOption` implementation for enum values, displayed as a button that cycles through the available options.                                                                                                                                                                                                                                                                                                              |
 | `config/BooleanOption.java`                                                                 | A `ConfigOption` implementation for a plain on/off setting, displayed as a button reading `Label: ON` / `Label: OFF`. The two states reuse vanilla's own `options.on` / `options.off` keys, so an addon declaring one translates only its label.                                                                                                                                                                               |
+| `config/StringOption.java`                                                                  | A `ConfigOption` implementation for free text, displayed as a text field whose hint is the option's own label. `entries()` reads the value as a trimmed, lower-cased, comma-separated list — the shape the domain and sender filters want.                                                                                                                                                                                     |
 | **`config/` (internal)**                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ConfigStore.java`                                                                          | Loads/saves mod options to disk, acting as the registry for all `ConfigOption`s. Provides methods to retrieve options by group.                                                                                                                                                                                                                               |
 | **`source/`**                                                                               |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `MediaSources.java`                                                                         | The registry of all sources and the single place the rest of the mod asks "what is this link?" (`find`/`kindOf`/`isImage`/`isVideo`/`isAudio`/`labelFor`).                                                                                                                                                                                                                                                                    |
-| `ImageFileSource.java` · `TenorSource.java`                                                 | The two `IMAGE` sources (direct image files; Tenor share pages). `TenorSource.isTenorPage` is reused by the image download path.                                                                                                                                                                                                                                                                                              |
-| `DirectVideoSource.java` · `StreamSource.java` · `YouTubeSource.java` · `YouTubePlaylistSource.java` · `TwitchSource.java` | The five `VIDEO` sources. `YouTubePlaylistSource` claims a `youtube.com/playlist?list=…` page (expanded into its videos on click, never played as-is) and stays disjoint from `YouTubeSource`, which keeps a `watch?v=…&list=…` link as the single video it opens. `YouTubeSource.isYouTube` and `TwitchSource.isTwitch` are reused by the playback engines for their dedicated resolution paths.                                                                                                                                                                                                                                                                      |
-| `AudioFileSource.java`                                                                      | The `AUDIO` source: a direct audio file (`AudioFileSource.isAudioFile`).                                                                                                                                                                                                                                                                                                                                                      |
+| `ImageFileSource.java` · `TenorSource.java` · `GiphySource.java`                            | The three `IMAGE` sources (direct image files; Tenor share pages; Giphy share pages). `TenorSource.isTenorPage` and `GiphySource.directGif` are reused by the image download path — Tenor needs the page fetched to find its media id, Giphy carries the id in the link and needs no network at all.                                                                                                                                                                                                                                                                                              |
+| `DirectVideoSource.java` · `StreamSource.java` · `YouTubeSource.java` · `YouTubePlaylistSource.java` · `TwitchSource.java` · `VimeoSource.java` · `StreamableSource.java` · `RedditVideoSource.java` | The eight `VIDEO` sources. `YouTubePlaylistSource` claims a `youtube.com/playlist?list=…` page (expanded into its videos on click, never played as-is) and stays disjoint from `YouTubeSource`, which keeps a `watch?v=…&list=…` link as the single video it opens. `YouTubeSource.isYouTube` and `TwitchSource.isTwitch` are reused by the playback engines for their dedicated resolution paths.                                                                                                                                                                                                                                                                      |
+| `AudioFileSource.java` · `SoundCloudSource.java` · `BandcampSource.java`                    | The three `AUDIO` sources: a direct audio file (`AudioFileSource.isAudioFile`), a SoundCloud track page and a Bandcamp track/album page. The last two are pages, so they answer `requiresExtractor()` with `true`.                                                                                                                                                                                                                                                                                                                                                      |
 | `Urls.java`                                                                                 | Package-private URL path/host parsing shared by the sources.                                                                                                                                                                                                                                                                                                                                                                  |
+| `LinkFilter.java` · `FilterMode.java`                                                       | The pure matching rules behind the client-side link filters — is this URL's host on a list (whole labels, sub-domains included), is this sender's name on one (matched anywhere in the display name) — and the three-way mode the host lists are read under. The lists are passed in, so both are unit-testable; the policy is `chat/MediaFilters`.                                                                            |
 | **`media/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `Volume.java`                                                                               | The single, shared playback level (0..1) used by both engines, plus the dB-gain math that applies it to a `SourceDataLine` (master-volume-scaled).                                                                                                                                                                                                                                                                            |
-| `MediaUrlResolver.java`                                                                     | Turns a chat link into something ffmpeg can open (direct/streams pass through; YouTube resolves via `yt-dlp -g`). Shared by both engines. Reads output asynchronously with strict timeouts to prevent deadlocks.                                                                                                                                                                                                              |
+| `MediaUrlResolver.java`                                                                     | Turns a chat link into something ffmpeg can open (direct files and manifests pass through; a page resolves via `yt-dlp -g`). Which links are pages is asked of the source registry (`MediaSource.requiresExtractor`), not decided here, so a new page-based source needs no change in the playback engine. Shared by both engines. Reads output asynchronously with strict timeouts to prevent deadlocks.                                                                                                                                                                                                              |
 | `YouTubePlaylistResolver.java`                                                              | Expands a YouTube playlist page into its watch links via `yt-dlp --flat-playlist` (one index request, no per-video work), with the same strict timeout/stderr-drain handling as `MediaUrlResolver`. `loadAsync` runs it on the IO pool and calls back on the main thread. |
 | `MediaTitleCache.java`                                                                      | Resolves and caches a human-readable title per URL (YouTube oEmbed, or the file name) for the queue/playlist panels. Shared by both engines.                                                                                                                                                                                                                                                                                  |
 | **`chat/`**                                                                                 |                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -159,6 +172,7 @@ the loader's business and the interface an addon implements became the same on b
 | `ImageChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the image rule (gold `[picture]`/`[gif]` label; registers the URL with `ImagePreviewCache`) and disposes the image side on disconnect. Takes no event object — `platform.ClientHooks` calls it.                                                                                                                                                                              |
 | `VideoChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the video rule (aqua underlined `[video]`/`[youtube]` label) and disposes the video side on disconnect.                                                                                                                                                                                                                                                                     |
 | `AudioChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the audio rule (green underlined `[audio]` label) and disposes the audio side on disconnect.                                                                                                                                                                                                                                                                                |
+| `MediaFilters.java`                                                                         | The client-side policy on whose links get rewritten and which: `allowsSender` (a listed player's message is left alone entirely) and `allowsUrl` (a link whose host fails the mode's list stays plain text). Purely local — nothing is hidden and no message is cancelled — and applied to chat only, never to a link the player put on their own clipboard. Reads `ConfigStore`, matches with `source/LinkFilter`.            |
 | **`gui/`**                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `MediaWindow.java`                                                                          | Shared base for the on-screen windows. Owns the box geometry, the chrome (softened box, title bar carrying the media's name, the 1 px edge that marks the front window, the control-bar strip), the corner buttons, resize grip, move/resize/zoom gestures, the open animation and the click flash, and global z-order. Its initial position is determined by the `default_window_position` config option. Each window has a stable ID for API control. Declares the subclass contract, including a polymorphic `close()` and an `anchorGroup()`. |
 | `MediaWindowOverlay.java`                                                                   | Single coordinator that renders and routes input for *all* windows (images + videos) as one z-ordered stack: the chat-screen render pass, the HUD overlay pass, mouse handling (click-to-front, click-on-link to open/queue via `MediaSources`), the "reveal hidden videos" button, the "now playing" banner, the fading outline left by a closed window, and the auto-advance/auto-close of finished videos. Every method is a plain function on vanilla types, returning `true` when it consumed input. |
@@ -169,6 +183,7 @@ the loader's business and the interface an addon implements became the same on b
 | `VideoPlayerManager.java`                                                                   | Registry of active video windows. Default behaviour is to **queue** a link into the front-most player; an independent window is only created on demand (shift-click) or when none exists. Caps the number alive (4) and disposes everything on disconnect.                                                                                                                                                                    |
 | `AudioWindow.java`                                                                          | The compact audio **bar** (extends `MediaWindow`): a music note + the track name, and a control row (play/pause, previous, next, loop, shuffle, speaker, seek + time). No picture; backed by an `AudioPlayer` and a shared `PlayQueue` (which also holds the history behind "previous").                                                                                                                                                                 |
 | `AudioPlayerManager.java`                                                                   | Registry of active audio bars. Same queue-into-front-most default as video, plus `playAll(urls, shuffle[, repeat])` to start a whole playlist and the transport helpers the keybinds call (`togglePauseFrontMost`/`nextFrontMost`/`previousFrontMost`).                                                                                                                                                                                 |
+| `QueuePanel.java`                                                                           | The list of what plays next, docked beside a player window: rows with a thumbnail and/or a title, click to jump, arrows to reorder, a cross to drop. Shared by both players — the window supplies only the `Mode` it has room for (`FULL` / `MINI` / `TEXT`) and what "play this one" means — and owns its own open state, scroll position and hit-testing geometry.                                                            |
 | `PlayQueue.java`                                                                            | The ordered URL queue model (append/jump/remove/reorder) shared by `VideoWindow` and `AudioWindow`, so the queue mechanics live in one place. Also owns the play history and the two playback modes that need it: `next(current)`/`previous(current)` apply the `RepeatMode` and the sticky shuffle flag, so the windows only ever swap their player. |
 | `RepeatMode.java`                                                                           | `OFF` / `ALL` / `ONE` — what the queue does when a track ends, cycled by the loop button.                                                                                                                                                                                                                                                                                 |
 | `Glyphs.java`                                                                               | Every icon the mod draws, in one place: the transport controls (play/pause, next, previous, stop, loop, shuffle, speaker, volume ±, speed), the window controls (close, minimize, external link, queue, fullscreen, pin), and the list controls (arrow, search, trash, drag handle, heart, note) — plus a text-ellipsis helper. All plain rectangles, so no textures and nothing that changes shape between versions.                          |
@@ -178,6 +193,7 @@ the loader's business and the interface an addon implements became the same on b
 | `Panels.java`                                                                               | The panel shape: a rectangle with 2 px softened corners and the outline that follows it. Five fills, no texture and no per-version API; one corner radius everywhere is what makes the windows, the queue panel, the chips and the banner read as one UI. |
 | `NowPlayingBanner.java`                                                                     | The strip announcing a track that no visible window is showing — raised from `playUrl` when the window doing the playing is hidden, drawn over the chat screen and the bare HUD alike. |
 | `MediaControls.java`                                                                        | Shared control logic and utilities (time formatting, volume and seek math, volume pop-up and seek-bar rendering — the bar grows and reveals its handle only while it is being pointed at) used by `VideoWindow` and `AudioWindow`. |
+| `HistoryScreen.java`                                                                        | The library screen, opened from the playlist screen: the saved playlists on the left as the target of the "add" button, the history entries on the right with a heart, an add and a remove button each. A search box and a favourites-only toggle narrow the list; a click on a row plays it exactly as clicking the link in chat would. Titles resolve through `MediaTitleCache` for the visible rows only.                     |
 | `PlaylistScreen.java`                                                                       | The playlist manager screen: a list of saved playlists on the left (select / create), the selected playlist's entries on the right (rename, add a link or expand a YouTube playlist into tracks, remove, play in order, play shuffled, loop, delete). Persists via `PlaylistStore`.                                                                                                                                                                                          |
 | `ConfigScreen.java`                                                                         | The settings screen: registered groups down the left, the selected group's options beside them, and a search box filtering by translated label. One screen rather than two — it replaced the hub-plus-per-group-screen pair, so switching group is a click and never a screen change. |
 | `OptionsList.java`                                                                          | The scrolling column of option widgets, one or two per row by `OptionWidth`. Each row carries a reset button (greyed out while the option is already at its default) and each widget the option's description and warning as one tooltip. Overrides `getRowLeft` so the rows sit in their own column beside the group list. |
@@ -195,11 +211,14 @@ the loader's business and the interface an addon implements became the same on b
 | `VideoThumbnailCache.java`                                                                  | Builds and caches a small still image for each queued video (the YouTube thumbnail, or the first decoded frame for direct files) so the queue panel can show what each entry is.                                                                                                                                                                                                                                              |
 | **`audio/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `AudioPlayer.java`                                                                          | The sound-only playback engine — the audio counterpart of `VideoPlayer`. Probes the stream, opens a `SourceDataLine`, and runs a control thread (resolve/probe/launch/seek) plus a per-session **pump thread** that blocking-writes PCM to the line. Reuses `FFmpegCli`, `media.MediaUrlResolver` and `media.Volume`; YouTube links play as sound only (ffmpeg opens the resolved stream with `-vn`).                         |
+| **`history/`**                                                                              |                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `HistoryEntry.java`                                                                         | One thing that was played: the URL, its `MediaKind`, when it last started, and whether it carries the heart. No title is stored — names come from `MediaTitleCache`, the same bargain `Playlist` makes.                                                                                                                                                                                                                        |
+| `HistoryStore.java`                                                                         | Loads/saves the history to `<gamedir>/liasmediaplayer/history.json` (lazy load, temp file + atomic move, never throws). Most recent first; re-playing an entry moves it back to the top instead of duplicating it. Ordinary entries are bounded at `MAX_ENTRIES`, favourites are not counted against it and are never evicted — and `clear()` keeps them. The static `record(url, kind)` is what the five playback entry points call. |
 | **`playlist/`**                                                                             |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `Playlist.java`                                                                             | A named, ordered list of media URLs (its fields are the JSON schema).                                                                                                                                                                                                                                                                                                                                                         |
 | `PlaylistStore.java`                                                                        | Loads/saves the playlists to `<gamedir>/liasmediaplayer/playlists.json` (Gson), lazily on first access and after every change, using atomic file replacements to prevent corruption.                                                                                                                                                                                                                                          |
 | **`input/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ModKeybinds.java`                                                                          | The four configurable key bindings (play/pause, next, previous, open playlists), unbound by default, under a "Lia's Media Player" category. Declares them and exposes `all()`; registering them with the game is each loader bridge's job.                                                                                                                                                                                    |
+| `ModKeybinds.java`                                                                          | The configurable key bindings (play/pause, next, previous, volume up/down, mute, show/hide all, close all, open playlists, open the settings, play the clipboard), unbound by default, under a "Lia's Media Player" category. Declares them and exposes `all()`; registering them with the game is each loader bridge's job.                                                                                                                                                                                    |
 | `KeybindHandler.java`                                                                       | Polls the bindings each client tick (`consumeClick`) and drives the front-most audio bar / opens `PlaylistScreen`. Called from `platform.ClientHooks.onClientTick`.                                                                                                                                                                                                                                                           |
 | **`tools/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `FFmpegCli.java`                                                                            | Thin wrapper around the `ffmpeg`/`ffprobe` binaries. Probes stream metadata (via `ffprobe` JSON, parsed with Gson) and starts ffmpeg processes that pipe raw `rgba` video and `s16le` PCM audio to stdout. A shutdown hook tracks and forcibly kills active processes on game exit to prevent orphaned binaries.                                                                                                              |
@@ -207,7 +226,7 @@ the loader's business and the interface an addon implements became the same on b
 | `BinaryLocator.java`                                                                        | Scans for existing installations of each tool: explicit overrides (JVM property / env var), the mod's managed directory, every directory on `PATH`, and common per-OS install locations (winget, scoop, Chocolatey, Homebrew, pip Scripts, …). Probes bare command names as a last resort. Never downloads anything.                                                                                                          |
 | `BinaryDownloader.java`                                                                     | Downloads and installs tools when `BinaryLocator` finds nothing. Handles the two download shapes: a single executable (yt-dlp) and a per-platform archive (ffmpeg bundle). Unpacks `.zip` (JDK) and `.tar.xz` (system `tar`) with zip-slip protection. Uses a shared `HttpClient` and temp-file-then-atomic-move for safe writes.                                                                                             |
 | **`platform/`**                                                                             |                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ClientHooks.java`                                                                          | The mod's whole catalogue of client hooks — chat, disconnect, tick, screen init/render, HUD render, and the four mouse hooks — written only in vanilla types. The two bridges call these; nothing below this package sees a loader event.                                                                                                                                                                                      |
+| `ClientHooks.java`                                                                          | The mod's whole catalogue of client hooks — chat (the message plus the sender's display name, for the sender filter), disconnect, tick, screen init/render, HUD render, the four mouse hooks and the keyboard one — written only in vanilla types. The two bridges call these; nothing below this package sees a loader event.                                                                                                                                                                                      |
 | `neoforge/NeoForgeMod.java`                                                                 | `@Mod(dist = Dist.CLIENT)`. Registers the `IConfigScreenFactory` extension point, calls `LiasMediaPlayer.init()`, and collects addon sources during `FMLClientSetupEvent`.                                                                                                                                                                                                                                                    |
 | `neoforge/NeoForgeApiMod.java`                                                              | `@Mod("liasmediaplayerapi", dist = Dist.CLIENT)` — the second Mods-menu entry. No logic. Exists so `api/` needs no loader import.                                                                                                                                                                                                                                                                                             |
 | `neoforge/NeoForgeBridge.java`                                                              | Every `@SubscribeEvent` the mod has, each unwrapping an event object and calling the matching `ClientHooks` method (`setCanceled(true)` where the hook returns `true`). Also registers the key mappings and the `/show` command.                                                                                                                                                                                               |
@@ -311,21 +330,31 @@ the message or the mouse click.
 
 ### 1. Rewrite incoming chat
 
-`ClientHooks.onChatReceived` runs the message through `ImageChatHandler`,
-`VideoChatHandler` and `AudioChatHandler` in turn. Each hands the message to the
+`ClientHooks.onChatReceived` takes the message and the sender's display name. If the
+sender is on the blocked list (`MediaFilters.allowsSender`) the message is returned
+**as the same instance** and nothing else runs — the identity is what tells the Fabric
+bridge to leave the line to vanilla. Otherwise it runs the message through
+`ImageChatHandler`, `VideoChatHandler` and `AudioChatHandler` in turn. Each hands the message to the
 shared `ChatLinkRewriter` together with a small `LinkRewrite` rule describing what
 it claims and how it styles a match. The rewriter walks the message
 component-by-component (preserving inherited styles); for every URL matching
 `https?://\S+` it asks the rule whether it `matches`, and if so replaces the URL
 with the rule's `label` carrying the rule's `style`:
 
-- **Images** (`MediaSources.isImage`): a direct image file or a Tenor share page.
-  Replaced by a gold `[gif]` (Tenor) or `[picture]` label, and the URL is
-  registered with `ImagePreviewCache.track` for lazy loading.
-- **Videos** (`MediaSources.isVideo`): a direct video file, an HLS/DASH manifest,
-  a YouTube link, or a Twitch stream. Replaced by an aqua, underlined `[video]` / `[youtube]` / `[twitch]` label.
-- **Audio** (`MediaSources.isAudio`): a direct audio file. Replaced by a green,
-  underlined `[audio]` label.
+- **Images** (`MediaSources.isImage`): a direct image file, a Tenor share page or a
+  Giphy one. Replaced by a gold `[gif]` (Tenor / Giphy) or `[picture]` label, and the
+  URL is registered with `ImagePreviewCache.track` for lazy loading.
+- **Videos** (`MediaSources.isVideo`): a direct video file, an HLS/DASH manifest, a
+  YouTube, Twitch, Vimeo, Streamable or Reddit link. Replaced by an aqua, underlined
+  `[video]` / `[youtube]` / `[twitch]` / `[vimeo]` / `[streamable]` / `[reddit]` label.
+- **Audio** (`MediaSources.isAudio`): a direct audio file, a SoundCloud track or a
+  Bandcamp release. Replaced by a green, underlined `[audio]` / `[soundcloud]` /
+  `[bandcamp]` label.
+
+Each rule also asks `MediaFilters.allowsUrl`, so a link whose host fails the configured
+host list is simply never claimed and stays plain text. Both filters are **purely
+local**: the message is displayed exactly as it arrived, only without a label the mod
+would play.
 
 Every label carries an `OPEN_URL` click event pointing at the original URL — that is
 how the overlay finds the URL again under the cursor. The image, video and audio
@@ -443,21 +472,43 @@ are hot-link protected, it rebuilds the canonical direct-download endpoint
 `https://c.tenor.com/<id>/tenor.gif`. Older page layouts fall back to a plain
 `og:image` GIF URL. `extractMediaUrl` is package-private for testing.
 
+### Giphy resolution (`source/GiphySource`)
+
+Giphy share pages are the same problem with a much smaller answer: the media id is the
+last dash-separated token of the slug (`/gifs/funny-cat-<id>`), and every GIF is served
+from a fixed endpoint built out of it, so `GiphySource.directGif` is pure string work and
+needs no page fetch at all. `ImagePreviewCache` calls it on the same line it calls the
+Tenor resolver. Giphy's own `media*.giphy.com/.../giphy.gif` links end in `.gif` and are
+already `ImageFileSource`'s.
+
 ## Video player
 
 ### Recognized links (`source` video sources)
 
-`MediaSources.isVideo` is true for three families, kept disjoint from the image
-sources:
+`MediaSources.isVideo` is true for these families, kept disjoint from the image and
+audio sources:
 
 - **Direct video files** (`DirectVideoSource`) — path ends in `.mp4`, `.webm`,
   `.mov`, `.mkv`, `.m4v`, `.avi`, `.flv`, `.ogv`, or `.ts`.
 - **Adaptive streams** (`StreamSource`) — an `.m3u8` (HLS) or `.mpd` (DASH) manifest.
 - **YouTube** (`YouTubeSource`) — `youtube.com/watch`, `/shorts/`, `/embed/`,
   `/live/`, the mobile/music hosts, or a `youtu.be/...` short link.
+- **Twitch** (`TwitchSource`) — a stream or VOD link.
+- **Vimeo** (`VimeoSource`) — `vimeo.com/<id>` (the numeric id is what separates a
+  video from the site's channels and search pages) or a `player.vimeo.com/video/<id>`
+  embed.
+- **Streamable** (`StreamableSource`) — `streamable.com/<id>`, the short alphanumeric
+  id keeping the site's own pages out.
+- **Reddit** (`RedditVideoSource`) — a `v.redd.it` link, or a comment page. Only
+  comment pages, never a subreddit or user listing.
 
-The chat label is `[youtube]` for YouTube links, `[youtube playlist]` for a playlist
-page and `[video]` otherwise.
+All of those except the first two are web pages, so they answer `requiresExtractor()`
+with `true` and go through yt-dlp — which, for `v.redd.it`, is also what muxes Reddit's
+separate audio track back in.
+
+The chat label names the site: `[youtube]`, `[youtube playlist]` for a playlist page,
+`[twitch]`, `[vimeo]`, `[streamable]`, `[reddit]`, and `[video]` for a plain file or
+manifest.
 
 ### YouTube playlists (`source/YouTubePlaylistSource`, `media/YouTubePlaylistResolver`)
 
@@ -629,29 +680,32 @@ Two details follow from a seek being a *relaunch* rather than a jump:
 
 The window is anchored bottom-right by default (so it never covers the left-aligned
 chat link), scaled to about a third of the screen. Its control bar carries: a
-play/pause button; a **next** button and a **queue** (playlist) button when
+play/pause button; a pair of **±10 s** skip buttons (greyed out and inert while the
+duration is unknown, so a live stream keeps a stable bar rather than one whose buttons
+come and go); a **next** button and a **queue** (playlist) button when
 something is queued; a **loop** button (always shown — a lone video can repeat too)
 and a **shuffle** toggle beside it while a queue exists; a **speaker/mute** button with a vertical **volume slider that
 pops up above it** on hover (shown only when the video has sound); and a draggable
 seek bar with a knob plus an elapsed `/` total time read-out (`LIVE` when the
 duration is unknown, with a `+N` suffix showing how many videos are queued). The
-top-right corner has the inherited **open-in-browser** (↗), **hide** (`_`) and
-**close** (`x`) buttons. Move/resize/zoom come from `MediaWindow`.
+top-right corner has the inherited **favourite** (♥), **open-in-browser** (↗),
+**hide** (`_`) and **close** (`x`) buttons. Move/resize/zoom come from `MediaWindow`.
 
 **The play queue.** Instead of one window per link, extra videos are appended to the
 current window's queue. When the current video ends (or **next** is pressed),
 `advance()` disposes the current `VideoPlayer` and starts the next queued URL in the
 same window; if nothing is queued, `MediaWindowOverlay` closes the window
-automatically. The **queue button** opens a playlist panel docked to the **right**
-of the player (the player slides left to make room when it has no fixed position)
-showing each entry's thumbnail and title. Each row's title comes from
+automatically. The **queue button** opens the shared `QueuePanel` docked to the
+**right** of the player (the player slides left to make room when it has no fixed
+position) showing each entry's thumbnail and title. Each row's title comes from
 `media.MediaTitleCache` (the resolved YouTube video name, or the file name for direct
 links) and is ellipsis-truncated to the row width so it never spills past the panel;
-the compact "mini" panel next to a small player shows thumbnails only. The panel
-matches the player's height and
-**scrolls** when there are more entries than fit, with a scrollbar on the right
-gutter; rows can be **clicked to jump**, **reordered** (up/down arrows) or
-**removed** (×); the mouse wheel scrolls the panel.
+the compact `MINI` panel next to a small player shows thumbnails only. The panel is at
+least as tall as the player, growing past it to fit up to eight rows when the player is
+the shorter of the two, and **scrolls** when there are more entries than fit, with a
+scrollbar on the right gutter; rows can be **clicked to jump**, **reordered** (up/down
+arrows) or **removed** (×); the mouse wheel scrolls the panel. The same panel serves the
+audio bar — see below.
 
 **Volume wheel.** With the cursor over the window (and the panel closed), the plain
 mouse wheel changes the volume in 10% steps; `Ctrl`+wheel always zooms the window.
@@ -669,10 +723,13 @@ on the main thread. Each `Thumb` tracks `IDLE`/`LOADING`/`LOADED`/`FAILED`.
 
 ### Recognized links and the chat label
 
-`MediaSources.isAudio` is true for a single family, disjoint from the image and video
+`MediaSources.isAudio` is true for three families, disjoint from the image and video
 sources: a **direct audio file** (`AudioFileSource` — a path ending in `.mp3`, `.wav`,
-`.ogg`, `.oga`, `.flac`, `.m4a`, `.aac`, `.opus`, `.weba`, `.wma`, `.aiff` or `.aif`).
-The chat label is a green, underlined `[audio]`. (YouTube links stay `VIDEO` in chat —
+`.ogg`, `.oga`, `.flac`, `.m4a`, `.aac`, `.opus`, `.weba`, `.wma`, `.aiff` or `.aif`), a
+**SoundCloud** track page and a **Bandcamp** track or album page. The last two are pages
+and go through yt-dlp like any other; neither site has video, so their links open the
+audio bar rather than the player. The chat labels are a green, underlined `[audio]`,
+`[soundcloud]` and `[bandcamp]`. (YouTube links stay `VIDEO` in chat —
 their click opens the video player; YouTube only becomes audio-only when it is added to
 a **playlist**, see below.)
 
@@ -707,9 +764,18 @@ The audio bar is a `MediaWindow` (anchor group 2, so audio bars cascade independ
 images and videos), anchored bottom-right and stacked upward. Its content row is just a
 music-note glyph and the **track name** (from `media.MediaTitleCache`), so on the HUD —
 where windows draw "picture only" — it stays a tidy bar with the name. Its control row
-carries play/pause, **previous**, **next**, **loop**, **shuffle**, a speaker/mute toggle and a seek bar with an
-elapsed `/` total read-out (a `+N` suffix shows how many tracks are queued). The mouse
-wheel over the bar changes the (shared) volume.
+carries play/pause, **previous**, a pair of **±10 s** skips, **next**, a **queue**
+button while something is queued, **loop**, **shuffle**, a speaker/mute toggle and a seek
+bar with an elapsed `/` total read-out (a `+N` suffix shows how many tracks are queued).
+The mouse wheel over the bar changes the (shared) volume, or scrolls the queue panel
+when the cursor is over it.
+
+The queue button opens the same `QueuePanel` the video player uses, in its `TEXT` layout
+— names in short rows, no thumbnails, since an audio bar has none to show. It docks
+beside the bar exactly as it does beside the player, and the bar caps its own width and
+clamps its position to leave room for it. It is drawn only on a screen that routes
+clicks (`MediaWindow.isInteractive()`): the bar keeps its transport row on the HUD, but a
+list nobody out there can click has no business over the world.
 
 The bar owns a shared `PlayQueue` (the same model the video window uses), which also
 keeps the play **history**: `advance()` plays whatever `PlayQueue.next(current)` returns
@@ -735,7 +801,7 @@ once:
   the window instead of only shuffling the list it is given.
 
 The loop button cycles `OFF → ALL → ONE`, and both toggles are drawn in
-`MediaWindow.BTN_ACTIVE` while on, so "active" never reads as "hovered".
+`Theme.ICON_ACTIVE` while on, so "active" never reads as "hovered".
 
 ## Playlists (`playlist/`, `gui/PlaylistScreen`)
 
@@ -758,6 +824,76 @@ Pasting a **YouTube playlist** link into the add box (or onto the clipboard **In
 expands it into its videos through `YouTubePlaylistResolver` instead of storing the page
 link; the screen counts the in-flight expansions so it can say it is working, and a
 clipboard import of a single playlist also takes its name from YouTube.
+
+## History & favourites (`history/`, `gui/HistoryScreen`)
+
+Everything the mod plays is recorded, so a link that has scrolled out of chat is still
+reachable — and anything worth keeping can be kept.
+
+`HistoryStore` persists to `<gamedir>/liasmediaplayer/history.json`, the same shape as
+`PlaylistStore` and `WindowStateStore`: lazy load, temp file plus atomic move, and never
+thrown from. Entries are most-recent-first; playing something already in the list moves
+it back to the top rather than adding a second line for it, and keeps whatever the user
+did to it. Ordinary entries are bounded at `MAX_ENTRIES` (200); **favourites are not
+counted against that bound, are never evicted, and survive `clear()`** — the whole point
+of the heart is that the entry stops being something that scrolls off the end.
+
+Recording happens where a player actually starts a URL, which is five places: the three
+managers' `open`/`show`, and the two player windows' `playUrl` (the queue advancing).
+`HistoryStore.record(url, kind)` is static and finds the context itself, so none of them
+has to. A queued track that is never reached is never recorded.
+
+The **heart** is a corner button on every media window, beside the browser link: the
+moment you know you want to keep something is while it is playing. It is **filled** once
+the entry is kept and **hollow** while it is not — both drawn from one shape description
+in `Glyphs`, so they cannot drift apart — because the heart sits next to a red "remove"
+cross, where two solid colours read as two different buttons rather than one button's two
+states. It toggles the
+favourite flag for the window's URL, adding a history entry if there is none — a window
+can outlive its entry. The window asks the source registry for the URL's `MediaKind`, so
+an addon's own source lands in the library under its own kind.
+
+`HistoryScreen` (from the **History** button on the playlist screen) shows the playlists
+on the left as the *target* of each row's add button, and the entries on the right with a
+heart, an add and a remove button; each gets a chip behind it on hover, so they read as
+buttons on a row that is itself clickable, and each carries a tooltip (the add button's
+says which playlist it would add to, or to pick one first). A search box filters on title
+or URL, a toggle narrows to favourites, and **Clear** empties the history while keeping
+them. The screen is measured in three bands from the top down — the search row, the two
+column captions, then the lists — so no band can reach into another; the row tooltips go
+through the mod's own `Tooltips` seam, because the rows are drawn by hand rather than by
+widgets and the vanilla deferred-tooltip call was renamed twice across the supported
+versions. Clicking a row plays
+it through `MediaWindowOverlay.play` — the same routing, and the same modifiers, as
+clicking the link in chat. Titles resolve through `MediaTitleCache` for the visible rows
+only, so scrolling a full history does not fire two hundred lookups.
+
+## Link filters (`chat/MediaFilters`, `source/LinkFilter`)
+
+The mod rewrites links posted by anyone, which on a public server is the one thing it can
+be used to be a nuisance with. Three client-side options govern it, all in `ConfigStore`:
+
+- **`LINK_FILTER_MODE`** — `OFF` (anything recognized), `BLOCKLIST` (everything except
+  the blocked hosts) or `ALLOWLIST` (nothing except the allowed ones). Both host lists are
+  kept whichever mode is set, so switching modes does not throw away what was typed into
+  the other one; an empty allow-list under `ALLOWLIST` really does mean "nothing".
+- **`BLOCKED_DOMAINS` / `ALLOWED_DOMAINS`** — comma-separated hosts. A host matches an
+  entry when it *is* that host or a sub-domain of it, compared label by label: a plain
+  `endsWith` would let `evil-discordapp.com` through a `discordapp.com` entry. A leading
+  `www.` is ignored on both sides.
+- **`BLOCKED_SENDERS`** — comma-separated player names. Matched *anywhere* in the
+  sender's display name, because that name arrives with whatever rank or team prefix the
+  server puts on it and an exact match would never fire.
+
+`LinkFilter` holds the matching (lists passed in, so it is unit-testable without a game);
+`MediaFilters` is the policy on top, reading the options. The host check runs inside each
+chat rule, the sender check once in `ClientHooks.onChatReceived` before any rule runs.
+
+Two deliberate limits. Filtering is **purely local** — the message is displayed exactly
+as it arrived, just without a clickable label; nothing is hidden and no message is
+cancelled, which would be a chat filter and a different thing. And it applies to **chat
+only**: a link the player put on their own clipboard, or into a playlist, is theirs. The
+lists exist to govern what other people put in front of you.
 
 ## Keybinds (`input/`)
 

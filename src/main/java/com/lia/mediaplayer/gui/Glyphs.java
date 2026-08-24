@@ -177,6 +177,27 @@ final class Glyphs {
     }
 
     /**
+     * "Add this to a playlist": the {@link #queue} list with its bottom line cut short
+     * for a plus in the corner.
+     *
+     * <p>A bare plus was what this used to be, and a bare plus says "add" without saying
+     * add to <em>what</em> — beside a heart that also adds the entry to something, that
+     * is the whole question. Reusing the list glyph answers it at a glance.</p>
+     */
+    static void addToPlaylist(GuiGraphics g, int x, int y, int color) {
+        // The list, narrowed to the left half to leave the plus a corner of its own —
+        // the two shapes have to stay visibly separate at this size or they read as one
+        // scribble.
+        for (int row = 0; row < 3; row++) {
+            int ry = y + 1 + row * 4;
+            g.fill(x, ry, x + 2, ry + 2, color);     // bullet
+            g.fill(x + 3, ry, x + 6, ry + 1, color); // line
+        }
+        g.fill(x + 7, y + 4, x + BUTTON, y + 6, color); // plus, horizontal
+        g.fill(x + 8, y + 3, x + 10, y + 7, color);     // plus, vertical
+    }
+
+    /**
      * A filled square: stop.
      */
     static void stop(GuiGraphics g, int x, int y, int color) {
@@ -272,18 +293,98 @@ final class Glyphs {
     }
 
     /**
-     * A solid heart: favourites. Like the loop and shuffle toggles it has one shape and
-     * two colours ({@link Theme#ICON_ACTIVE} / {@link Theme#ICON_INACTIVE}) rather than
-     * a filled and a hollow variant, which do not read apart at eleven pixels.
+     * The heart's shape, as {@code {row, first column, last column}} spans inside the
+     * 11x11 button box. Both hearts are drawn from this one description, so the filled
+     * and the hollow one cannot drift apart by a pixel.
+     */
+    private static final int[][] HEART_SPANS = {
+            {2, 2, 4}, {2, 6, 8},                 // the two lobes
+            {3, 1, 9}, {4, 1, 9}, {5, 1, 9},      // the body
+            {6, 2, 8}, {7, 3, 7}, {8, 4, 6}, {9, 5, 5}      // narrowing to the point
+    };
+
+    /** The pixels of {@link #HEART_SPANS} that have a side facing outwards. */
+    private static final int[][] HEART_OUTLINE = outlineOf(HEART_SPANS);
+
+    /**
+     * A solid heart: this one is kept.
      */
     static void heart(GuiGraphics g, int x, int y, int color) {
-        // Two lobes...
-        g.fill(x + 2, y + 2, x + 4, y + 3, color);
-        g.fill(x + 7, y + 2, x + 9, y + 3, color);
-        g.fill(x + 1, y + 3, x + 10, y + 5, color);
-        // ...narrowing to the point.
-        for (int i = 0; i < 4; i++) {
-            g.fill(x + 1 + i, y + 5 + i, x + 10 - i, y + 6 + i, color);
+        for (int[] span : HEART_SPANS) {
+            g.fill(x + span[1], y + span[0], x + span[2] + 1, y + span[0] + 1, color);
+        }
+    }
+
+    /**
+     * The same heart hollow: this one is not kept yet.
+     *
+     * <p>The two states used to be one shape in two colours, which is how the loop and
+     * shuffle toggles work — but those sit among other toggles, while the heart sits
+     * next to a red "remove" cross, where "solid grey" versus "solid red" reads as two
+     * different buttons rather than one button's two states. Filled versus hollow is the
+     * distinction every application uses for this, and it survives the colour.</p>
+     */
+    static void heartOutline(GuiGraphics g, int x, int y, int color) {
+        for (int[] pixel : HEART_OUTLINE) {
+            g.fill(x + pixel[1], y + pixel[0], x + pixel[1] + 1, y + pixel[0] + 1, color);
+        }
+    }
+
+    /**
+     * Turns a filled shape into its outline: every pixel with at least one of its four
+     * sides not covered by the shape. Computed once at class load rather than per frame,
+     * because a list draws a glyph per row per frame.
+     */
+    private static int[][] outlineOf(int[][] spans) {
+        boolean[][] solid = new boolean[BUTTON][BUTTON];
+        for (int[] span : spans) {
+            for (int column = span[1]; column <= span[2]; column++) {
+                solid[span[0]][column] = true;
+            }
+        }
+        java.util.List<int[]> edge = new java.util.ArrayList<>();
+        for (int row = 0; row < BUTTON; row++) {
+            for (int column = 0; column < BUTTON; column++) {
+                if (solid[row][column] && !surrounded(solid, row, column)) {
+                    edge.add(new int[] {row, column});
+                }
+            }
+        }
+        return edge.toArray(new int[0][]);
+    }
+
+    private static boolean surrounded(boolean[][] solid, int row, int column) {
+        return covered(solid, row - 1, column) && covered(solid, row + 1, column)
+                && covered(solid, row, column - 1) && covered(solid, row, column + 1);
+    }
+
+    private static boolean covered(boolean[][] solid, int row, int column) {
+        return row >= 0 && row < solid.length && column >= 0 && column < solid[row].length
+                && solid[row][column];
+    }
+
+    /**
+     * A "jump by a fixed step" glyph: two stacked chevrons pointing back or forward.
+     *
+     * <p>Deliberately not {@link #next}/{@link #previous} with a bar: those already mean
+     * "the next track", and a control that skipped ten seconds while looking like the
+     * one that skips a whole video would be read wrong every time. Chevrons alone say
+     * "within this one".</p>
+     */
+    static void seekStep(GuiGraphics g, int x, int y, boolean forward, int color) {
+        chevron(g, x + (forward ? 1 : 5), y, forward, color);
+        chevron(g, x + (forward ? 5 : 1), y, forward, color);
+    }
+
+    /**
+     * One chevron of {@link #seekStep}: five rows widening to the point and back.
+     */
+    private static void chevron(GuiGraphics g, int x, int y, boolean forward, int color) {
+        int top = y + 3;
+        for (int i = 0; i < 5; i++) {
+            int depth = Math.min(i, 4 - i);      // 0,1,2,1,0 — the tip is the middle row
+            int px = forward ? x + depth : x + 2 - depth;
+            g.fill(px, top + i, px + 2, top + i + 1, color);
         }
     }
 

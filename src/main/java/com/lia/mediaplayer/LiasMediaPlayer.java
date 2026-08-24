@@ -55,6 +55,12 @@ public final class LiasMediaPlayer {
         // Load persisted volume.
         context.getVolumeManager().load();
 
+        // And the settings. This used to happen on the first read that asked for it
+        // (the video resolution, when something was played), which was late enough that
+        // anything consulted earlier — the link filters, on the first chat message —
+        // would have answered from the declared defaults rather than from the file.
+        context.getConfigStore().ensureLoaded();
+
         return context;
     }
 

@@ -17,6 +17,12 @@ final class MediaControls {
      * the same one the click handlers already accept.
      */
     static final int SEEK_GRAB = 3;
+    /**
+     * How far the two skip buttons jump. Ten seconds is the step every video player
+     * uses; it lives here so the video bar and the audio bar cannot disagree about it,
+     * and so the tooltip and the action are written from one number.
+     */
+    static final long SKIP_MICROS = 10_000_000L;
 
     private MediaControls() {
     }

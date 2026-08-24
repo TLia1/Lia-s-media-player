@@ -36,6 +36,7 @@ public class AudioPlayerManager {
      */
     public AudioWindow open(String url) {
         evictIfFull();
+        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.AUDIO);
         AudioPlayer player = new AudioPlayer(url);
         AudioWindow window = new AudioWindow(player);
         windows.add(window);

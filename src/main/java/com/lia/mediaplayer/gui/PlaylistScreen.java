@@ -142,7 +142,13 @@ public final class PlaylistScreen extends Screen {
                 .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.liasmediaplayer.playlists.tooltip.import")))
                 .build());
 
-        // Bottom: close.
+        // Bottom: the library, then close.
+        addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.history"),
+                        b -> Screens.open(new HistoryScreen(this)))
+                .bounds(Math.max(4, width / 2 - 164), height - 26, 80, 20)
+                .tooltip(net.minecraft.client.gui.components.Tooltip.create(
+                        Component.translatable("gui.liasmediaplayer.playlists.tooltip.history")))
+                .build());
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"), b -> onClose())
                 .bounds(width / 2 - 80, height - 26, 160, 20).build());
 

@@ -9,7 +9,9 @@ import com.lia.mediaplayer.api.config.EnumOption;
 import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.OptionWidth;
 import com.lia.mediaplayer.api.config.StepSliderOption;
+import com.lia.mediaplayer.api.config.StringOption;
 import com.lia.mediaplayer.gui.WindowPosition;
+import com.lia.mediaplayer.source.FilterMode;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
@@ -46,6 +48,14 @@ public class ConfigStore {
     public static final IntSliderOption MAX_IMAGE_CACHE_MEGABYTES;
     public static final IntSliderOption YT_DLP_TIMEOUT_SECONDS;
     public static final EnumOption<WindowPosition> DEFAULT_WINDOW_POSITION;
+    // The client-side link filters (see com.lia.mediaplayer.chat.MediaFilters). Both
+    // host lists are kept, not one list whose meaning depends on the mode: switching
+    // the mode to look at the other list should not throw away what was typed into
+    // this one.
+    public static final EnumOption<FilterMode> LINK_FILTER_MODE;
+    public static final StringOption BLOCKED_DOMAINS;
+    public static final StringOption ALLOWED_DOMAINS;
+    public static final StringOption BLOCKED_SENDERS;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
@@ -92,6 +102,19 @@ public class ConfigStore {
                 WindowPosition.CENTER
         );
         DEFAULT_WINDOW_POSITION.withDescription("config.liasmediaplayer.default_window_position.description");
+        LINK_FILTER_MODE = new EnumOption<>(
+                "liasmediaplayer:link_filter_mode",
+                "liasmediaplayer",
+                "config.liasmediaplayer.link_filter_mode",
+                FilterMode.OFF
+        );
+        LINK_FILTER_MODE.withDescription("config.liasmediaplayer.link_filter_mode.description");
+        BLOCKED_DOMAINS = (StringOption) new StringOption("liasmediaplayer:blocked_domains", "liasmediaplayer", "config.liasmediaplayer.blocked_domains", "")
+                .withDescription("config.liasmediaplayer.blocked_domains.description");
+        ALLOWED_DOMAINS = (StringOption) new StringOption("liasmediaplayer:allowed_domains", "liasmediaplayer", "config.liasmediaplayer.allowed_domains", "")
+                .withDescription("config.liasmediaplayer.allowed_domains.description");
+        BLOCKED_SENDERS = (StringOption) new StringOption("liasmediaplayer:blocked_senders", "liasmediaplayer", "config.liasmediaplayer.blocked_senders", "")
+                .withDescription("config.liasmediaplayer.blocked_senders.description");
     }
 
     public ConfigStore() {
@@ -105,6 +128,10 @@ public class ConfigStore {
         register(FRAME_QUEUE_CAPACITY);
         register(YT_DLP_TIMEOUT_SECONDS);
         register(DEFAULT_WINDOW_POSITION);
+        register(LINK_FILTER_MODE);
+        register(BLOCKED_DOMAINS);
+        register(ALLOWED_DOMAINS);
+        register(BLOCKED_SENDERS);
     }
 
     public synchronized void register(ConfigOption<?> option) {

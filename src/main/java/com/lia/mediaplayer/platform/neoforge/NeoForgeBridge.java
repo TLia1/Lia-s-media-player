@@ -6,6 +6,7 @@ import com.lia.mediaplayer.input.ModKeybinds;
 import com.lia.mediaplayer.platform.ClientHooks;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.ChatType;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -40,12 +41,23 @@ public final class NeoForgeBridge {
 
     @SubscribeEvent
     public static void onSystemChatReceived(ClientChatReceivedEvent.System event) {
-        event.setMessage(ClientHooks.onChatReceived(event.getMessage()));
+        event.setMessage(ClientHooks.onChatReceived(event.getMessage(), null));
     }
 
     @SubscribeEvent
     public static void onPlayerChatReceived(ClientChatReceivedEvent.Player event) {
-        event.setMessage(ClientHooks.onChatReceived(event.getMessage()));
+        event.setMessage(ClientHooks.onChatReceived(event.getMessage(), senderName(event)));
+    }
+
+    /**
+     * The sender's display name, or {@code null} when the message has no bound chat type
+     * to take one from. The event also carries the sender's UUID, but a name is what the
+     * filter lists are written in — and it is the same field the Fabric bridge reads, so
+     * the two loaders feed the hook the same string.
+     */
+    private static String senderName(ClientChatReceivedEvent event) {
+        ChatType.Bound bound = event.getBoundChatType();
+        return bound == null ? null : bound.name().getString();
     }
 
     @SubscribeEvent

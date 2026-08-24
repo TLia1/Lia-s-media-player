@@ -25,7 +25,7 @@ public final class VideoChatHandler {
         @Override
         public boolean matches(String url) {
             com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
-            return ctx != null && ctx.getMediaSources().isVideo(url);
+            return ctx != null && ctx.getMediaSources().isVideo(url) && MediaFilters.allowsUrl(url);
         }
 
         @Override

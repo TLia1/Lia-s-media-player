@@ -14,9 +14,10 @@ ever leaving the game.
 When a link to an image or video appears in chat, the mod quietly replaces the raw URL with a short, colored label:
 
 - A gold **[picture]** for images
-- A gold **[gif]** for Tenor GIFs
-- An aqua, underlined **video label** for videos, YouTube links, YouTube playlists, and Twitch streams
-- A green, underlined **[audio]** label for audio files
+- A gold **[gif]** for Tenor and Giphy GIFs
+- An aqua, underlined **video label** for videos, YouTube links, YouTube playlists, Twitch streams, Vimeo, Streamable
+and Reddit videos
+- A green, underlined **audio label** for audio files, SoundCloud tracks and Bandcamp releases
 
 ---
 
@@ -57,12 +58,16 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 - **YouTube links**: normal `watch` links, `youtu.be` short links, and Shorts
 - **YouTube playlists**: a `youtube.com/playlist?list=...` page — clicking it queues the whole list
 - **Twitch streams**: channel and VOD links
+- **Vimeo**: a `vimeo.com/<id>` page or an embed link
+- **Streamable**: a `streamable.com/<id>` clip
+- **Reddit videos**: a `v.redd.it` link, or the comment page a video was posted on
 
 **The player window** gives you full controls:
 
 - A **title bar** naming what is playing — the real YouTube title, or the file name — with the window buttons on it
   instead of sitting on top of the picture
-- **Play / pause**
+- **Play / pause**, and a pair of **-10s / +10s** buttons for the jump you actually want most of the time. They grey
+out for a live stream, which has no position to jump within
 - A **seek bar** with elapsed and total time, so you can scrub to any point. It grows and shows its handle when you
   point at it, so you can tell a bar you can drag from one that is only reporting progress. Seeking (and resuming after
   a pause) restarts the decoder, which takes about a second — the bar stays where you put it and a spinner says the
@@ -76,7 +81,8 @@ Hovering over a video label provides a handy tooltip reminder of your options.
 **A built-in queue.** Instead of cluttering your screen with a new window for every link, extra videos are added to the
 current player's queue. When one finishes (or you press next), the window automatically swaps to the next video in
 place. The queue panel shows each entry's thumbnail and its real video name (the actual YouTube title, or the file
-name), so you can tell what's coming up at a glance.
+name), so you can tell what's coming up at a glance. Click a row to jump straight to it, use the arrows to reorder, or
+the cross to drop one.
 
 **Whole YouTube playlists.** Click a **[youtube playlist]** label and the mod reads the playlist (it takes a moment)
 and queues every video in it, in order — alt-click to listen to it as audio only. Turn on **loop** and it plays
@@ -127,18 +133,20 @@ can listen without a big window in the way. Hovering over an audio label will pr
 **What it can play:**
 
 - **Direct audio files** shared in chat: MP3, WAV, OGG/OGA, FLAC, M4A, AAC, OPUS, WEBA, WMA and AIFF
+- **SoundCloud** tracks and **Bandcamp** releases — no video on either, so they open the bar rather than a player
 
 **The bar gives you:**
 
-- **Play / pause**, **previous** and **next**
+- **Play / pause**, **previous**, **-10s / +10s** and **next**
 - A **loop** button that cycles through *off → loop the whole queue → loop this track*
 - A **shuffle** button — with loop on, every round is reshuffled instead of repeating the same order
 - A **seek bar** with elapsed and total time
 - A **speaker toggle**, plus scroll the mouse wheel over the bar to change the volume
 
 **A built-in queue, just like videos.** Click more audio links, and they line up behind the current one; the bar plays
-them one after another and the time read-out shows how many are waiting (a little `+N`). The volume is shared with the
-video player, so one setting controls everything.
+them one after another and the time read-out shows how many are waiting (a little `+N`). A **queue** button opens the
+same panel the video player has, listing the tracks by name — click one to jump to it, reorder them, or drop one. The
+volume is shared with the video player, so one setting controls everything.
 
 **Keeps playing in the background.** Hide the bar and the music keeps going; while no menu is open it stays on your HUD
 showing the track name. The same top-left button that brings hidden videos back works for hidden audio bars too.
@@ -162,6 +170,22 @@ Your playlists are **saved to disk**, so they're still there next time you play.
 
 ---
 
+## History and favourites
+
+Every picture, video and track the mod plays is remembered, so a link that has scrolled out of chat is still one click
+away. Press **History** at the bottom of the Playlists screen to open the library.
+
+- **The list** shows what you played, most recent first, with the real name of each entry. Click one to play it again —
+same behaviour as clicking the link in chat, modifiers included.
+- **The heart** keeps an entry. There is one on every media window too, next to the browser button, so you can keep
+something while it is playing.
+- **Favourites are never forgotten.** The ordinary history is capped and the oldest entries fall off the end, but a
+favourite does not count against that cap, is never evicted, and survives the **Clear** button.
+- **Add to a playlist** without retyping the link: pick a playlist on the left, then press **+** on any entry.
+- A **search box** filters by name or URL, and a toggle narrows the list to favourites only.
+
+---
+
 ## Mod Options
 
 The mod now features a configurable options menu where you can tailor its behavior to your liking.
@@ -177,6 +201,10 @@ default. The button is greyed out while the option is already at its default.
 - **Resource Limits:** Adjust the maximum number of pinned images, video players, audio players, cached entries, and GIF
 frames to optimize memory usage based on your computer's capabilities.
 - **Advanced Limits:** You can also configure the video frame queue capacity, max image cache in megabytes, and yt-dlp timeout. Watch out for red tooltips indicating sensitive settings!
+- **Link filter:** Decide whose links become playable. Set it to `BLOCKLIST` and list the domains you never want to
+open, or to `ALLOWLIST` and list the only ones you do — sub-domains are covered either way. There is also a
+**blocked senders** list for players whose links you would rather the mod ignored entirely. All of it is local: the
+message still shows exactly what was written, it just stops being something the mod will play.
 - All options are saved automatically and persist between sessions.
 ---
 

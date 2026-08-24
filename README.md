@@ -14,10 +14,15 @@ watchable (and listenable) media — without ever leaving the game.
   import it into one of your saved playlists.
 - **Loop** a queue or a single track, with every looped round reshuffled while
   shuffle is on.
+- Keep what you liked: everything played goes into a **history**, and a heart on any
+  window (or any history row) keeps it there for good.
+- Decide what gets played at all with client-side **domain and sender filters** — useful
+  on a busy public server.
 - Drive the audio player with **configurable keybinds** (play/pause, next, previous,
   open playlists).
-- Supports direct image, video and audio files, animated Tenor GIFs, HLS/DASH streams
-  and YouTube — with zero manual setup for most things.
+- Supports direct image, video and audio files, animated Tenor and Giphy GIFs, HLS/DASH
+  streams, YouTube, Twitch, Vimeo, Streamable, Reddit, SoundCloud and Bandcamp — with
+  zero manual setup for most things.
 
 It is purely cosmetic / quality-of-life: it only changes how your own client
 displays links it receives in chat. It does not touch gameplay, the world, or what

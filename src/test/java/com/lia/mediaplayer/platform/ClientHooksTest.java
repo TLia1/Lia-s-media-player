@@ -2,6 +2,7 @@ package com.lia.mediaplayer.platform;
 
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.config.ConfigStore;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,20 +45,42 @@ class ClientHooksTest {
     @AfterEach
     void tearDown() {
         LiasMediaPlayerApi.setInstance(null);
+        // The options are static, so a test that sets one would leak into the next.
+        ConfigStore.BLOCKED_SENDERS.resetToDefault();
     }
 
     @Test
     void onChatReceived_LeavesAMessageWithoutLinksAlone() {
         Component message = Component.literal("hello there");
 
-        assertSame(message, ClientHooks.onChatReceived(message));
+        assertSame(message, ClientHooks.onChatReceived(message, null));
     }
 
     @Test
     void onChatReceived_LeavesALinkNoMediaSourceClaimsAlone() {
         Component message = Component.literal("see https://example.com/page.html for details");
 
-        assertSame(message, ClientHooks.onChatReceived(message));
+        assertSame(message, ClientHooks.onChatReceived(message, null));
+    }
+
+    @Test
+    void onChatReceived_LeavesABlockedSendersMessageAlone() {
+        // Not just "does not rewrite it": the same instance, which is what tells the
+        // Fabric bridge to leave the line to vanilla instead of re-injecting it.
+        ConfigStore.BLOCKED_SENDERS.setValue("griefer");
+        Component message = Component.literal("watch https://example.com/video.mp4 now");
+
+        assertSame(message, ClientHooks.onChatReceived(message, "[VIP] Griefer"));
+    }
+
+    @Test
+    void onChatReceived_StillReadsAnUnblockedSender() {
+        // The counterpart of the test above: a name that is not on the list has to reach
+        // the rules, and a link nothing claims still comes back untouched.
+        ConfigStore.BLOCKED_SENDERS.setValue("griefer");
+        Component message = Component.literal("see https://example.com/page.html");
+
+        assertSame(message, ClientHooks.onChatReceived(message, "Steve"));
     }
 
     @Test
@@ -67,6 +90,6 @@ class ClientHooksTest {
         LiasMediaPlayerApi.setInstance(null);
         Component message = Component.literal("watch https://example.com/video.mp4 now");
 
-        assertSame(message, ClientHooks.onChatReceived(message));
+        assertSame(message, ClientHooks.onChatReceived(message, null));
     }
 }

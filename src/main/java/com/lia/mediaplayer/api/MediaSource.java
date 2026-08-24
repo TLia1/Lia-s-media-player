@@ -38,4 +38,23 @@ public interface MediaSource {
      * {@code [youtube]}). The caller applies the colour/click style.
      */
     Component label(String url);
+
+    /**
+     * Whether a link this source claims is a <em>web page</em> that has to be run
+     * through the external extractor ({@code yt-dlp}) before {@code ffmpeg} can open
+     * it, rather than a media file {@code ffmpeg} can be pointed at directly.
+     *
+     * <p>{@code false} by default, which is right for every direct-file source. A
+     * source for a site whose links are pages — YouTube, Twitch, SoundCloud,
+     * Vimeo — returns {@code true}, and that is the whole of what
+     * {@link com.lia.mediaplayer.media.MediaUrlResolver} needs to know about it. Before
+     * this, the resolver named the two page sources it knew about, so a new one meant
+     * editing the playback engine as well as adding a source; now it asks the registry.</p>
+     *
+     * <p>Ignored for {@link MediaKind#IMAGE} sources: the image pipeline does not use
+     * the extractor at all.</p>
+     */
+    default boolean requiresExtractor() {
+        return false;
+    }
 }
