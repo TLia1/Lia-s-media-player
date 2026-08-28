@@ -9,6 +9,8 @@ import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPosition
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
+
 /**
  * The mod's single point of contact with tooltips, in both senses: <em>how</em> one is
  * drawn immediately (a call that was renamed twice across the supported versions), and
@@ -76,7 +78,7 @@ final class Tooltips {
         // above. Building the component list by hand and calling renderTooltip keeps it
         // immediate, which is what every version before 1.21.6 did.
         g.renderTooltip(mc.font,
-                java.util.List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
+                List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
                 mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
         *///?} else {
         /*// 26.1 dropped the immediate renderTooltip overloads entirely, but kept the
@@ -85,7 +87,7 @@ final class Tooltips {
         // through extractDeferredElements, and that closure calls this public `tooltip`
         // method. Calling it directly keeps the tooltip immediate exactly as on 1.21.6.
         g.tooltip(mc.font,
-                java.util.List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
+                List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
                 mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
         *///?}
         GuiLayer.pop(g);

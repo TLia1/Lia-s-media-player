@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.chat.ChatEvents;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 import net.minecraft.client.gui.GuiGraphics;
@@ -40,7 +41,7 @@ final class ImageHoverPreview {
             return;
         }
 
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx == null) return;
 
         if (!ctx.getMediaSources().isImage(url)) {
@@ -55,7 +56,7 @@ final class ImageHoverPreview {
         }
 
         // Starts the async download on first hover.
-        ImagePreviewCache.Entry entry = ImagePreviewCache.getOrLoad(url);
+        ImagePreviewCache.Entry entry = MediaPlayerContext.get().getImagePreviewCache().getOrLoad(url);
         switch (entry.state) {
             case LOADED -> {
                 if (entry.currentFrame() != null) {

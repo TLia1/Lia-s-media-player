@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.chat;
 
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -7,7 +9,7 @@ import net.minecraft.network.chat.Style;
 /**
  * Rewrites incoming chat so direct audio links become a green, underlined
  * {@code [audio]} label. Clicking the label is handled by
- * {@link com.lia.mediaplayer.gui.MediaWindowOverlay}, which queues / opens the in-game
+ * {@link MediaWindowOverlay}, which queues / opens the in-game
  * audio bar; this class only does the chat rewrite and the disconnect cleanup.
  *
  * <p>The component-walking is delegated to {@link ChatLinkRewriter}; this class only
@@ -23,14 +25,14 @@ public final class AudioChatHandler {
     private static final ChatLinkRewriter.LinkRewrite AUDIO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isAudio(url) && MediaFilters.allowsUrl(url);
         }
 
         @Override
         public Component label(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
-            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.literal("[audio]");
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
+            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.translatable("chat.liasmediaplayer.label.audio");
         }
 
         @Override
@@ -56,7 +58,7 @@ public final class AudioChatHandler {
 
     /** Drops every open audio bar when leaving a world. */
     public static void onDisconnect() {
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx != null) {
             ctx.getAudioManager().disposeAll();
         }

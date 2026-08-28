@@ -14,8 +14,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -36,6 +34,12 @@ import java.util.concurrent.CompletionException;
  * mutated on the render/main thread. While a YouTube title is loading,
  * {@link #getOrLoad} returns a sensible placeholder so the panel never shows a blank
  * row. All public methods must be called from the main thread.</p>
+ *
+ * <p>One instance, owned by {@code MediaPlayerContext} and reached through
+ * {@code MediaPlayerContext.get().getTitleCache()}. It used to be a static holder, which
+ * made a cache with a lifecycle (cleared on disconnect) and a bound look like a utility;
+ * the store it is built on, {@link MediaCache}, carries the eviction policy and is
+ * tested on its own.</p>
  */
 public final class MediaTitleCache {
     private static final int MAX_ENTRIES = 128;
@@ -48,15 +52,7 @@ public final class MediaTitleCache {
      */
     private static final int MAX_OEMBED_BYTES = 64 * 1024;
 
-    private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
-            return size() > MAX_ENTRIES;
-        }
-    };
-
-    private MediaTitleCache() {
-    }
+    private final MediaCache<Entry> cache = new MediaCache<>(() -> MAX_ENTRIES, null);
 
     /**
      * Returns the best title known for a URL, starting a one-off background load the
@@ -64,8 +60,8 @@ public final class MediaTitleCache {
      * placeholder while a title is still loading, the file name for direct links, or
      * the resolved video title once available.
      */
-    public static String getOrLoad(String url) {
-        Entry entry = CACHE.computeIfAbsent(url, MediaTitleCache::newEntry);
+    public String getOrLoad(String url) {
+        Entry entry = cache.computeIfAbsent(url, MediaTitleCache::newEntry);
         if (entry.state == State.IDLE) {
             // Direct files already have their final title (the file name); only
             // YouTube links need a network round-trip.
@@ -84,23 +80,23 @@ public final class MediaTitleCache {
      * A caller that shows a title once — a transient banner rather than a panel
      * redrawn every frame — uses this to wait for the real one.
      */
-    public static boolean isLoading(String url) {
-        Entry entry = CACHE.get(url);
+    public boolean isLoading(String url) {
+        Entry entry = cache.get(url);
         return entry != null && entry.state == State.LOADING;
     }
 
     /**
      * Drops every cached title (e.g. when leaving a server).
      */
-    public static void clear() {
-        CACHE.clear();
+    public void clear() {
+        cache.clear();
     }
 
     private static Entry newEntry(String url) {
         return new Entry(fallbackLabel(url));
     }
 
-    private static void startLoading(String url, Entry entry) {
+    private void startLoading(String url, Entry entry) {
         entry.state = State.LOADING;
         CompletableFuture
                 .supplyAsync(() -> fetchYouTubeTitle(url), Util.ioPool())
@@ -153,9 +149,9 @@ public final class MediaTitleCache {
     // Main thread — publish the result
     // ------------------------------------------------------------------
 
-    private static void onComplete(String url, Entry entry, String title, Throwable error) {
+    private void onComplete(String url, Entry entry, String title, Throwable error) {
         // The entry may have been evicted while the load was in flight.
-        if (CACHE.get(url) != entry) {
+        if (cache.get(url) != entry) {
             return;
         }
         if (error != null || title == null || title.isBlank()) {

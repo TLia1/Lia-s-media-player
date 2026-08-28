@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -7,16 +9,16 @@ import org.jetbrains.annotations.Nullable;
  * A Giphy share page ({@code giphy.com/gifs/<slug>-<id>} or {@code giphy.com/clips/...}).
  *
  * <p>The sibling of {@link TenorSource}: a page rather than an image, claimed as
- * {@link com.lia.mediaplayer.api.MediaKind#IMAGE} and turned into the GIF behind it
+ * {@link MediaKind#IMAGE} and turned into the GIF behind it
  * before the preview cache downloads anything. Unlike Tenor, no page fetch is needed —
  * the media id is the last dash-separated token of the slug, and Giphy serves every GIF
  * from a fixed endpoint built out of it ({@link #directGif}). Giphy's own
  * {@code media*.giphy.com/.../giphy.gif} links end in {@code .gif} and are already
  * claimed by {@link ImageFileSource}.</p>
  */
-public final class GiphySource implements com.lia.mediaplayer.api.MediaSource {
+public final class GiphySource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[gif]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.gif");
 
     @Override
     public boolean matches(String url) {
@@ -24,8 +26,8 @@ public final class GiphySource implements com.lia.mediaplayer.api.MediaSource {
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.IMAGE;
+    public MediaKind kind() {
+        return MediaKind.IMAGE;
     }
 
     @Override

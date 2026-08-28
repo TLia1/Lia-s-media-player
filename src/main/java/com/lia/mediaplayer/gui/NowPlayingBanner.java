@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -62,7 +63,7 @@ final class NowPlayingBanner {
      */
     static void show(String mediaUrl) {
         url = mediaUrl;
-        MediaTitleCache.getOrLoad(mediaUrl); // start the lookup now, not on the first frame
+        MediaPlayerContext.get().getTitleCache().getOrLoad(mediaUrl); // start the lookup now, not on the first frame
         requestedAt = Anim.now();
         shownAt = 0;
     }
@@ -87,7 +88,7 @@ final class NowPlayingBanner {
         if (shownAt == 0) {
             // Still waiting on the real name. Give up after MAX_WAIT_MS so a lookup
             // that fails, or a server that never answers, still announces something.
-            if (MediaTitleCache.isLoading(mediaUrl) && Anim.now() - requestedAt < MAX_WAIT_MS) {
+            if (MediaPlayerContext.get().getTitleCache().isLoading(mediaUrl) && Anim.now() - requestedAt < MAX_WAIT_MS) {
                 return;
             }
             shownAt = Anim.now();
@@ -98,7 +99,7 @@ final class NowPlayingBanner {
             return;
         }
         Component message = Component.translatable("gui.liasmediaplayer.now_playing",
-                MediaTitleCache.getOrLoad(mediaUrl));
+                MediaPlayerContext.get().getTitleCache().getOrLoad(mediaUrl));
         double alpha = Anim.inOut(t, HOLD);
         // Vanilla's font renderer treats a colour whose alpha byte is (near) zero as
         // fully opaque, so the very start and end of the fade would flash at full

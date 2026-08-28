@@ -3,9 +3,27 @@ package com.lia.mediaplayer.api.config;
 import com.google.gson.JsonElement;
 import net.minecraft.client.gui.components.AbstractWidget;
 
+import java.util.Objects;
+
 /**
  * Represents a single configuration option that can be registered in the
  * Media Player's configuration menu.
+ *
+ * <p><b>Chaining.</b> {@link #withDescription}, {@link #withWarning} and
+ * {@link #withWidth} are declared here and so answer {@code ConfigOption<T>}, which is
+ * not the type a declaration wants back: {@code IntSliderOption x = new
+ * IntSliderOption(...).withDescription(...)} does not compile, and every built-in option
+ * used to carry a downcast to say so. Each subclass therefore <b>overrides all three
+ * covariantly</b>, returning its own type — the whole body being {@code super}, a cast,
+ * and {@code this}, once, in the one place that can prove the cast is sound.</p>
+ *
+ * <p>The alternative was the self-typed shape, {@code ConfigOption<T, SELF extends
+ * ConfigOption<T, SELF>>}, which gets the same result with no per-subclass code and
+ * gives it to an addon's own option type for free. It was not taken because this class
+ * is in {@code api}: adding a type parameter breaks every {@code ConfigOption<?>} an
+ * addon has already written, and three overrides per subclass is a cheaper price than a
+ * breaking change to the surface other mods compile against. A subclass that skips them
+ * loses nothing it had before.</p>
  *
  * @param <T> the type of value this option stores
  */
@@ -122,7 +140,7 @@ public abstract class ConfigOption<T> {
      * to decide if there is anything for its reset button to undo.
      */
     public boolean isDefault() {
-        return java.util.Objects.equals(currentValue, defaultValue);
+        return Objects.equals(currentValue, defaultValue);
     }
 
     /**

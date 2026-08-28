@@ -12,7 +12,8 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
     private final T[] steps;
     private final Function<T, String> displayFormatter;
 
-    public StepSliderOption(String id, String group, String translationKey, int defaultIndex, T[] steps, Function<T, String> displayFormatter) {
+    public StepSliderOption(String id, String group, String translationKey, int defaultIndex,
+                            T[] steps, Function<T, String> displayFormatter) {
         super(id, group, translationKey, defaultIndex);
         this.steps = steps;
         this.displayFormatter = displayFormatter;
@@ -53,7 +54,8 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
 
             @Override
             protected void updateMessage() {
-                this.setMessage(Component.translatable(getTranslationKey()).append(Component.literal(": " + displayFormatter.apply(steps[getIntValue()]))));
+                this.setMessage(Component.translatable(getTranslationKey())
+                        .append(Component.literal(": " + displayFormatter.apply(steps[getIntValue()]))));
             }
 
             @Override
@@ -81,6 +83,26 @@ public class StepSliderOption<T> extends ConfigOption<Integer> {
     private double getSliderValue() {
         int lastIndex = steps.length - 1;
         return lastIndex <= 0 ? 0.0 : (double) clampIndex(getValue()) / lastIndex;
+    }
+
+    // ---- Covariant builder overrides (see ConfigOption's javadoc) ------------
+
+    @Override
+    public StepSliderOption<T> withDescription(String descriptionKey) {
+        super.withDescription(descriptionKey);
+        return this;
+    }
+
+    @Override
+    public StepSliderOption<T> withWarning(String warningKey) {
+        super.withWarning(warningKey);
+        return this;
+    }
+
+    @Override
+    public StepSliderOption<T> withWidth(OptionWidth width) {
+        super.withWidth(width);
+        return this;
     }
 }
 

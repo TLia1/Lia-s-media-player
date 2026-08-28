@@ -3,7 +3,9 @@ package com.lia.mediaplayer.video;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.gui.TextureBridge;
 import com.lia.mediaplayer.image.GifDecoder;
+import com.lia.mediaplayer.media.MediaCache;
 import com.lia.mediaplayer.media.MediaUrlResolver;
+import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubeSource;
 import com.lia.mediaplayer.tools.FFmpegCli;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -20,9 +22,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,6 +40,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Loading happens on the IO pool; the texture is created back on
  * the render/main thread. All public methods must be called from the main thread.</p>
+ *
+ * <p>One instance, owned by {@code MediaPlayerContext} and reached through
+ * {@code MediaPlayerContext.get().getThumbnailCache()}. Every entry holds a GPU texture,
+ * which is why the eviction policy lives in {@link MediaCache} and is tested there: an
+ * entry that leaves the map without {@link Thumb#release()} running is a texture the
+ * game never gets back, and nothing in the game says so.</p>
  */
 public final class VideoThumbnailCache {
     /**
@@ -50,25 +56,13 @@ public final class VideoThumbnailCache {
     private static final int MAX_ENTRIES = 64;
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
-    private static final LinkedHashMap<String, Thumb> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Thumb> eldest) {
-            if (size() > MAX_ENTRIES) {
-                eldest.getValue().release();
-                return true;
-            }
-            return false;
-        }
-    };
-
-    private VideoThumbnailCache() {
-    }
+    private final MediaCache<Thumb> cache = new MediaCache<>(() -> MAX_ENTRIES, Thumb::release);
 
     /**
      * Returns the thumbnail for a URL, starting a one-off background load the first time.
      */
-    public static Thumb getOrLoad(String url) {
-        Thumb thumb = CACHE.computeIfAbsent(url, u -> new Thumb());
+    public Thumb getOrLoad(String url) {
+        Thumb thumb = cache.computeIfAbsent(url, u -> new Thumb());
         if (thumb.state == State.IDLE) {
             startLoading(url, thumb);
         }
@@ -78,12 +72,11 @@ public final class VideoThumbnailCache {
     /**
      * Drops every cached thumbnail (e.g. when leaving a server).
      */
-    public static void clear() {
-        CACHE.values().forEach(Thumb::release);
-        CACHE.clear();
+    public void clear() {
+        cache.clear();
     }
 
-    private static void startLoading(String url, Thumb thumb) {
+    private void startLoading(String url, Thumb thumb) {
         thumb.state = State.LOADING;
         CompletableFuture
                 .supplyAsync(() -> build(url), Util.ioPool())
@@ -131,7 +124,7 @@ public final class VideoThumbnailCache {
     }
 
     private static BufferedImage downloadImage(String imageUrl) throws IOException {
-        if (!com.lia.mediaplayer.source.Urls.isHttp(imageUrl)) {
+        if (!Urls.isHttp(imageUrl)) {
             throw new IOException("Refusing to fetch a non-http(s) thumbnail: " + imageUrl);
         }
         HttpURLConnection connection = (HttpURLConnection) URI.create(imageUrl).toURL().openConnection();
@@ -226,7 +219,7 @@ public final class VideoThumbnailCache {
     // Main thread — create the texture and publish it
     // ------------------------------------------------------------------
 
-    private static void onComplete(String url, Thumb thumb, @Nullable BufferedImage image, @Nullable Throwable error) {
+    private void onComplete(String url, Thumb thumb, @Nullable BufferedImage image, @Nullable Throwable error) {
         if (error != null || image == null) {
             thumb.state = State.FAILED;
             Throwable cause = error instanceof CompletionException && error.getCause() != null
@@ -235,7 +228,7 @@ public final class VideoThumbnailCache {
             return;
         }
         // The entry may have been evicted while the load was in flight.
-        if (thumb.disposed || CACHE.get(url) != thumb) {
+        if (thumb.disposed || cache.get(url) != thumb) {
             return;
         }
         try {
@@ -346,7 +339,7 @@ public final class VideoThumbnailCache {
             return state == State.LOADED && texture != null;
         }
 
-        void release() {
+        public void release() {
             disposed = true;
             if (texture != null) {
                 TextureBridge.release(texture);

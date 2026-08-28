@@ -5,19 +5,20 @@
 package com.lia.mediaplayer.api.event;
 
 import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.api.MediaSourceProvider;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Handed to every registered {@link com.lia.mediaplayer.api.MediaSourceProvider} during
+ * Handed to every registered {@link MediaSourceProvider} during
  * Lia's Media Player initialization so it can contribute custom {@link MediaSource}s.
  *
  * <p>This used to be a NeoForge mod-bus event. It is now a plain object, because the mod
  * ships for two loaders and Fabric has no global event bus to post it on: the loader
  * decides how providers are <em>discovered</em>, and this type is what they are all
- * handed once discovered. See {@link com.lia.mediaplayer.api.MediaSourceProvider} for
+ * handed once discovered. See {@link MediaSourceProvider} for
  * how to register one on each loader.</p>
  *
  * <p>This is part of the <b>public API</b>.</p>

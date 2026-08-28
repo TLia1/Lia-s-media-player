@@ -5,19 +5,14 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.lia.mediaplayer.LiasMediaPlayer;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.gui.WindowStateStore;
+import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.Urls;
-import net.minecraft.client.Minecraft;
+import com.lia.mediaplayer.storage.JsonFileStore;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -31,15 +26,18 @@ import java.util.List;
  * of what was played, most recent first, and a heart on each entry that takes it out of
  * the bound.</p>
  *
- * <p>Same shape as {@link com.lia.mediaplayer.playlist.PlaylistStore} and
- * {@link com.lia.mediaplayer.gui.WindowStateStore}: loaded lazily, written through a
- * temp file and an atomic move, and never thrown from. The JSON is built field by field
- * rather than by reflection, because the Gson that ships with Minecraft ranges from 2.8
- * to 2.14 across the fourteen targets and record support only arrived in 2.10.</p>
+ * <p>Same shape as {@link PlaylistStore} and
+ * {@link WindowStateStore}: loaded lazily, written through a
+ * {@link JsonFileStore} (temp file plus atomic move), and never thrown from. The JSON is
+ * built field by field rather than by reflection, because the Gson that ships with
+ * Minecraft ranges from 2.8 to 2.14 across the fourteen targets and record support only
+ * arrived in 2.10.</p>
  */
 public final class HistoryStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    private final JsonFileStore file = new JsonFileStore("history.json");
 
     /**
      * How many ordinary entries are kept. Favourites are <em>not</em> counted against
@@ -68,8 +66,7 @@ public final class HistoryStore {
      * the thing that knows how to find itself, so it does.</p>
      */
     public static void record(String url, MediaKind kind) {
-        com.lia.mediaplayer.MediaPlayerContext context =
-                (com.lia.mediaplayer.MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
         if (context != null) {
             context.getHistoryStore().add(url, kind);
         }
@@ -293,48 +290,13 @@ public final class HistoryStore {
             return;
         }
         loaded = true;
-        Path path = file();
-        if (path == null || !Files.isRegularFile(path)) {
-            return;
-        }
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            StringBuilder text = new StringBuilder();
-            char[] buffer = new char[4096];
-            int read;
-            while ((read = reader.read(buffer)) > 0) {
-                text.append(buffer, 0, read);
-            }
-            entries.addAll(fromJson(text.toString()));
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not read history from {}: {}", path, e.toString());
+        String text = file.read();
+        if (text != null) {
+            entries.addAll(fromJson(text));
         }
     }
 
     private void save() {
-        Path path = file();
-        if (path == null) {
-            return;
-        }
-        try {
-            Files.createDirectories(path.getParent());
-            Path tmp = path.resolveSibling("history.json.tmp");
-            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                writer.write(toJson(Collections.unmodifiableList(entries)));
-            }
-            Files.move(tmp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not save history to {}: {}", path, e.toString());
-        }
-    }
-
-    @Nullable
-    private Path file() {
-        try {
-            return Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("liasmediaplayer").resolve("history.json");
-        } catch (Exception e) {
-            return null;
-        }
+        file.write(toJson(Collections.unmodifiableList(entries)));
     }
 }

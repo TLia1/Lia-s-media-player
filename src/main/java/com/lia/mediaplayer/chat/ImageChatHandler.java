@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.chat;
 
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -23,14 +24,14 @@ public final class ImageChatHandler {
     private static final ChatLinkRewriter.LinkRewrite IMAGE_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isImage(url) && MediaFilters.allowsUrl(url);
         }
 
         @Override
         public Component label(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
-            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.literal("[picture]");
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
+            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.translatable("chat.liasmediaplayer.label.picture");
         }
 
         @Override
@@ -42,7 +43,10 @@ public final class ImageChatHandler {
 
         @Override
         public void onMatch(String url) {
-            ImagePreviewCache.track(url);
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
+            if (ctx != null) {
+                ctx.getImagePreviewCache().track(url);
+            }
         }
     };
 
@@ -59,10 +63,10 @@ public final class ImageChatHandler {
 
     /** Drops every pinned image and the preview cache when leaving a world. */
     public static void onDisconnect() {
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx != null) {
             ctx.getImageManager().disposeAll();
+            ctx.getImagePreviewCache().clear();
         }
-        ImagePreviewCache.clear();
     }
 }

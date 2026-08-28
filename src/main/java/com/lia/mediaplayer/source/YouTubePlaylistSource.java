@@ -1,5 +1,8 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import net.minecraft.network.chat.Component;
 
 import java.net.URI;
@@ -10,7 +13,7 @@ import java.util.Locale;
  * A YouTube <em>playlist</em> page ({@code youtube.com/playlist?list=...}, plus the
  * mobile and music hosts). Unlike every other source this is not a single media item:
  * clicking it expands the playlist into its videos (via {@code yt-dlp}, see
- * {@link com.lia.mediaplayer.media.YouTubePlaylistResolver}) and queues them all.
+ * {@link YouTubePlaylistResolver}) and queues them all.
  * Shown as a {@code [youtube playlist]} label.
  *
  * <p>It is registered before {@link YouTubeSource} but stays disjoint from it: a
@@ -18,9 +21,9 @@ import java.util.Locale;
  * playing as that single video, which is what the link itself opens on YouTube. Only
  * the dedicated {@code /playlist} page means "the whole list".</p>
  */
-public final class YouTubePlaylistSource implements com.lia.mediaplayer.api.MediaSource {
+public final class YouTubePlaylistSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[youtube playlist]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.youtube_playlist");
 
     @Override
     public boolean matches(String url) {
@@ -28,10 +31,10 @@ public final class YouTubePlaylistSource implements com.lia.mediaplayer.api.Medi
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
+    public MediaKind kind() {
         // The entries are played as video by default (alt-click still routes to the
         // audio player, exactly like a single YouTube link).
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+        return MediaKind.VIDEO;
     }
 
     @Override

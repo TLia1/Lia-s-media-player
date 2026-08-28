@@ -67,5 +67,25 @@ public class IntSliderOption extends ConfigOption<Integer> {
         int range = max - min;
         return range <= 0 ? 0.0 : (double) (getValue() - min) / range;
     }
+
+    // ---- Covariant builder overrides (see ConfigOption's javadoc) ------------
+
+    @Override
+    public IntSliderOption withDescription(String descriptionKey) {
+        super.withDescription(descriptionKey);
+        return this;
+    }
+
+    @Override
+    public IntSliderOption withWarning(String warningKey) {
+        super.withWarning(warningKey);
+        return this;
+    }
+
+    @Override
+    public IntSliderOption withWidth(OptionWidth width) {
+        super.withWidth(width);
+        return this;
+    }
 }
 

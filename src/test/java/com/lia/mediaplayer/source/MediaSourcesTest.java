@@ -30,7 +30,7 @@ class MediaSourcesTest {
         assertNull(mediaSources.kindOf("https://example.com/unknown.txt"));
         assertNull(mediaSources.kindOf(null));
 
-        assertEquals(MediaKind.IMAGE, mediaSources.apiKindOf("https://example.com/image.png"));
+        assertEquals(MediaKind.IMAGE, mediaSources.kindOf("https://example.com/image.png"));
     }
 
     @Test
@@ -73,8 +73,10 @@ class MediaSourcesTest {
 
     @Test
     void labelFor_ReturnsSourceLabelOrRawText() {
-        assertEquals("[youtube]", mediaSources.labelFor("https://youtube.com/watch?v=123").getString());
-        assertEquals("[picture]", mediaSources.labelFor("https://example.com/image.png").getString());
+        assertEquals("chat.liasmediaplayer.label.youtube",
+                mediaSources.labelFor("https://youtube.com/watch?v=123").getString());
+        assertEquals("chat.liasmediaplayer.label.picture",
+                mediaSources.labelFor("https://example.com/image.png").getString());
         assertEquals("https://example.com/unknown.txt", mediaSources.labelFor("https://example.com/unknown.txt").getString());
     }
 

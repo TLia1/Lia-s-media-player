@@ -1,6 +1,7 @@
 package com.lia.mediaplayer;
 
 import com.lia.mediaplayer.api.IMediaPlayerAPI;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.api.MediaSource;
 import com.lia.mediaplayer.api.config.ConfigOption;
@@ -10,9 +11,15 @@ import com.lia.mediaplayer.gui.ImageWindowManager;
 import com.lia.mediaplayer.gui.VideoPlayerManager;
 import com.lia.mediaplayer.gui.WindowStateStore;
 import com.lia.mediaplayer.history.HistoryStore;
+import com.lia.mediaplayer.image.ImagePreviewCache;
+import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.media.Volume;
+import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.MediaSources;
+import com.lia.mediaplayer.source.Urls;
+import com.lia.mediaplayer.source.YouTubePlaylistSource;
+import com.lia.mediaplayer.video.VideoThumbnailCache;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -31,6 +38,52 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     private final WindowStateStore windowStateStore;
     private final HistoryStore historyStore;
     private final Volume volume;
+    private final ImagePreviewCache imagePreviewCache;
+    private final VideoThumbnailCache thumbnailCache;
+    private final MediaTitleCache titleCache;
+
+    /**
+     * The live context, on the understanding that the mod is up.
+     *
+     * <p>The counterpart of {@link LiasMediaPlayerApi#getInstance()}, and the reason it
+     * exists is the same: code that only ever runs once a window, a player or a screen
+     * is on the stage cannot be reached before {@code init()}, so making it handle a
+     * {@code null} would be noise. Anything that can fire earlier — an event-bus
+     * listener, a tick, a render pass — wants {@link #getOrNull()} instead.</p>
+     *
+     * @throws IllegalStateException if the mod has not finished initializing
+     */
+    public static MediaPlayerContext get() {
+        MediaPlayerContext context = getOrNull();
+        if (context == null) {
+            throw new IllegalStateException("Lia's Media Player context is not initialized yet.");
+        }
+        return context;
+    }
+
+    /**
+     * The live context, or {@code null} if the mod has not finished initializing.
+     *
+     * <p>The single place in the mod allowed to turn the published API instance back
+     * into its implementation. Everything inside the mod needs the implementation —
+     * {@link LiasMediaPlayerApi#getInstanceOrNull()} hands back the public interface,
+     * which deliberately exposes none of the managers or stores — so without this the
+     * same cast is written at every call site, and a change to the API's shape has to
+     * be chased through all of them.</p>
+     *
+     * <p>Nullable because most callers run off an event bus — chat, ticks, rendering —
+     * and can fire before {@code LiasMediaPlayer.init()} has run. The {@code instanceof}
+     * rather than a cast covers the other way this can be absent: {@code setInstance} is
+     * public, so a third party could in principle publish something else, and answering
+     * {@code null} routes that into the branch every caller already handles instead of
+     * throwing inside someone else's callback.</p>
+     */
+    @Nullable
+    public static MediaPlayerContext getOrNull() {
+        return LiasMediaPlayerApi.getInstanceOrNull() instanceof MediaPlayerContext context
+                ? context
+                : null;
+    }
 
     public MediaPlayerContext() {
         this.videoManager = new VideoPlayerManager();
@@ -42,6 +95,9 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         this.windowStateStore = new WindowStateStore();
         this.historyStore = new HistoryStore();
         this.volume = new Volume();
+        this.imagePreviewCache = new ImagePreviewCache();
+        this.thumbnailCache = new VideoThumbnailCache();
+        this.titleCache = new MediaTitleCache();
     }
 
     public VideoPlayerManager getVideoManager() {
@@ -88,6 +144,38 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     }
 
     // ====================================================================
+    // Caches
+    //
+    // The three of these hold the mod's off-heap weight — decoded frames and their GPU
+    // textures — and each is emptied when the player leaves a world. That is a lifecycle
+    // and a budget, i.e. a service, which is why they are owned here rather than being
+    // static holders reached from wherever: a cache nobody owns is a cache nobody empties.
+    // ====================================================================
+
+    /**
+     * Downloaded chat images and GIFs, decoded and uploaded once — see
+     * {@link ImagePreviewCache}.
+     */
+    public ImagePreviewCache getImagePreviewCache() {
+        return imagePreviewCache;
+    }
+
+    /**
+     * The still shown for each entry of a video queue — see {@link VideoThumbnailCache}.
+     */
+    public VideoThumbnailCache getThumbnailCache() {
+        return thumbnailCache;
+    }
+
+    /**
+     * The readable name of a media URL, shared by both players' queue panels — see
+     * {@link MediaTitleCache}.
+     */
+    public MediaTitleCache getTitleCache() {
+        return titleCache;
+    }
+
+    // ====================================================================
     // Source registration
     // ====================================================================
 
@@ -122,7 +210,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     @Override
     @Nullable
     public MediaKind kindOf(String url) {
-        return mediaSources.apiKindOf(url);
+        return mediaSources.kindOf(url);
     }
 
     // ====================================================================
@@ -151,7 +239,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
      * videos first, which is a background {@code yt-dlp} call.
      */
     private static boolean isYouTubePlaylist(String url) {
-        return com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url);
+        return YouTubePlaylistSource.isPlaylist(url);
     }
 
     /**
@@ -160,7 +248,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
      * returns {@code -1}.
      */
     private long playYouTubePlaylist(String url, boolean asAudio) {
-        com.lia.mediaplayer.media.YouTubePlaylistResolver.loadAsync(url, result -> {
+        YouTubePlaylistResolver.loadAsync(url, result -> {
             if (result == null) {
                 return; // the resolver has already reported why
             }
@@ -190,7 +278,7 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         if (isYouTubePlaylist(url)) {
             return playYouTubePlaylist(url, true);
         }
-        return audioManager.playNewWindowPublic(url);
+        return audioManager.openPublic(url);
     }
 
     @Override
@@ -349,6 +437,12 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     @Override
     public boolean addToPlaylist(String playlistName, String url) {
+        // An addon's string gets the same gate a chat link gets: a playlist entry ends up
+        // in ffmpeg/yt-dlp on a later session, so only real http(s) links are stored. Said
+        // here rather than left to Playlist.add so the caller is told it was rejected.
+        if (!Urls.isHttp(url)) {
+            return false;
+        }
         for (var p : playlistStore.all()) {
             if (p.name().equals(playlistName)) {
                 p.add(url);

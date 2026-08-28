@@ -1,19 +1,27 @@
 package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.source.TwitchSource;
+import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubeSource;
+import com.lia.mediaplayer.tools.FFmpegCli;
 import com.lia.mediaplayer.tools.MediaBinaries;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Turns a link seen in chat into a URL that {@link com.lia.mediaplayer.tools.FFmpegCli}
+ * Turns a link seen in chat into a URL that {@link FFmpegCli}
  * can open. Shared by both media engines — the video player and the audio player — so
  * the (non-trivial) YouTube resolution lives in exactly one place.
  *
@@ -34,7 +42,7 @@ public final class MediaUrlResolver {
      * yt-dlp can be slow on first call (it sometimes self-updates / probes formats).
      */
     private static long getYtDlpTimeoutSeconds() {
-        return com.lia.mediaplayer.config.ConfigStore.YT_DLP_TIMEOUT_SECONDS.getValue();
+        return ConfigStore.YT_DLP_TIMEOUT_SECONDS.getValue();
     }
 
     /**
@@ -70,7 +78,7 @@ public final class MediaUrlResolver {
     public static String resolve(String url) throws IOException {
         // Everything downstream of here is a command line or a socket, so refuse
         // anything that is not a plain http(s) link before it gets that far.
-        if (!com.lia.mediaplayer.source.Urls.isHttp(url)) {
+        if (!Urls.isHttp(url)) {
             throw new IOException("Refusing to play a non-http(s) link: " + url);
         }
         if (requiresExtractor(url)) {
@@ -86,7 +94,7 @@ public final class MediaUrlResolver {
      *
      * <p>This method used to name YouTube and Twitch itself, which meant every new
      * page-based source had to be taught to the playback engine as well as registered.
-     * {@link com.lia.mediaplayer.api.MediaSource#requiresExtractor()} moved that answer
+     * {@link MediaSource#requiresExtractor()} moved that answer
      * to the source, so adding one now really does touch nothing else.</p>
      *
      * <p>The two originals stay as the fallback for the window before the context
@@ -95,8 +103,7 @@ public final class MediaUrlResolver {
      * to ffmpeg.</p>
      */
     private static boolean requiresExtractor(String url) {
-        com.lia.mediaplayer.MediaPlayerContext context =
-                (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
         if (context == null) {
             return YouTubeSource.isYouTube(url) || TwitchSource.isTwitch(url);
         }
@@ -112,7 +119,7 @@ public final class MediaUrlResolver {
                     + "or launch Minecraft with -Dliasmediaplayer.ytdlp=C:\\\\path\\\\to\\\\yt-dlp.exe");
         }
 
-        List<String> command = new java.util.ArrayList<>(List.of(
+        List<String> command = new ArrayList<>(List.of(
                 executable,
                 "--no-playlist",
                 "--quiet",
@@ -146,7 +153,7 @@ public final class MediaUrlResolver {
             errReader.setDaemon(true);
             errReader.start();
 
-            java.util.concurrent.Future<String> lineFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            Future<String> lineFuture = CompletableFuture.supplyAsync(() -> {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     return reader.readLine();

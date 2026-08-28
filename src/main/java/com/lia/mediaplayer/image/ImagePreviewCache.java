@@ -1,8 +1,12 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.gui.TextureBridge;
+import com.lia.mediaplayer.media.MediaCache;
+import com.lia.mediaplayer.source.GiphySource;
 import com.lia.mediaplayer.source.TenorSource;
+import com.lia.mediaplayer.source.Urls;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.Util;
@@ -18,8 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +39,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>All public methods must be called from the render/main thread. Downloads
  * happen on a background IO pool and are published back on the main thread.</p>
+ *
+ * <p>One instance, owned by {@code MediaPlayerContext} and reached through
+ * {@code MediaPlayerContext.get().getImagePreviewCache()}. Both of its bounds — the
+ * entry count and the memory budget — are settings a player can move while the game is
+ * running, so {@link MediaCache} re-reads them rather than capturing them, and carries
+ * the eviction that releases each entry's textures on the way out.</p>
  */
 public final class ImagePreviewCache {
     /**
@@ -52,28 +60,20 @@ public final class ImagePreviewCache {
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
     private static long getMaxCacheBytes() {
-        return (long) com.lia.mediaplayer.config.ConfigStore.MAX_IMAGE_CACHE_MEGABYTES.getValue() * 1024 * 1024;
+        return (long) ConfigStore.MAX_IMAGE_CACHE_MEGABYTES.getValue() * 1024 * 1024;
     }
 
-    private static final LinkedHashMap<String, Entry> CACHE = new LinkedHashMap<>(16, 0.75f, false) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Entry> eldest) {
-            if (size() > com.lia.mediaplayer.config.ConfigStore.MAX_IMAGE_CACHE_ENTRIES.getValue()) {
-                eldest.getValue().releaseTexture();
-                return true;
-            }
-            return false;
-        }
-    };
-
-    private ImagePreviewCache() {
-    }
+    private final MediaCache<Entry> cache = new MediaCache<>(
+            ConfigStore.MAX_IMAGE_CACHE_ENTRIES::getValue,
+            ImagePreviewCache::getMaxCacheBytes,
+            entry -> entry.estimatedSizeBytes,
+            Entry::releaseTexture);
 
     /**
      * Registers a URL seen in chat so its preview can be loaded lazily later.
      */
-    public static void track(String url) {
-        Minecraft.getInstance().execute(() -> CACHE.computeIfAbsent(url, u -> new Entry()));
+    public void track(String url) {
+        Minecraft.getInstance().execute(() -> cache.computeIfAbsent(url, u -> new Entry()));
     }
 
     /**
@@ -81,8 +81,8 @@ public final class ImagePreviewCache {
      * first time it is requested. Check {@link Entry#state} to know whether
      * the texture is ready.
      */
-    public static Entry getOrLoad(String url) {
-        Entry entry = CACHE.computeIfAbsent(url, u -> new Entry());
+    public Entry getOrLoad(String url) {
+        Entry entry = cache.computeIfAbsent(url, u -> new Entry());
         if (entry.state == State.IDLE) {
             startLoading(url, entry);
         }
@@ -92,12 +92,11 @@ public final class ImagePreviewCache {
     /**
      * Drops every cached preview (e.g. when leaving a server).
      */
-    public static void clear() {
-        CACHE.values().forEach(Entry::releaseTexture);
-        CACHE.clear();
+    public void clear() {
+        cache.clear();
     }
 
-    private static void startLoading(String url, Entry entry) {
+    private void startLoading(String url, Entry entry) {
         entry.state = State.LOADING;
         LiasMediaPlayer.LOGGER.info("Loading image preview from {}", url);
 
@@ -118,12 +117,12 @@ public final class ImagePreviewCache {
             if (TenorSource.isTenorPage(url)) {
                 mediaUrl = TenorResolver.resolve(url);
             } else {
-                String giphy = com.lia.mediaplayer.source.GiphySource.directGif(url);
+                String giphy = GiphySource.directGif(url);
                 if (giphy != null) {
                     mediaUrl = giphy;
                 }
             }
-            if (!com.lia.mediaplayer.source.Urls.isHttp(mediaUrl)) {
+            if (!Urls.isHttp(mediaUrl)) {
                 throw new IOException("Refusing to fetch a non-http(s) image: " + mediaUrl);
             }
             HttpURLConnection connection = (HttpURLConnection) URI.create(mediaUrl).toURL().openConnection();
@@ -211,8 +210,8 @@ public final class ImagePreviewCache {
     /**
      * Runs on the main thread — safe to create GL textures and mutate the cache.
      */
-    private static void onDownloadComplete(String url, Entry entry, @Nullable GifDecoder.Result decoded,
-                                           @Nullable Throwable error) {
+    private void onDownloadComplete(String url, Entry entry, @Nullable GifDecoder.Result decoded,
+                                    @Nullable Throwable error) {
         if (error != null || decoded == null || decoded.frames().length == 0) {
             entry.state = State.FAILED;
             closeFrames(decoded);
@@ -225,7 +224,7 @@ public final class ImagePreviewCache {
 
         try {
             // The entry may have been evicted while the download was in flight.
-            if (CACHE.get(url) != entry) {
+            if (cache.get(url) != entry) {
                 closeFrames(decoded);
                 return;
             }
@@ -254,28 +253,11 @@ public final class ImagePreviewCache {
             entry.state = State.LOADED;
             LiasMediaPlayer.LOGGER.info("Loaded image preview {}x{} ({} frame(s)) from {}",
                     entry.width, entry.height, images.length, url);
-            enforceCacheSizeLimit();
+            cache.enforceByteBudget();
         } catch (Exception e) {
             entry.state = State.FAILED;
             closeFrames(decoded);
             LiasMediaPlayer.LOGGER.warn("Failed to create preview texture for {}", url, e);
-        }
-    }
-
-    private static void enforceCacheSizeLimit() {
-        long currentSize = 0;
-        for (Entry e : CACHE.values()) {
-            currentSize += e.estimatedSizeBytes;
-        }
-
-        var iterator = CACHE.entrySet().iterator();
-        long maxCacheBytes = getMaxCacheBytes();
-        while (iterator.hasNext() && currentSize > maxCacheBytes) {
-            Map.Entry<String, Entry> eldest = iterator.next();
-            Entry e = eldest.getValue();
-            currentSize -= e.estimatedSizeBytes;
-            e.releaseTexture();
-            iterator.remove();
         }
     }
 
@@ -335,7 +317,7 @@ public final class ImagePreviewCache {
             return frames[frames.length - 1];
         }
 
-        void releaseTexture() {
+        public void releaseTexture() {
             if (frames != null) {
                 for (ResourceLocation location : frames) {
                     if (location != null) {

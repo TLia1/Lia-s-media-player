@@ -3,6 +3,9 @@ package com.lia.mediaplayer.gui;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Every icon the mod draws — transport controls, window controls, list controls — plus a
  * text-fitting helper. All of them are plain filled rectangles, so they need no textures,
@@ -383,7 +386,7 @@ final class Glyphs {
                 solid[span[0]][column] = true;
             }
         }
-        java.util.List<int[]> edge = new java.util.ArrayList<>();
+        List<int[]> edge = new ArrayList<>();
         for (int row = 0; row < BUTTON; row++) {
             for (int column = 0; column < BUTTON; column++) {
                 if (solid[row][column] && !surrounded(solid, row, column)) {

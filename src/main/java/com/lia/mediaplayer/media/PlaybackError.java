@@ -107,6 +107,13 @@ public final class PlaybackError {
                     "not available from your location", "blocked it in your"),
             new Rule(Cause.LIVE_NOT_STARTED,
                     "live event will begin", "premieres in", "this live event", "not currently live"),
+            // yt-dlp's "Requested format is not available" is a format-selector miss,
+            // not a missing video, but it contains UNAVAILABLE's "is not available" and
+            // would otherwise be read as one. Listed here rather than folded into the
+            // UNSUPPORTED_FORMAT rule below, which has to stay under UNAVAILABLE: its
+            // other needles are broader than this one.
+            new Rule(Cause.UNSUPPORTED_FORMAT,
+                    "requested format is not available"),
             new Rule(Cause.UNAVAILABLE,
                     "video unavailable", "video is unavailable", "is not available",
                     "has been removed", "removed by the uploader", "has been terminated",
@@ -123,8 +130,7 @@ public final class PlaybackError {
                     "name resolution", "ssl", "tls handshake", "unable to download webpage"),
             new Rule(Cause.UNSUPPORTED_FORMAT,
                     "invalid data found", "protocol not found", "unknown protocol",
-                    "decoder not found", "requested format is not available",
-                    "does not contain any stream", "no streams"),
+                    "decoder not found", "does not contain any stream", "no streams"),
             new Rule(Cause.DECODE_FAILED,
                     "ffprobe could not read", "could not parse ffprobe", "ffmpeg exited",
                     "failed to read frame")

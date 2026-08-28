@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -7,9 +9,9 @@ import net.minecraft.network.chat.Component;
  * open straight away (a Discord {@code .mp4}/{@code .webm}/{@code .mov} attachment
  * and friends). Shown as a {@code [video]} label.
  */
-public final class DirectVideoSource implements com.lia.mediaplayer.api.MediaSource {
+public final class DirectVideoSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[video]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.video");
 
     @Override
     public boolean matches(String url) {
@@ -17,8 +19,8 @@ public final class DirectVideoSource implements com.lia.mediaplayer.api.MediaSou
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

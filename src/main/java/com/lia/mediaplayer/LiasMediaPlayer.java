@@ -89,7 +89,7 @@ public final class LiasMediaPlayer {
             }
         }
 
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+        MediaPlayerContext context = MediaPlayerContext.get();
         registrationEvent.getRegistered().forEach(source -> context.getMediaSources().register(source));
         LOGGER.info("Registered {} external media source(s) via API",
                 registrationEvent.getRegistered().size());

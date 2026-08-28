@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -7,9 +9,9 @@ import net.minecraft.network.chat.Component;
  * the preview can decode ({@code .png}, {@code .jpg}, {@code .jpeg}, {@code .gif}
  * or {@code .bmp}). Shown as a {@code [picture]} label.
  */
-public final class ImageFileSource implements com.lia.mediaplayer.api.MediaSource {
+public final class ImageFileSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[picture]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.picture");
 
     @Override
     public boolean matches(String url) {
@@ -17,8 +19,8 @@ public final class ImageFileSource implements com.lia.mediaplayer.api.MediaSourc
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.IMAGE;
+    public MediaKind kind() {
+        return MediaKind.IMAGE;
     }
 
     @Override

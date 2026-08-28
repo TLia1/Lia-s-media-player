@@ -5,6 +5,7 @@ import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.chat.ChatEvents;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.audio.AudioPlayer;
+import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -18,8 +19,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Single coordinator that renders and drives <em>all</em> media windows — the
@@ -74,7 +81,7 @@ public final class MediaWindowOverlay {
     }
 
     private static MediaPlayerContext getContext() {
-        return (MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        return MediaPlayerContext.getOrNull();
     }
 
     // ------------------------------------------------------------------
@@ -135,7 +142,7 @@ public final class MediaWindowOverlay {
      * swallow the space bar.</p>
      */
     @Nullable
-    static MediaWindow frontMost(java.util.function.Predicate<MediaWindow> filter) {
+    static MediaWindow frontMost(Predicate<MediaWindow> filter) {
         MediaWindow best = null;
         for (MediaWindow window : orderedWindows()) {
             if (window.isVisible() && filter.test(window)) {
@@ -358,7 +365,9 @@ public final class MediaWindowOverlay {
             return;
         }
         Font font = Minecraft.getInstance().font;
-        Component label = Component.translatable(hidden > 1 ? "gui.liasmediaplayer.hidden_players.plural" : "gui.liasmediaplayer.hidden_players.singular", hidden);
+        Component label = Component.translatable(hidden > 1
+                ? "gui.liasmediaplayer.hidden_players.plural"
+                : "gui.liasmediaplayer.hidden_players.singular", hidden);
         int triW = 8;
         revealW = triW + font.width(label) + 10;
         revealH = 14;
@@ -465,7 +474,7 @@ public final class MediaWindowOverlay {
         }
         // A playlist page is not a media item: expand it first (a yt-dlp round-trip
         // on a background thread), then queue everything it contains.
-        if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+        if (YouTubePlaylistSource.isPlaylist(url)) {
             playYouTubePlaylist(url, audioOnly);
             return true;
         }

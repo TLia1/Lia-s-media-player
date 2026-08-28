@@ -2,6 +2,7 @@ package com.lia.mediaplayer.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.api.config.BooleanOption;
@@ -14,14 +15,9 @@ import com.lia.mediaplayer.api.config.StringOption;
 import com.lia.mediaplayer.gui.ThemeName;
 import com.lia.mediaplayer.gui.WindowPosition;
 import com.lia.mediaplayer.source.FilterMode;
-import net.minecraft.client.Minecraft;
+import com.lia.mediaplayer.storage.JsonFileStore;
+import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,6 +31,8 @@ import java.util.stream.Collectors;
 public class ConfigStore {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    private final JsonFileStore file = new JsonFileStore("config.json");
     private boolean loaded;
 
     private final Map<String, ConfigOption<?>> registeredOptions = new LinkedHashMap<>();
@@ -52,7 +50,7 @@ public class ConfigStore {
     public static final EnumOption<WindowPosition> DEFAULT_WINDOW_POSITION;
     /** Which palette every window, panel and list draws with — see {@code gui.Theme}. */
     public static final EnumOption<ThemeName> THEME;
-    // The client-side link filters (see com.lia.mediaplayer.chat.MediaFilters). Both
+    // The client-side link filters (see chat.MediaFilters). Both
     // host lists are kept, not one list whose meaning depends on the mode: switching
     // the mode to look at the other list should not throw away what was typed into
     // this one.
@@ -66,70 +64,83 @@ public class ConfigStore {
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
 
+    // ------------------------------------------------------------------
+    // Declaring an option
+    //
+    // Every built-in option repeats the same four strings — the namespaced id, the
+    // group, the label key and the description key — all four derived from one name,
+    // and each declaration used to spell them out and carry a downcast on top. The
+    // factories below take the name and nothing else; only what is genuinely per-option
+    // (the range, the default, a width, a warning) is still written out.
+    //
+    // The convention they encode is that an option's name is the same in all four:
+    // `max_gif_frames` is `liasmediaplayer:max_gif_frames`, labelled by
+    // `config.liasmediaplayer.max_gif_frames` and described by that key plus
+    // `.description`. A new option that follows it needs two language keys and one line
+    // here; one that does not cannot use these and should say why.
+    // ------------------------------------------------------------------
+
+    /**
+     * The group every built-in option belongs to — the mod's own id, which is what puts
+     * them all on one page of the config screen. An addon passes its own.
+     */
+    private static final String GROUP = LiasMediaPlayer.MODID;
+
+    private static String id(String name) {
+        return GROUP + ":" + name;
+    }
+
+    private static String key(String name) {
+        return "config." + GROUP + "." + name;
+    }
+
+    private static String descriptionKey(String name) {
+        return key(name) + ".description";
+    }
+
+    private static IntSliderOption slider(String name, int defaultValue, int min, int max) {
+        return new IntSliderOption(id(name), GROUP, key(name), defaultValue, min, max)
+                .withDescription(descriptionKey(name));
+    }
+
+    private static <E extends Enum<E>> EnumOption<E> choice(String name, E defaultValue) {
+        return new EnumOption<>(id(name), GROUP, key(name), defaultValue)
+                .withDescription(descriptionKey(name));
+    }
+
+    private static StringOption text(String name) {
+        return new StringOption(id(name), GROUP, key(name), "")
+                .withDescription(descriptionKey(name));
+    }
+
+    private static BooleanOption toggle(String name, boolean defaultValue) {
+        return new BooleanOption(id(name), GROUP, key(name), defaultValue)
+                .withDescription(descriptionKey(name));
+    }
+
     static {
         VIDEO_RESOLUTION = new StepSliderOption<>(
-                "liasmediaplayer:video_resolution",
-                "liasmediaplayer",
-                "config.liasmediaplayer.video_resolution",
+                id("video_resolution"), GROUP, key("video_resolution"),
                 3, // default 480p
                 RESOLUTION_HEIGHTS,
-                height -> height + "p"
-        );
-        // Set separately rather than chained: withDescription is declared on
-        // ConfigOption<T> and returns it, so chaining it onto a generic option would
-        // need an unchecked cast back to the concrete type. The IntSliderOptions below
-        // can chain because IntSliderOption is not generic.
-        VIDEO_RESOLUTION.withDescription("config.liasmediaplayer.video_resolution.description");
-        MAX_PINNED_IMAGES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_pinned_images", "liasmediaplayer", "config.liasmediaplayer.max_pinned_images", 6, 1, 20)
-                .withDescription("config.liasmediaplayer.max_pinned_images.description");
-        MAX_VIDEO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_video_windows", "liasmediaplayer", "config.liasmediaplayer.max_video_windows", 4, 1, 10)
-                .withDescription("config.liasmediaplayer.max_video_windows.description")
-                .withWidth(OptionWidth.HALF);
-        MAX_AUDIO_WINDOWS = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_audio_windows", "liasmediaplayer", "config.liasmediaplayer.max_audio_windows", 4, 1, 10)
-                .withDescription("config.liasmediaplayer.max_audio_windows.description")
-                .withWidth(OptionWidth.HALF);
-        MAX_GIF_FRAMES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_gif_frames", "liasmediaplayer", "config.liasmediaplayer.max_gif_frames", 256, 10, 1000)
-                .withDescription("config.liasmediaplayer.max_gif_frames.description");
-        MAX_IMAGE_CACHE_ENTRIES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_entries", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_entries", 30, 5, 100)
-                .withDescription("config.liasmediaplayer.max_image_cache_entries.description")
-                .withWidth(OptionWidth.HALF);
-        FRAME_QUEUE_CAPACITY = (IntSliderOption) new IntSliderOption("liasmediaplayer:frame_queue_capacity", "liasmediaplayer", "config.liasmediaplayer.frame_queue_capacity", 64, 16, 256)
-                .withDescription("config.liasmediaplayer.frame_queue_capacity.description")
-                .withWarning("config.liasmediaplayer.frame_queue_capacity.warning");
-        MAX_IMAGE_CACHE_MEGABYTES = (IntSliderOption) new IntSliderOption("liasmediaplayer:max_image_cache_mb", "liasmediaplayer", "config.liasmediaplayer.max_image_cache_mb", 256, 64, 1024)
-                .withDescription("config.liasmediaplayer.max_image_cache_mb.description")
-                .withWidth(OptionWidth.HALF);
-        YT_DLP_TIMEOUT_SECONDS = (IntSliderOption) new IntSliderOption("liasmediaplayer:yt_dlp_timeout", "liasmediaplayer", "config.liasmediaplayer.yt_dlp_timeout", 25, 5, 60)
-                .withDescription("config.liasmediaplayer.yt_dlp_timeout.description");
-        THEME = new EnumOption<>(
-                "liasmediaplayer:theme",
-                "liasmediaplayer",
-                "config.liasmediaplayer.theme",
-                ThemeName.DARK
-        );
-        THEME.withDescription("config.liasmediaplayer.theme.description");
-        DEFAULT_WINDOW_POSITION = new EnumOption<>(
-                "liasmediaplayer:default_window_position",
-                "liasmediaplayer",
-                "config.liasmediaplayer.default_window_position",
-                WindowPosition.CENTER
-        );
-        DEFAULT_WINDOW_POSITION.withDescription("config.liasmediaplayer.default_window_position.description");
-        LINK_FILTER_MODE = new EnumOption<>(
-                "liasmediaplayer:link_filter_mode",
-                "liasmediaplayer",
-                "config.liasmediaplayer.link_filter_mode",
-                FilterMode.OFF
-        );
-        LINK_FILTER_MODE.withDescription("config.liasmediaplayer.link_filter_mode.description");
-        BLOCKED_DOMAINS = (StringOption) new StringOption("liasmediaplayer:blocked_domains", "liasmediaplayer", "config.liasmediaplayer.blocked_domains", "")
-                .withDescription("config.liasmediaplayer.blocked_domains.description");
-        ALLOWED_DOMAINS = (StringOption) new StringOption("liasmediaplayer:allowed_domains", "liasmediaplayer", "config.liasmediaplayer.allowed_domains", "")
-                .withDescription("config.liasmediaplayer.allowed_domains.description");
-        BLOCKED_SENDERS = (StringOption) new StringOption("liasmediaplayer:blocked_senders", "liasmediaplayer", "config.liasmediaplayer.blocked_senders", "")
-                .withDescription("config.liasmediaplayer.blocked_senders.description");
-        AUTO_UPDATE_TOOLS = (BooleanOption) new BooleanOption("liasmediaplayer:auto_update_tools", "liasmediaplayer", "config.liasmediaplayer.auto_update_tools", true)
-                .withDescription("config.liasmediaplayer.auto_update_tools.description");
+                height -> height + "p")
+                .withDescription(descriptionKey("video_resolution"));
+        MAX_PINNED_IMAGES = slider("max_pinned_images", 6, 1, 20);
+        MAX_VIDEO_WINDOWS = slider("max_video_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
+        MAX_AUDIO_WINDOWS = slider("max_audio_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
+        MAX_GIF_FRAMES = slider("max_gif_frames", 256, 10, 1000);
+        MAX_IMAGE_CACHE_ENTRIES = slider("max_image_cache_entries", 30, 5, 100).withWidth(OptionWidth.HALF);
+        FRAME_QUEUE_CAPACITY = slider("frame_queue_capacity", 64, 16, 256)
+                .withWarning(key("frame_queue_capacity") + ".warning");
+        MAX_IMAGE_CACHE_MEGABYTES = slider("max_image_cache_mb", 256, 64, 1024).withWidth(OptionWidth.HALF);
+        YT_DLP_TIMEOUT_SECONDS = slider("yt_dlp_timeout", 25, 5, 60);
+        THEME = choice("theme", ThemeName.DARK);
+        DEFAULT_WINDOW_POSITION = choice("default_window_position", WindowPosition.CENTER);
+        LINK_FILTER_MODE = choice("link_filter_mode", FilterMode.OFF);
+        BLOCKED_DOMAINS = text("blocked_domains");
+        ALLOWED_DOMAINS = text("allowed_domains");
+        BLOCKED_SENDERS = text("blocked_senders");
+        AUTO_UPDATE_TOOLS = toggle("auto_update_tools", true);
     }
 
     public ConfigStore() {
@@ -166,17 +177,9 @@ public class ConfigStore {
      * Used when an addon registers an option after the initial load.
      */
     private void applySavedValue(ConfigOption<?> option) {
-        Path path = file();
-        if (path == null || !Files.isRegularFile(path)) {
-            return;
-        }
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            JsonObject json = GSON.fromJson(reader, JsonObject.class);
-            if (json != null && json.has(option.getId())) {
-                option.deserialize(json.get(option.getId()));
-            }
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not read config from {}: {}", path, e.toString());
+        JsonObject json = readJson();
+        if (json != null && json.has(option.getId())) {
+            option.deserialize(json.get(option.getId()));
         }
     }
 
@@ -212,51 +215,76 @@ public class ConfigStore {
     }
 
     public synchronized void save() {
-        Path path = file();
-        if (path == null) {
-            return;
-        }
-        try {
-            Files.createDirectories(path.getParent());
-            Path tmp = path.resolveSibling("config.json.tmp");
-            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                JsonObject json = new JsonObject();
-                for (ConfigOption<?> option : registeredOptions.values()) {
-                    json.add(option.getId(), option.serialize());
-                }
-                GSON.toJson(json, writer);
-            }
-            Files.move(tmp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not save config to {}: {}", path, e.toString());
-        }
+        file.write(GSON.toJson(toJson()));
     }
 
     private void load() {
-        Path path = file();
-        if (path == null || !Files.isRegularFile(path)) {
+        applyJson(readJson());
+    }
+
+    /**
+     * Every registered option's current value, as the document {@link #save} writes.
+     *
+     * <p>Separated from the file I/O so the format has a seam a unit test can drive:
+     * this file is edited by hand, survives an upgrade of the mod, and is the one place
+     * a bad value can reach every setting at once. Same shape as
+     * {@code WindowStateStore.toJson}/{@code fromJson}, for the same reason.</p>
+     */
+    JsonObject toJson() {
+        JsonObject json = new JsonObject();
+        for (ConfigOption<?> option : registeredOptions.values()) {
+            json.add(option.getId(), option.serialize());
+        }
+        return json;
+    }
+
+    /**
+     * Applies a saved document to the registered options.
+     *
+     * <p>An entry naming an option nobody registered is skipped rather than an error —
+     * that is what an addon's setting looks like when the addon is not installed, and
+     * dropping it would erase the addon's configuration the next time this file is
+     * written. What each option makes of a value of the wrong shape is the option's own
+     * business: they all leave themselves alone rather than throw.</p>
+     */
+    void applyJson(@Nullable JsonObject json) {
+        if (json == null) {
             return;
         }
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            JsonObject json = GSON.fromJson(reader, JsonObject.class);
-            if (json != null) {
-                for (Map.Entry<String, com.google.gson.JsonElement> entry : json.entrySet()) {
-                    ConfigOption<?> option = registeredOptions.get(entry.getKey());
-                    if (option != null) {
-                        option.deserialize(entry.getValue());
-                    }
-                }
+        for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
+            ConfigOption<?> option = registeredOptions.get(entry.getKey());
+            if (option != null) {
+                option.deserialize(entry.getValue());
             }
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not read config from {}: {}", path, e.toString());
         }
     }
 
-    private Path file() {
+    /**
+     * The config file parsed, or {@code null} if it is absent, unreadable or not JSON.
+     * An unparseable file leaves every option on its default rather than failing the
+     * launch — the same best-effort contract {@link JsonFileStore} states for the I/O.
+     */
+    @Nullable
+    private JsonObject readJson() {
+        return parse(file.read(), file.path());
+    }
+
+    /**
+     * A config document parsed defensively: {@code null} for anything that is not a JSON
+     * object, including {@code null} itself.
+     *
+     * @param source only named in the warning, so a test can pass {@code null}
+     */
+    @Nullable
+    static JsonObject parse(@Nullable String text, @Nullable Object source) {
+        if (text == null) {
+            return null;
+        }
         try {
-            return Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("liasmediaplayer").resolve("config.json");
-        } catch (Exception e) {
+            JsonElement parsed = GSON.fromJson(text, JsonElement.class);
+            return parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
+        } catch (RuntimeException e) {
+            LiasMediaPlayer.LOGGER.warn("Could not parse {}: {}", source, e.toString());
             return null;
         }
     }

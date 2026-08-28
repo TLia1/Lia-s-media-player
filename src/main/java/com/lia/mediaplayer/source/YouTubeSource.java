@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 import java.net.URI;
@@ -13,9 +15,9 @@ import java.util.Locale;
  * to a direct stream separately (via {@code yt-dlp}); this source only recognizes and
  * labels them. Shown as a {@code [youtube]} label.
  */
-public final class YouTubeSource implements com.lia.mediaplayer.api.MediaSource {
+public final class YouTubeSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[youtube]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.youtube");
 
     @Override
     public boolean matches(String url) {
@@ -23,8 +25,8 @@ public final class YouTubeSource implements com.lia.mediaplayer.api.MediaSource 
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

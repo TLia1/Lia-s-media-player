@@ -18,7 +18,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +47,38 @@ import java.util.zip.ZipInputStream;
  * a temporary file + atomic move so a failed download never leaves a corrupt
  * binary in the managed directory.</p>
  *
+ * <h2>Trust model</h2>
+ *
+ * <p>This mod downloads executables and then runs them, so it owes an explicit account
+ * of what that trust rests on. It rests on <b>TLS to three named publishers</b>, and on
+ * nothing else:</p>
+ * <ul>
+ *   <li>{@code github.com/yt-dlp/yt-dlp} — the upstream project's own release assets;</li>
+ *   <li>{@code github.com/BtbN/FFmpeg-Builds} — the build most ffmpeg documentation
+ *       points Windows and Linux users at;</li>
+ *   <li>{@code evermeet.cx} — the equivalent for macOS.</li>
+ * </ul>
+ *
+ * <p>There is deliberately <b>no checksum check</b>, and that is a limitation rather
+ * than an oversight: none of the three publishes a checksum that is any more trustworthy
+ * than the asset beside it (same host, same TLS, same release), so verifying one would
+ * describe a guarantee the mod does not actually have. A hash baked into this file
+ * instead would pin the bytes, but only until the next build replaces them — which for
+ * yt-dlp is the point of the tool, see below.</p>
+ *
+ * <p>What is checked is what can be: the response is a 200, the body is large enough to
+ * be a real binary rather than an error page ({@link #download}), it starts with the
+ * magic bytes of an executable for the platform we are on ({@link #looksExecutable}),
+ * and archives cannot write outside their extraction directory
+ * ({@link #safeResolve}).</p>
+ *
+ * <p>Versions are pinned as far as each tool allows. {@code ffmpeg} names a release
+ * branch ({@link #FFMPEG_RELEASE}) rather than following {@code master}'s daily
+ * autobuilds, so the decoder under the player only moves when this constant does.
+ * {@code yt-dlp} deliberately stays on {@code latest}: it breaks whenever YouTube
+ * changes its player, and being current <em>is</em> its function — pinning it would
+ * guarantee the mod stops playing YouTube some weeks after release.</p>
+ *
  * @see BinaryLocator
  * @see MediaBinaries
  */
@@ -57,6 +91,28 @@ final class BinaryDownloader {
      * How long the one-time download of a tool may take before we give up.
      */
     private static final Duration DOWNLOAD_TIMEOUT = Duration.ofSeconds(120);
+
+    /**
+     * The ffmpeg release branch the mod asks BtbN for, e.g. {@code n9.0}.
+     *
+     * <p>BtbN's {@code latest} release holds two families of asset: {@code master}
+     * autobuilds, which are whatever ffmpeg's trunk looked like this morning, and
+     * per-release-branch builds like this one. Naming a branch is the difference
+     * between "the ffmpeg that happened to be built today" and a version this mod has
+     * actually been run against — a decoder regression upstream can otherwise arrive on
+     * a player's machine without a single line of this repository changing.</p>
+     *
+     * <p>Bump it deliberately, and leave {@link #FFMPEG_FALLBACK_RELEASE} pointing at
+     * {@code master}: BtbN retires a branch's assets some time after the branch itself
+     * is retired, and a mod that cannot get ffmpeg at all is worse than one that gets a
+     * newer build than it expected. The fallback logs, so it is visible when it happens.</p>
+     */
+    private static final String FFMPEG_RELEASE = "n9.0";
+
+    /**
+     * What {@link #FFMPEG_RELEASE} degrades to once its assets are gone — see there.
+     */
+    private static final String FFMPEG_FALLBACK_RELEASE = "master";
 
     /**
      * Reusable HTTP client for all downloads within the session. Configured with
@@ -100,6 +156,10 @@ final class BinaryDownloader {
             Path tmp = Files.createTempFile(managedDir, "yt-dlp", ".part");
             LiasMediaPlayer.LOGGER.info("Downloading yt-dlp from {} ...", source);
             if (!download(source, tmp, 100_000)) {
+                Files.deleteIfExists(tmp);
+                return null;
+            }
+            if (!looksExecutable(tmp)) {
                 Files.deleteIfExists(tmp);
                 return null;
             }
@@ -147,25 +207,28 @@ final class BinaryDownloader {
                 return a && b && verifyBundle(ffmpeg, ffprobe);
             }
             // Windows (.zip) and Linux (.tar.xz): one archive holds both binaries.
-            String source = ffmpegArchiveUrl();
-            Path archive = Files.createTempFile(managedDir, "ffmpeg", archiveSuffix(source));
-            LiasMediaPlayer.LOGGER.info("Downloading ffmpeg from {} ...", source);
-            try {
-                if (!download(source, archive, 1_000_000)) {
-                    return false;
-                }
-                Path extractDir = Files.createTempDirectory(managedDir, "ffmpeg-unpack");
+            // The pinned release first, master only if it is no longer published.
+            for (String source : ffmpegArchiveUrls()) {
+                Path archive = Files.createTempFile(managedDir, "ffmpeg", archiveSuffix(source));
+                LiasMediaPlayer.LOGGER.info("Downloading ffmpeg from {} ...", source);
                 try {
-                    extract(archive, extractDir);
-                    boolean a = placeFromTree(extractDir, MediaBinaries.Tool.FFMPEG.exeName(), ffmpeg);
-                    boolean b = placeFromTree(extractDir, MediaBinaries.Tool.FFPROBE.exeName(), ffprobe);
-                    return a && b && verifyBundle(ffmpeg, ffprobe);
+                    if (!download(source, archive, 1_000_000)) {
+                        continue;
+                    }
+                    Path extractDir = Files.createTempDirectory(managedDir, "ffmpeg-unpack");
+                    try {
+                        extract(archive, extractDir);
+                        boolean a = placeFromTree(extractDir, MediaBinaries.Tool.FFMPEG.exeName(), ffmpeg);
+                        boolean b = placeFromTree(extractDir, MediaBinaries.Tool.FFPROBE.exeName(), ffprobe);
+                        return a && b && verifyBundle(ffmpeg, ffprobe);
+                    } finally {
+                        deleteRecursively(extractDir);
+                    }
                 } finally {
-                    deleteRecursively(extractDir);
+                    Files.deleteIfExists(archive);
                 }
-            } finally {
-                Files.deleteIfExists(archive);
             }
+            return false;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -293,6 +356,9 @@ final class BinaryDownloader {
             LiasMediaPlayer.LOGGER.warn("'{}' not found inside the downloaded archive", exeName);
             return false;
         }
+        if (!looksExecutable(found)) {
+            return false;
+        }
         makeExecutable(found);
         Files.move(found, target, StandardCopyOption.REPLACE_EXISTING);
         makeExecutable(target);
@@ -323,7 +389,7 @@ final class BinaryDownloader {
 
     private static void deleteRecursively(Path dir) {
         try (var stream = Files.walk(dir)) {
-            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
                     Files.deleteIfExists(p);
                 } catch (IOException ignored) {
@@ -333,6 +399,77 @@ final class BinaryDownloader {
         } catch (IOException ignored) {
             // best-effort cleanup
         }
+    }
+
+    /**
+     * Whether {@code file} starts with the magic bytes of a program this platform could
+     * actually run.
+     *
+     * <p>The last thing checked before a downloaded file is marked executable, and the
+     * cheapest useful one. It does not make an unknown binary safe — nothing here can,
+     * see the trust model above — but it does catch the failure that is plausible
+     * without an attacker: a publisher moving an asset, a captive-portal or proxy error
+     * page served with a 200, an archive whose layout changed and left us pointing at a
+     * README. Every one of those ends today with the mod chmod +x'ing a text file and
+     * reporting a confusing {@code Exec format error} at the first playback instead.</p>
+     *
+     * <p>Only the current platform's format is accepted: a Linux client has no use for a
+     * PE, and taking one would mean the platform-specific download URL had gone wrong.</p>
+     */
+    private static boolean looksExecutable(Path file) {
+        byte[] head = new byte[4];
+        try (InputStream in = Files.newInputStream(file)) {
+            if (in.readNBytes(head, 0, head.length) < head.length) {
+                LiasMediaPlayer.LOGGER.warn("Downloaded {} is too short to be a program", file.getFileName());
+                return false;
+            }
+        } catch (IOException e) {
+            LiasMediaPlayer.LOGGER.warn("Could not read back {}: {}", file.getFileName(), e.toString());
+            return false;
+        }
+        if (!hasExecutableMagic(head, MediaBinaries.WINDOWS, MediaBinaries.MAC)) {
+            LiasMediaPlayer.LOGGER.warn("Downloaded {} is not a {} executable; discarding.",
+                    file.getFileName(), MediaBinaries.WINDOWS ? "Windows" : MediaBinaries.MAC ? "macOS" : "Linux");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The magic-number half of {@link #looksExecutable}, kept apart from the file I/O so
+     * the table of formats can be unit-tested.
+     *
+     * <ul>
+     *   <li>Windows: {@code MZ}, the DOS header every PE still carries.</li>
+     *   <li>Linux: {@code 0x7F E L F}.</li>
+     *   <li>macOS: Mach-O in either byte order ({@code 0xFEEDFACE} / {@code 0xFEEDFACF}
+     *       and their reversed forms) or a universal binary ({@code 0xCAFEBABE}), which
+     *       is what evermeet.cx actually ships.</li>
+     * </ul>
+     *
+     * <p>The platform is a parameter rather than read from {@link MediaBinaries}: those
+     * are constants of the machine the test happens to run on, and a check whose whole
+     * content is a per-platform table is worth exercising for the two platforms that
+     * machine is not.</p>
+     */
+    static boolean hasExecutableMagic(byte[] head, boolean windows, boolean mac) {
+        if (head.length < 4) {
+            return false;
+        }
+        int b0 = head[0] & 0xFF;
+        int b1 = head[1] & 0xFF;
+        int b2 = head[2] & 0xFF;
+        int b3 = head[3] & 0xFF;
+        if (windows) {
+            return b0 == 'M' && b1 == 'Z';
+        }
+        if (mac) {
+            long word = ((long) b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+            return word == 0xFEEDFACEL || word == 0xFEEDFACFL
+                    || word == 0xCEFAEDFEL || word == 0xCFFAEDFEL
+                    || word == 0xCAFEBABEL || word == 0xBEBAFECAL;
+        }
+        return b0 == 0x7F && b1 == 'E' && b2 == 'L' && b3 == 'F';
     }
 
     /**
@@ -387,16 +524,34 @@ final class BinaryDownloader {
     }
 
     /**
-     * The BtbN ffmpeg build archive (Windows zip / Linux tar.xz) for this platform.
+     * The BtbN ffmpeg build archives (Windows zip / Linux tar.xz) for this platform, in
+     * the order they should be tried: the pinned release branch, then {@code master}.
+     *
+     * @see #FFMPEG_RELEASE
      */
-    private static @NotNull String ffmpegArchiveUrl() {
+    private static @NotNull List<String> ffmpegArchiveUrls() {
+        return List.of(
+                ffmpegArchiveUrl(FFMPEG_RELEASE),
+                ffmpegArchiveUrl(FFMPEG_FALLBACK_RELEASE));
+    }
+
+    /**
+     * One BtbN asset URL for {@code release} on this platform.
+     *
+     * <p>The asset names of a release branch repeat its version at the end
+     * ({@code ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz}); {@code master}'s do not
+     * ({@code ffmpeg-master-latest-linux64-gpl.tar.xz}). The {@code -latest} in the
+     * middle is BtbN's own, and means "the newest build of this branch" — the release
+     * tag it hangs under is stable, which is why the URL keeps working.</p>
+     */
+    private static @NotNull String ffmpegArchiveUrl(String release) {
         String base = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/";
-        if (MediaBinaries.WINDOWS) {
-            return base + "ffmpeg-master-latest-win64-gpl.zip";
-        }
-        return base + (MediaBinaries.AARCH64
-                ? "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
-                : "ffmpeg-master-latest-linux64-gpl.tar.xz");
+        // n9.0 -> "-9.0"; master -> "".
+        String versionSuffix = release.startsWith("n") ? "-" + release.substring(1) : "";
+        String platform = MediaBinaries.WINDOWS ? "win64"
+                : MediaBinaries.AARCH64 ? "linuxarm64" : "linux64";
+        String extension = MediaBinaries.WINDOWS ? ".zip" : ".tar.xz";
+        return base + "ffmpeg-" + release + "-latest-" + platform + "-gpl" + versionSuffix + extension;
     }
 
     /**

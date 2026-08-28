@@ -1,14 +1,16 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
  * A Streamable clip page ({@code streamable.com/<id>}, or its {@code /e/<id>} embed).
  * A page, so it goes through yt-dlp.
  */
-public final class StreamableSource implements com.lia.mediaplayer.api.MediaSource {
+public final class StreamableSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[streamable]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.streamable");
 
     @Override
     public boolean matches(String url) {
@@ -16,8 +18,8 @@ public final class StreamableSource implements com.lia.mediaplayer.api.MediaSour
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

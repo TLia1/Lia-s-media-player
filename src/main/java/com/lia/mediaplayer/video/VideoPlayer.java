@@ -1,6 +1,9 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.media.MediaPlayback;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.tools.FFmpegCli;
 import net.minecraft.resources.ResourceLocation;
@@ -9,6 +12,8 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * One playing (or paused) video. Orchestrates playback state, decodes video frames
  * and audio on background threads, and provides the current frame to the render thread.
  */
-public final class VideoPlayer {
+public final class VideoPlayer implements MediaPlayback {
     private static final long SEEK_END_MARGIN_MICROS = 500_000L; // 0.5s
     private static final AtomicInteger PLAYER_ID = new AtomicInteger(0);
 
@@ -82,7 +87,7 @@ public final class VideoPlayer {
 
     public VideoPlayer(String url) {
         this.url = url;
-        this.frameQueueCapacity = com.lia.mediaplayer.config.ConfigStore.FRAME_QUEUE_CAPACITY.getValue();
+        this.frameQueueCapacity = ConfigStore.FRAME_QUEUE_CAPACITY.getValue();
         this.frameQueue = new ArrayBlockingQueue<>(this.frameQueueCapacity);
         this.freeBuffers = new ArrayBlockingQueue<>(this.frameQueueCapacity + 4);
         this.renderer = new VideoRenderer();
@@ -91,8 +96,8 @@ public final class VideoPlayer {
         this.session = new FFmpegSession();
     }
 
-    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
-        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    private static MediaPlayerContext getContext() {
+        return MediaPlayerContext.get();
     }
 
     public String url() {
@@ -174,7 +179,7 @@ public final class VideoPlayer {
             thread.interrupt();
         }
         renderer.releaseTexture();
-        java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
+        List<VideoFrame> drained = new ArrayList<>();
         frameQueue.drainTo(drained);
         drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
     }
@@ -387,7 +392,9 @@ public final class VideoPlayer {
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
-            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), getContext().getConfigStore().videoMaxWidth(), getContext().getConfigStore().videoMaxHeight());
+            int[] target = FFmpegCli.fitWithin(info.width(), info.height(),
+                    getContext().getConfigStore().videoMaxWidth(),
+                    getContext().getConfigStore().videoMaxHeight());
             videoWidth = target[0];
             videoHeight = target[1];
             durationMicros = Math.max(0, info.durationMicros());
@@ -486,7 +493,7 @@ public final class VideoPlayer {
         seekRequested = false;
 
         audioOutput.flushLine();
-        java.util.List<VideoFrame> drained = new java.util.ArrayList<>();
+        List<VideoFrame> drained = new ArrayList<>();
         frameQueue.drainTo(drained);
         drained.forEach(f -> freeBuffers.offer(f.rgbaBuffer()));
 
@@ -547,7 +554,8 @@ public final class VideoPlayer {
         frameIndex = 0;
         sessionBaseMicros = Math.round(startSeconds * 1_000_000.0);
 
-        session.start(mediaUrl, videoWidth, videoHeight, startSeconds, hasAudio, audioOutput.getSampleRate(), audioOutput.getChannels(), gen, (in) -> {
+        session.start(mediaUrl, videoWidth, videoHeight, startSeconds, hasAudio,
+                audioOutput.getSampleRate(), audioOutput.getChannels(), gen, (in) -> {
             audioOutput.pumpAudio(gen, () -> sessionGen, () -> running, in);
         });
     }

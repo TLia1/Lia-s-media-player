@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
 
 import net.minecraft.client.gui.Font;
@@ -32,7 +33,7 @@ final class Thumbnail {
      */
     static void draw(GuiGraphics g, Font font, String url, int x, int y) {
         g.fill(x, y, x + W, y + H, Theme.PLACEHOLDER);
-        VideoThumbnailCache.Thumb thumb = VideoThumbnailCache.getOrLoad(url);
+        VideoThumbnailCache.Thumb thumb = MediaPlayerContext.get().getThumbnailCache().getOrLoad(url);
         if (thumb.isLoaded()) {
             // Fit the (already-small) thumbnail inside the box, preserving aspect.
             int tw = Math.max(1, thumb.width);

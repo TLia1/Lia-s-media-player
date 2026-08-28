@@ -1,8 +1,12 @@
 package com.lia.mediaplayer.image;
 
+import com.lia.mediaplayer.config.ConfigStore;
 import com.mojang.blaze3d.platform.NativeImage;
 import org.w3c.dom.Node;
 
+import java.awt.AlphaComposite;
+import java.awt.Composite;
+import java.awt.Rectangle;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.metadata.IIOMetadata;
@@ -83,7 +87,7 @@ public final class GifDecoder {
                 throw new IOException("GIF has no frames");
             }
             int frameLimit = Math.min(frameCount,
-                    com.lia.mediaplayer.config.ConfigStore.MAX_GIF_FRAMES.getValue());
+                    ConfigStore.MAX_GIF_FRAMES.getValue());
 
             int[] canvasSize = readLogicalScreenSize(reader);
             int canvasWidth = canvasSize[0];
@@ -134,7 +138,7 @@ public final class GifDecoder {
                     // The rectangle comes from the file, so clip it to the canvas: a frame
                     // placed partly outside the logical screen is malformed but common
                     // enough that it should degrade, not abort the decode.
-                    java.awt.Rectangle restoreRect = meta.disposal == 3
+                    Rectangle restoreRect = meta.disposal == 3
                             ? clipToCanvas(meta.x, meta.y, frame.getWidth(), frame.getHeight(), canvasWidth, canvasHeight)
                             : null;
                     if (restoreRect != null) {
@@ -211,7 +215,7 @@ public final class GifDecoder {
     /**
      * The part of a frame rectangle that actually lies on the canvas, or {@code null} if none does.
      */
-    private static java.awt.Rectangle clipToCanvas(int x, int y, int w, int h, int canvasW, int canvasH) {
+    private static Rectangle clipToCanvas(int x, int y, int w, int h, int canvasW, int canvasH) {
         int x0 = Math.max(0, x);
         int y0 = Math.max(0, y);
         int x1 = Math.min(canvasW, x + w);
@@ -219,7 +223,7 @@ public final class GifDecoder {
         if (x1 <= x0 || y1 <= y0) {
             return null;
         }
-        return new java.awt.Rectangle(x0, y0, x1 - x0, y1 - y0);
+        return new Rectangle(x0, y0, x1 - x0, y1 - y0);
     }
 
     private record Frames(List<BufferedImage> images, List<Integer> delays) {
@@ -260,8 +264,8 @@ public final class GifDecoder {
     }
 
     private static void clearRect(Graphics2D g, int x, int y, int w, int h) {
-        java.awt.Composite previous = g.getComposite();
-        g.setComposite(java.awt.AlphaComposite.Clear);
+        Composite previous = g.getComposite();
+        g.setComposite(AlphaComposite.Clear);
         g.fillRect(x, y, w, h);
         g.setComposite(previous);
     }

@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.source.TenorSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,7 +16,7 @@ import java.util.regex.Pattern;
  * {@link ImagePreviewCache} can fetch the actual image.
  *
  * <p>Recognizing a Tenor link is the job of
- * {@link com.lia.mediaplayer.source.TenorSource}; this class only handles the
+ * {@link TenorSource}; this class only handles the
  * resolution step. A Tenor "view" link is an HTML page, not an image file, but it
  * is server-rendered with the media URLs in its markup, for example an
  * {@code <img>} pointing at {@code https://media1.tenor.com/m/<id>/name.gif} and
@@ -57,7 +58,7 @@ final class TenorResolver {
      * pool. Throws if the page can't be fetched or no media URL is found.
      */
     static String resolve(String pageUrl) throws IOException {
-        if (!com.lia.mediaplayer.source.TenorSource.isTenorPage(pageUrl)) {
+        if (!TenorSource.isTenorPage(pageUrl)) {
             throw new IOException("Not a Tenor page: " + pageUrl);
         }
         HttpURLConnection connection = (HttpURLConnection) URI.create(pageUrl).toURL().openConnection();

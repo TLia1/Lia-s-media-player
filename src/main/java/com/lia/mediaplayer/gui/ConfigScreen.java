@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import com.lia.mediaplayer.tools.MediaBinaries;
 import net.minecraft.client.gui.GuiGraphics;
@@ -78,7 +77,7 @@ public class ConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx == null) {
             return;
         }
@@ -182,7 +181,7 @@ public class ConfigScreen extends Screen {
      * into it) alone — the responder that calls this fires on every keystroke.
      */
     private void refreshOptions() {
-        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx == null || this.optionsList == null) {
             return;
         }

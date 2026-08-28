@@ -1,14 +1,16 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
  * A Vimeo video page ({@code vimeo.com/<id>}) or its embed player
  * ({@code player.vimeo.com/video/<id>}). A page, so it goes through yt-dlp.
  */
-public final class VimeoSource implements com.lia.mediaplayer.api.MediaSource {
+public final class VimeoSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[vimeo]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.vimeo");
 
     @Override
     public boolean matches(String url) {
@@ -16,8 +18,8 @@ public final class VimeoSource implements com.lia.mediaplayer.api.MediaSource {
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

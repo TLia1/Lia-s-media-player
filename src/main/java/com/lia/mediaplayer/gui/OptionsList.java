@@ -2,7 +2,6 @@ package com.lia.mediaplayer.gui;
 
 import com.google.common.collect.ImmutableList;
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.config.ConfigOption;
 import com.lia.mediaplayer.api.config.OptionWidth;
 import net.minecraft.ChatFormatting;
@@ -163,7 +162,7 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
      * The small button that puts one option back to the value it was declared with.
      */
     private static Button resetButton(ConfigOption<?> option, Runnable onChanged) {
-        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+        MediaPlayerContext ctx = MediaPlayerContext.get();
         Button button = Button.builder(Component.translatable("gui.liasmediaplayer.config.reset"), b -> {
             option.resetToDefault();
             ctx.getConfigStore().save();
@@ -180,7 +179,7 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
         private final int widgetWidth;
 
         public SingleEntry(ConfigOption<?> option, int widgetWidth, Runnable onChanged) {
-            MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+            MediaPlayerContext ctx = MediaPlayerContext.get();
             this.option = option;
             this.widgetWidth = widgetWidth;
             this.widget = option.createWidget(0, 0, widgetWidth, () -> ctx.getConfigStore().save());
@@ -209,7 +208,9 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
         // are not targets, so this could equally be <1.21.9 or <1.21.10.
         //? if <1.21.11 {
         @Override
-        public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isMouseOver, float partialTick) {
+        public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left,
+                           int width, int height, int mouseX, int mouseY,
+                           boolean isMouseOver, float partialTick) {
             place(left, top);
             this.widget.render(guiGraphics, mouseX, mouseY, partialTick);
             this.reset.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -254,7 +255,7 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
 
         public DoubleEntry(ConfigOption<?> option1, ConfigOption<?> option2,
                            int widgetWidth, int secondColumnX, Runnable onChanged) {
-            MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+            MediaPlayerContext ctx = MediaPlayerContext.get();
             this.option1 = option1;
             this.option2 = option2;
             this.widgetWidth = widgetWidth;
@@ -285,7 +286,9 @@ public class OptionsList extends ContainerObjectSelectionList<OptionsList.Entry>
         // See the note on SingleEntry.
         //? if <1.21.11 {
         @Override
-        public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isMouseOver, float partialTick) {
+        public void render(@NotNull GuiGraphics guiGraphics, int index, int top, int left,
+                           int width, int height, int mouseX, int mouseY,
+                           boolean isMouseOver, float partialTick) {
             place(left, top);
             this.widget1.render(guiGraphics, mouseX, mouseY, partialTick);
             this.reset1.render(guiGraphics, mouseX, mouseY, partialTick);

@@ -5,12 +5,15 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Locates existing installations of the external tools the media player shells
@@ -222,12 +225,12 @@ final class BinaryLocator {
                     .start();
             String output;
             try (InputStream in = process.getInputStream()) {
-                output = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
-            if (!process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+            if (!process.waitFor(8, TimeUnit.SECONDS) || process.exitValue() != 0) {
                 return false;
             }
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("version\\s+(?:n)?(\\d+)\\.(\\d+)(?:\\.(\\d+))?").matcher(output);
+            Matcher m = Pattern.compile("version\\s+(?:n)?(\\d+)\\.(\\d+)(?:\\.(\\d+))?").matcher(output);
             if (m.find()) {
                 int major = Integer.parseInt(m.group(1));
                 int minor = Integer.parseInt(m.group(2));

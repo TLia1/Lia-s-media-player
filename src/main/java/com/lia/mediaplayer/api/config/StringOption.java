@@ -81,4 +81,24 @@ public class StringOption extends ConfigOption<String> {
         });
         return box;
     }
+
+    // ---- Covariant builder overrides (see ConfigOption's javadoc) ------------
+
+    @Override
+    public StringOption withDescription(String descriptionKey) {
+        super.withDescription(descriptionKey);
+        return this;
+    }
+
+    @Override
+    public StringOption withWarning(String warningKey) {
+        super.withWarning(warningKey);
+        return this;
+    }
+
+    @Override
+    public StringOption withWidth(OptionWidth width) {
+        super.withWidth(width);
+        return this;
+    }
 }

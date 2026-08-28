@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -8,11 +10,11 @@ import net.minecraft.network.chat.Component;
  * <p>Like {@link YouTubeSource} and {@link TwitchSource} these are web pages rather than
  * media files, so they are {@linkplain #requiresExtractor() resolved by yt-dlp} before
  * ffmpeg sees them. SoundCloud has no video, so the link is claimed as
- * {@link com.lia.mediaplayer.api.MediaKind#AUDIO} and opens the compact audio bar.</p>
+ * {@link MediaKind#AUDIO} and opens the compact audio bar.</p>
  */
-public final class SoundCloudSource implements com.lia.mediaplayer.api.MediaSource {
+public final class SoundCloudSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[soundcloud]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.soundcloud");
 
     @Override
     public boolean matches(String url) {
@@ -20,8 +22,8 @@ public final class SoundCloudSource implements com.lia.mediaplayer.api.MediaSour
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.AUDIO;
+    public MediaKind kind() {
+        return MediaKind.AUDIO;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.chat.ChatEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Style;
@@ -23,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>The two answers are not quite the same. The old method returned the style
  * of any component under the cursor; {@code ClickableStyleFinder} only keeps
  * one that carries a click event. That makes no difference here — both call
- * sites feed the result straight to {@link com.lia.mediaplayer.chat.ChatEvents}
+ * sites feed the result straight to {@link ChatEvents}
  * {@code .clickedUrl}, which returns null for a style without one — but it is a
  * narrower query, not a rename.</p>
  *

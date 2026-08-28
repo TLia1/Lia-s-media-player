@@ -1,8 +1,9 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.tools.MediaBinaries;
 import com.lia.mediaplayer.video.VideoPlayer;
-import com.lia.mediaplayer.video.VideoThumbnailCache;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -11,7 +12,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-import java.util.List;
 
 /**
  * The on-screen window for a single {@link VideoPlayer}: the video image plus a
@@ -23,22 +23,17 @@ import java.util.List;
  * and playback are independent: a hidden window keeps its player decoding and
  * playing audio.</p>
  *
- * <p>A window also owns a small <em>queue</em> of URLs. Rather than spawning a new
- * window for every link, additional videos are appended here; when the current
- * one ends (or the user presses "next") the window swaps its {@link VideoPlayer}
- * for the next queued URL in place.</p>
+ * <p>The <em>queue</em> — additional videos appended rather than given a window each,
+ * and the swap of the {@link VideoPlayer} in place when the current one ends — comes
+ * from {@link QueuedMediaWindow}, shared with the audio bar. What is left here is the
+ * picture and the control bar under it.</p>
  */
-final class VideoWindow extends MediaWindow {
+final class VideoWindow extends QueuedMediaWindow<VideoPlayer> {
     private static final int CONTROL_BAR_HEIGHT = 18;
     /**
      * Smallest seek bar we keep when computing the minimum window width.
      */
     private static final int MIN_SEEK_W = 20;
-    /**
-     * How many entries of a bulk enqueue get their thumbnail/title fetched up front.
-     */
-    private static final int WARM_AHEAD = 10;
-
     /**
      * A player box this wide (or narrower) gets the compact {@link QueuePanel.Mode#MINI}
      * queue panel: beside a small player, a full-width one would be wider than the
@@ -46,190 +41,41 @@ final class VideoWindow extends MediaWindow {
      */
     private static final int MINI_PANEL_MAX_BOX_W = 200;
 
-    private VideoPlayer player;
-    /**
-     * URLs waiting to play in this same window, in play order.
-     */
-    private final PlayQueue queue = new PlayQueue();
-    private boolean draggingSeek;
-    private boolean draggingVolume;
-    private double scrubFraction;
-
-    // Control-bar hit regions cached from the last layout.
-    private int playBtnX, playBtnY;
-    private int backBtnX, backBtnY;
-    private int fwdBtnX, fwdBtnY;
+    // Video-only parts of the control bar; the rest of the hit regions are shared
+    // (see QueuedMediaWindow).
     private boolean showNext;
-    private int nextBtnX, nextBtnY;
-    private int loopBtnX, loopBtnY;
     private boolean showShuffle;
-    private int shuffleBtnX, shuffleBtnY;
     private boolean showVolume;
-    private boolean showVolumePopup;
-    private int volBtnX, volBtnY;
-    private int volBarX, volBarY;
-    private int seekX, seekY, seekW, seekH;
-    private int timeTextX;
-    private boolean showQueueBtn;
-    private int queueBtnX, queueBtnY;
-
-    /**
-     * The list of what plays next, docked beside the player. Shared with the audio bar
-     * (see {@link QueuePanel}); this window only says which layout it has room for and
-     * what "play this one" means.
-     */
-    private final QueuePanel panel = new QueuePanel(queue, this::jumpTo);
 
     /** Drawn over the content area once playback has failed; see {@link ErrorPanel}. */
     private final ErrorPanel errorPanel = new ErrorPanel();
 
     VideoWindow(VideoPlayer player) {
-        this.player = player;
-    }
-
-    VideoPlayer player() {
-        return player;
+        super(player);
     }
 
     // ------------------------------------------------------------------
-    // Queue
+    // Queue (the model, the panel and the transport live in QueuedMediaWindow)
     // ------------------------------------------------------------------
 
-    /**
-     * Appends a URL to this window's play queue (it plays after the current ones).
-     */
-    void enqueue(String url) {
-        queue.add(url);
-        // Warm the thumbnail and title so the panel can show them without a click.
-        VideoThumbnailCache.getOrLoad(url);
-        MediaTitleCache.getOrLoad(url);
+    @Override
+    protected VideoPlayer createPlayer(String url) {
+        return new VideoPlayer(url);
+    }
+
+    @Override
+    protected MediaKind playbackKind() {
+        return MediaKind.VIDEO;
     }
 
     /**
-     * Appends several URLs in order — an expanded YouTube playlist, typically.
-     *
-     * <p>Only the first few are warmed: both caches are small LRUs backed by a network
-     * (or ffmpeg) call per entry, so eagerly warming hundreds of them would thrash the
-     * cache and fire hundreds of requests for rows nobody has scrolled to. The panel
-     * loads the rest as it draws them.</p>
+     * The panel shows a thumbnail beside each row, so the picture is warmed as well as
+     * the name.
      */
-    void enqueueAll(java.util.Collection<String> urls) {
-        int warmed = 0;
-        for (String url : urls) {
-            if (warmed++ < WARM_AHEAD) {
-                enqueue(url);
-            } else {
-                queue.add(url);
-            }
-        }
-    }
-
-    /**
-     * Number of URLs still waiting to play after the current one.
-     */
-    int queueSize() {
-        return queue.size();
-    }
-
-    /**
-     * A snapshot of the queued URLs, in play order, for rendering.
-     */
-    List<String> queuedUrls() {
-        return queue.snapshot();
-    }
-
-    /**
-     * Disposes the current player and starts the next video in the same window — the
-     * head of the queue, the current video again under {@link RepeatMode#ONE}, or the
-     * start of a fresh round under {@link RepeatMode#ALL}. Returns {@code false} (and
-     * leaves the current player untouched) when there is nothing left to play, so
-     * callers can close the window instead.
-     */
-    boolean advance() {
-        String next = queue.next(player.url());
-        if (next == null) {
-            return false;
-        }
-        playUrl(next);
-        return true;
-    }
-
-    /**
-     * Sets how this window loops (see {@link RepeatMode}).
-     */
-    void setRepeat(RepeatMode mode) {
-        queue.setRepeat(mode);
-    }
-
-    /**
-     * Keeps shuffle on for this window, so every looped round is reshuffled.
-     */
-    void setShuffle(boolean value) {
-        queue.setShuffle(value);
-    }
-
-    /**
-     * Plays a specific queued entry now (the others keep their order).
-     */
-    void jumpTo(int index) {
-        if (index < 0 || index >= queue.size()) {
-            return;
-        }
-        playUrl(queue.remove(index));
-    }
-
-    /**
-     * Removes a queued entry without playing it.
-     */
-    void removeAt(int index) {
-        if (index >= 0 && index < queue.size()) {
-            queue.remove(index);
-        }
-    }
-
-    /**
-     * Moves a queued entry one place earlier in the queue.
-     */
-    void moveUp(int index) {
-        queue.moveUp(index);
-    }
-
-    /**
-     * Moves a queued entry one place later in the queue.
-     */
-    void moveDown(int index) {
-        queue.moveDown(index);
-    }
-
-    /**
-     * Swaps in a new player for the given URL, disposing the current one.
-     */
-    private void playUrl(String url) {
-        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.VIDEO);
-        player.dispose();
-        draggingSeek = false;
-        draggingVolume = false;
-        player = new VideoPlayer(url);
-        player.start();
-        announceIfHidden(url);
-    }
-
-    /**
-     * Starts the current video over from scratch — a fresh player, a fresh resolve, a
-     * fresh ffmpeg. What the retry button on a failed player does, and the only sensible
-     * answer to most of the causes {@link com.lia.mediaplayer.media.PlaybackError} names:
-     * an expired stream URL, a timeout, a network blip.
-     */
-    void retry() {
-        playUrl(player.url());
-    }
-
-    /**
-     * Disposes the current player and discards anything still queued.
-     */
-    void disposeAll() {
-        queue.clear();
-        player.dispose();
+    @Override
+    protected void warmCaches(String url) {
+        MediaPlayerContext.get().getThumbnailCache().getOrLoad(url);
+        MediaPlayerContext.get().getTitleCache().getOrLoad(url);
     }
 
     // ------------------------------------------------------------------
@@ -256,13 +102,8 @@ final class VideoWindow extends MediaWindow {
     }
 
     @Override
-    protected String mediaUrl() {
-        return player.url();
-    }
-
-    @Override
     protected void close() {
-        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getVideoManager().close(this);
+        MediaPlayerContext.get().getVideoManager().close(this);
     }
 
     @Override
@@ -275,20 +116,6 @@ final class VideoWindow extends MediaWindow {
         return WindowStateStore.VIDEO;
     }
 
-    @Override
-    protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
-        return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
-                geometry.sized(), geometry.width(),
-                panel.isOpen(), queue.repeat(), queue.shuffle());
-    }
-
-    @Override
-    protected void applyRestoredState(WindowStateStore.State state) {
-        panel.setOpen(state.queuePanel());
-        queue.setRepeat(state.repeat());
-        queue.setShuffle(state.shuffle());
-    }
-
     /**
      * The queue panel is docked <em>beside</em> the player and caps its width to leave
      * room ({@link #maxContentWidth}), so leaving it open would stop theatre mode ever
@@ -297,53 +124,6 @@ final class VideoWindow extends MediaWindow {
     @Override
     protected void onEnterTheater() {
         panel.setOpen(false);
-    }
-
-    // ------------------------------------------------------------------
-    // Transport (keyboard shortcuts; the control bar reaches the same actions)
-    // ------------------------------------------------------------------
-
-    @Override
-    boolean hasTransport() {
-        return true;
-    }
-
-    @Override
-    boolean togglePlayPause() {
-        player.togglePause();
-        return true;
-    }
-
-    @Override
-    boolean seekBy(long deltaMicros) {
-        long duration = player.durationMicros();
-        if (duration <= 0) {
-            return false; // a live stream has no position to seek within
-        }
-        player.seekTo(Mth.clamp(player.positionMicros() + deltaMicros, 0, duration));
-        return true;
-    }
-
-    @Override
-    long positionMicros() {
-        return player.positionMicros();
-    }
-
-    @Override
-    boolean playNext() {
-        return advance();
-    }
-
-    @Override
-    boolean cycleRepeat() {
-        queue.cycleRepeat();
-        return true;
-    }
-
-    @Override
-    boolean toggleShuffle() {
-        queue.toggleShuffle();
-        return true;
     }
 
     @Override
@@ -578,13 +358,13 @@ final class VideoWindow extends MediaWindow {
         boolean overPlay = inRect(mouseX, mouseY, playBtnX, playBtnY, BUTTON, BUTTON);
         Glyphs.playPause(g, playBtnX, playBtnY, player.isPlaying(), overPlay ? Theme.ICON_HOVER : Theme.ICON);
         if (overPlay) {
-            Tooltips.request(playTooltip(player.isPlaying()));
+            Tooltips.request(WindowChrome.playTooltip(player.isPlaying()));
         }
 
         // The two fixed-step skips.
         boolean seekable = player.durationMicros() > 0;
-        renderSkipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
-        renderSkipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
+        WindowChrome.skipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
+        WindowChrome.skipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
 
         // "Next" (skip to the next queued video) button.
         if (showNext) {
@@ -609,15 +389,15 @@ final class VideoWindow extends MediaWindow {
         // Loop / shuffle toggles.
         RepeatMode repeat = queue.repeat();
         boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
-        Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE, toggleColor(!repeat.isOff(), overLoop));
+        Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE, WindowChrome.toggleColor(!repeat.isOff(), overLoop));
         if (overLoop) {
-            Tooltips.request(loopTooltip(repeat));
+            Tooltips.request(WindowChrome.loopTooltip(repeat));
         }
         if (showShuffle) {
             boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
-            Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
+            Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, WindowChrome.toggleColor(queue.shuffle(), overShuffle));
             if (overShuffle) {
-                Tooltips.request(shuffleTooltip(queue.shuffle()));
+                Tooltips.request(WindowChrome.shuffleTooltip(queue.shuffle()));
             }
         }
 
@@ -626,7 +406,7 @@ final class VideoWindow extends MediaWindow {
             boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
             Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? Theme.ICON_HOVER : Theme.ICON);
             if (overVol) {
-                Tooltips.request(volumeTooltip(player.isMuted()));
+                Tooltips.request(WindowChrome.volumeTooltip(player.isMuted()));
             }
             showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
             if (showVolumePopup) {
@@ -668,7 +448,7 @@ final class VideoWindow extends MediaWindow {
                     return ClickResult.HANDLED;
                 }
                 case UPDATE_TOOLS -> {
-                    com.lia.mediaplayer.tools.MediaBinaries.updateToolsAsync();
+                    MediaBinaries.updateToolsAsync();
                     return ClickResult.HANDLED;
                 }
                 case NONE -> {
@@ -711,7 +491,8 @@ final class VideoWindow extends MediaWindow {
             player.toggleMute();
             return ClickResult.HANDLED;
         }
-        if (showVolume && showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6)) {
+        if (showVolume && showVolumePopup && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3,
+                MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6)) {
             draggingVolume = true;
             player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
             return ClickResult.HANDLED;
@@ -722,33 +503,6 @@ final class VideoWindow extends MediaWindow {
             return ClickResult.HANDLED;
         }
         return ClickResult.NONE;
-    }
-
-    @Override
-    protected boolean onControlDrag(double mouseX, double mouseY) {
-        if (draggingVolume) {
-            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
-            return true;
-        }
-        if (draggingSeek) {
-            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    protected boolean onControlRelease() {
-        if (draggingVolume) {
-            draggingVolume = false;
-            return true;
-        }
-        if (draggingSeek) {
-            draggingSeek = false;
-            player.seekToFraction(scrubFraction);
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -771,11 +525,6 @@ final class VideoWindow extends MediaWindow {
     protected boolean overPopup(double mouseX, double mouseY) {
         return showVolume && showVolumePopup
                 && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6);
-    }
-
-    @Override
-    protected boolean overExtraRegion(double mouseX, double mouseY) {
-        return panel.contains(mouseX, mouseY);
     }
 
 }

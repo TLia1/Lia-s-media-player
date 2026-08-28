@@ -1,9 +1,12 @@
 package com.lia.mediaplayer.audio;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.media.MediaPlayback;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.tools.FFmpegCli;
+import com.lia.mediaplayer.video.VideoPlayer;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * One playing (or paused) audio track — the sound-only counterpart of
- * {@link com.lia.mediaplayer.video.VideoPlayer}. It reuses the same external tooling and
+ * {@link VideoPlayer}. It reuses the same external tooling and
  * shared helpers (so there is no second copy of the heavy machinery):
  *
  * <ul>
@@ -44,7 +47,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * The line's {@code getMicrosecondPosition()} is the master clock; a stopped line
  * freezes it, so pausing needs no extra wall-clock bookkeeping.
  */
-public final class AudioPlayer {
+public final class AudioPlayer implements MediaPlayback {
 
     /**
      * Never seek into the very last slice (ffmpeg can EOF there with nothing to play).
@@ -55,7 +58,7 @@ public final class AudioPlayer {
      * un-pausing the line.
      *
      * <p>Kept at the value it has always shipped with. Sound does not have the video
-     * side's problem — {@link com.lia.mediaplayer.video.VideoPlayer} has to relaunch on
+     * side's problem — {@link VideoPlayer} has to relaunch on
      * <em>every</em> resume, because a video session blocked on its pipes never produces
      * a picture again — and raising this has not been tested against a real stream. The
      * failure it would cause is silence after a pause, which is exactly what the video
@@ -101,7 +104,7 @@ public final class AudioPlayer {
     /**
      * Where playback is going while a seek is in flight, or {@code -1} — the same
      * mechanism, and for the same reason, as
-     * {@link com.lia.mediaplayer.video.VideoPlayer}'s: a seek relaunches ffmpeg, and
+     * {@link VideoPlayer}'s: a seek relaunches ffmpeg, and
      * until it lands the line's clock still reports the old position, so a seek bar
      * reading the clock would snap back before jumping to where it was put.
      */
@@ -128,8 +131,8 @@ public final class AudioPlayer {
         return url;
     }
 
-    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
-        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    private static MediaPlayerContext getContext() {
+        return MediaPlayerContext.get();
     }
 
     public State state() {

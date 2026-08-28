@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.source;
 
+import java.net.URI;
 import java.util.Locale;
 
 /**
@@ -105,7 +106,7 @@ public final class ShareLink {
      * that name it already had — a second {@code t=} would be read by nobody in
      * particular, and the one that matters is the one being written now.
      *
-     * <p>Hand-rolled rather than routed through {@link java.net.URI}: rebuilding a URI
+     * <p>Hand-rolled rather than routed through {@link URI}: rebuilding a URI
      * from its parts re-encodes the path and drops what it considers redundant, and this
      * string is going onto someone's clipboard to be pasted back into chat. It should
      * come out as the link they were given, plus one parameter.</p>

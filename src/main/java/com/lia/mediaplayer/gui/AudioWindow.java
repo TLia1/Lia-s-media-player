@@ -1,7 +1,8 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.audio.AudioPlayer;
-import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.media.PlaybackError;
 
 import net.minecraft.client.Minecraft;
@@ -9,8 +10,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-
-import java.util.Collection;
 
 import static com.lia.mediaplayer.gui.MediaControls.timeText;
 
@@ -21,16 +20,17 @@ import static com.lia.mediaplayer.gui.MediaControls.timeText;
  * it sits unobtrusively while you listen.
  *
  * <p>Movement, resizing, the corner buttons and the shared z-order all come from
- * {@link MediaWindow}; the play queue is the shared {@link PlayQueue} (same model the
- * video player uses), which also holds the history behind the "previous" control and
- * the loop / shuffle modes the two right-hand toggles drive.</p>
+ * {@link MediaWindow}; the play queue, the transport and the seek/volume dragging come
+ * from {@link QueuedMediaWindow}, shared with the video player. The queue is the shared
+ * {@link PlayQueue}, which also holds the history behind the "previous" control and the
+ * loop / shuffle modes the two right-hand toggles drive.</p>
  *
  * <p>The queue is also <em>shown</em> the same way: the {@link QueuePanel} that docks
  * beside the video player docks beside this bar too, in its text layout. Before that
  * the bar could only say "+49" in its time read-out, which was the whole of what a
  * fifty-track playlist looked like from here.</p>
  */
-final class AudioWindow extends MediaWindow {
+final class AudioWindow extends QueuedMediaWindow<AudioPlayer> {
     private static final int CONTROL_BAR_HEIGHT = 16;
     private static final int MIN_SEEK_W = 20;
     /**
@@ -38,163 +38,35 @@ final class AudioWindow extends MediaWindow {
      */
     private static final int BASE_W = 254;
     private static final int BASE_H = 14;
-    /**
-     * How many entries of a bulk enqueue get their title fetched up front.
-     */
-    private static final int WARM_AHEAD = 10;
 
-    private AudioPlayer player;
-    private final PlayQueue queue = new PlayQueue();
-    /**
-     * What plays next, in the text layout: an audio bar has no thumbnails to show, so
-     * its rows are the names alone (see {@link QueuePanel.Mode#TEXT}).
-     */
-    private final QueuePanel panel = new QueuePanel(queue, this::jumpTo);
-
-    private boolean draggingSeek;
-    private boolean draggingVolume;
-    private double scrubFraction;
-
-    // Control-bar hit regions cached from the last layout.
-    private int playBtnX, playBtnY;
+    // The one control the video player has no counterpart for; the rest of the hit
+    // regions are shared (see QueuedMediaWindow).
     private int prevBtnX, prevBtnY;
-    private int backBtnX, backBtnY;
-    private int fwdBtnX, fwdBtnY;
-    private int nextBtnX, nextBtnY;
-    private int loopBtnX, loopBtnY;
-    private int shuffleBtnX, shuffleBtnY;
-    private boolean showQueueBtn;
-    private int queueBtnX, queueBtnY;
-    private int volBtnX, volBtnY;
-    private boolean showVolumePopup;
-    private int volBarX, volBarY;
-    private int seekX, seekY, seekW, seekH;
-    private int timeTextX;
 
     AudioWindow(AudioPlayer player) {
-        this.player = player;
-    }
-
-    AudioPlayer player() {
-        return player;
+        super(player);
     }
 
     // ------------------------------------------------------------------
-    // Queue
+    // Queue (the model, the panel and the transport live in QueuedMediaWindow)
     // ------------------------------------------------------------------
 
-    /**
-     * Appends a URL to this window's play queue.
-     */
-    void enqueue(String url) {
-        queue.add(url);
-        MediaTitleCache.getOrLoad(url); // warm the name so the bar can show it instantly
+    @Override
+    protected AudioPlayer createPlayer(String url) {
+        return new AudioPlayer(url);
+    }
+
+    @Override
+    protected MediaKind playbackKind() {
+        return MediaKind.AUDIO;
     }
 
     /**
-     * Appends several URLs (e.g. a whole playlist) in order.
-     *
-     * <p>Only the first few names are warmed: the title cache is a small LRU backed by
-     * a network call per entry, so eagerly resolving a few hundred of them would thrash
-     * it for names the bar will not show for the next hour.</p>
+     * An audio bar has no thumbnails, so only the name is warmed.
      */
-    void enqueueAll(Collection<String> urls) {
-        int warmed = 0;
-        for (String url : urls) {
-            if (warmed++ < WARM_AHEAD) {
-                enqueue(url);
-            } else {
-                queue.add(url);
-            }
-        }
-    }
-
-    int queueSize() {
-        return queue.size();
-    }
-
-    /**
-     * Sets how this bar loops (see {@link RepeatMode}); used when a saved playlist is
-     * started with looping already on.
-     */
-    void setRepeat(RepeatMode mode) {
-        queue.setRepeat(mode);
-    }
-
-    /**
-     * Keeps shuffle on for this bar, so every looped round is reshuffled rather than
-     * replaying the order the first round happened to get.
-     */
-    void setShuffle(boolean value) {
-        queue.setShuffle(value);
-    }
-
-    /**
-     * Disposes the current player and starts the next track in the same window — the
-     * head of the queue, the current track again under {@link RepeatMode#ONE}, or the
-     * start of a fresh round under {@link RepeatMode#ALL}. Returns {@code false}
-     * (leaving the current player untouched) when there is nothing left to play, so
-     * callers can close the window instead.
-     */
-    boolean advance() {
-        String next = queue.next(player.url());
-        if (next == null) {
-            return false;
-        }
-        playUrl(next);
-        return true;
-    }
-
-    /**
-     * Plays a specific queued entry now (the others keep their order) — what a click on
-     * a row of the queue panel means.
-     */
-    void jumpTo(int index) {
-        if (index < 0 || index >= queue.size()) {
-            return;
-        }
-        playUrl(queue.remove(index));
-    }
-
-    /**
-     * Goes back to the previously played track, re-queuing the current one at the front
-     * so "next" returns to it. Returns {@code false} when there is no history.
-     */
-    boolean previous() {
-        String prev = queue.previous(player.url());
-        if (prev == null) {
-            return false;
-        }
-        playUrl(prev);
-        return true;
-    }
-
-    /**
-     * Swaps in a new player for the given URL, disposing the current one.
-     */
-    private void playUrl(String url) {
-        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.AUDIO);
-        player.dispose();
-        draggingSeek = false;
-        player = new AudioPlayer(url);
-        player.start();
-        announceIfHidden(url);
-    }
-
-    /**
-     * Starts the current track over from scratch — a fresh player, a fresh resolve, a
-     * fresh ffmpeg. What the retry button on a failed bar does.
-     */
-    void retry() {
-        playUrl(player.url());
-    }
-
-    /**
-     * Disposes the current player and discards anything still queued.
-     */
-    void disposeAll() {
-        queue.clear();
-        player.dispose();
+    @Override
+    protected void warmCaches(String url) {
+        MediaPlayerContext.get().getTitleCache().getOrLoad(url);
     }
 
     // ------------------------------------------------------------------
@@ -212,13 +84,8 @@ final class AudioWindow extends MediaWindow {
     }
 
     @Override
-    protected String mediaUrl() {
-        return player.url();
-    }
-
-    @Override
     protected void close() {
-        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getAudioManager().close(this);
+        MediaPlayerContext.get().getAudioManager().close(this);
     }
 
     @Override
@@ -231,20 +98,6 @@ final class AudioWindow extends MediaWindow {
         return WindowStateStore.AUDIO;
     }
 
-    @Override
-    protected WindowStateStore.State decorateState(WindowStateStore.State geometry) {
-        return new WindowStateStore.State(geometry.placed(), geometry.x(), geometry.y(),
-                geometry.sized(), geometry.width(),
-                panel.isOpen(), queue.repeat(), queue.shuffle());
-    }
-
-    @Override
-    protected void applyRestoredState(WindowStateStore.State state) {
-        panel.setOpen(state.queuePanel());
-        queue.setRepeat(state.repeat());
-        queue.setShuffle(state.shuffle());
-    }
-
     /**
      * A bar of buttons has no picture to enlarge; filling the screen with one would be
      * a 14 px strip stretched over a monitor.
@@ -254,56 +107,13 @@ final class AudioWindow extends MediaWindow {
         return false;
     }
 
-    // ------------------------------------------------------------------
-    // Transport (keyboard shortcuts; the control bar reaches the same actions)
-    // ------------------------------------------------------------------
-
-    @Override
-    boolean hasTransport() {
-        return true;
-    }
-
-    @Override
-    boolean togglePlayPause() {
-        player.togglePause();
-        return true;
-    }
-
-    @Override
-    boolean seekBy(long deltaMicros) {
-        long duration = player.durationMicros();
-        if (duration <= 0) {
-            return false; // a live stream has no position to seek within
-        }
-        player.seekTo(Mth.clamp(player.positionMicros() + deltaMicros, 0, duration));
-        return true;
-    }
-
-    @Override
-    long positionMicros() {
-        return player.positionMicros();
-    }
-
-    @Override
-    boolean playNext() {
-        return advance();
-    }
-
+    /**
+     * The audio bar is the only window with a "previous" control, so it is the only one
+     * that answers the shortcut. See {@link QueuedMediaWindow#previous()}.
+     */
     @Override
     boolean playPrevious() {
         return previous();
-    }
-
-    @Override
-    boolean cycleRepeat() {
-        queue.cycleRepeat();
-        return true;
-    }
-
-    @Override
-    boolean toggleShuffle() {
-        queue.toggleShuffle();
-        return true;
     }
 
     @Override
@@ -441,9 +251,9 @@ final class AudioWindow extends MediaWindow {
             }
         } else if (working) {
             text = Component.translatable("gui.liasmediaplayer.audio.loading",
-                    MediaTitleCache.getOrLoad(player.url())).getString();
+                    MediaPlayerContext.get().getTitleCache().getOrLoad(player.url())).getString();
         } else {
-            text = MediaTitleCache.getOrLoad(player.url());
+            text = MediaPlayerContext.get().getTitleCache().getOrLoad(player.url());
         }
         g.drawString(font, Component.literal(Glyphs.fit(font, text, maxW)), textX, ty, color);
     }
@@ -465,7 +275,7 @@ final class AudioWindow extends MediaWindow {
         if (overPlay) {
             Tooltips.request(failed
                     ? Component.translatable("gui.liasmediaplayer.error.retry")
-                    : playTooltip(player.isPlaying()));
+                    : WindowChrome.playTooltip(player.isPlaying()));
         }
 
         boolean canPrev = queue.hasPrevious();
@@ -476,8 +286,8 @@ final class AudioWindow extends MediaWindow {
         }
 
         boolean seekable = player.durationMicros() > 0;
-        renderSkipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
-        renderSkipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
+        WindowChrome.skipButton(g, backBtnX, backBtnY, false, seekable, mouseX, mouseY);
+        WindowChrome.skipButton(g, fwdBtnX, fwdBtnY, true, seekable, mouseX, mouseY);
 
         boolean canNext = queue.hasNext();
         boolean overNext = inRect(mouseX, mouseY, nextBtnX, nextBtnY, BUTTON, BUTTON);
@@ -499,21 +309,21 @@ final class AudioWindow extends MediaWindow {
         RepeatMode repeat = queue.repeat();
         boolean overLoop = inRect(mouseX, mouseY, loopBtnX, loopBtnY, BUTTON, BUTTON);
         Glyphs.loop(g, loopBtnX, loopBtnY, repeat == RepeatMode.ONE,
-                toggleColor(!repeat.isOff(), overLoop));
+                WindowChrome.toggleColor(!repeat.isOff(), overLoop));
         if (overLoop) {
-            Tooltips.request(loopTooltip(repeat));
+            Tooltips.request(WindowChrome.loopTooltip(repeat));
         }
 
         boolean overShuffle = inRect(mouseX, mouseY, shuffleBtnX, shuffleBtnY, BUTTON, BUTTON);
-        Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, toggleColor(queue.shuffle(), overShuffle));
+        Glyphs.shuffle(g, shuffleBtnX, shuffleBtnY, WindowChrome.toggleColor(queue.shuffle(), overShuffle));
         if (overShuffle) {
-            Tooltips.request(shuffleTooltip(queue.shuffle()));
+            Tooltips.request(WindowChrome.shuffleTooltip(queue.shuffle()));
         }
 
         boolean overVol = inRect(mouseX, mouseY, volBtnX, volBtnY, BUTTON, BUTTON);
         Glyphs.speaker(g, volBtnX, volBtnY, player.isMuted(), overVol ? Theme.ICON_HOVER : Theme.ICON);
         if (overVol) {
-            Tooltips.request(volumeTooltip(player.isMuted()));
+            Tooltips.request(WindowChrome.volumeTooltip(player.isMuted()));
         }
         showVolumePopup = overVol || overPopup(mouseX, mouseY) || draggingVolume;
         if (showVolumePopup) {
@@ -600,33 +410,6 @@ final class AudioWindow extends MediaWindow {
     }
 
     @Override
-    protected boolean onControlDrag(double mouseX, double mouseY) {
-        if (draggingVolume) {
-            player.setVolume((float) MediaControls.volumeFractionAt(mouseY, volBarY));
-            return true;
-        }
-        if (draggingSeek) {
-            scrubFraction = MediaControls.fractionAt(mouseX, seekX, seekW);
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    protected boolean onControlRelease() {
-        if (draggingVolume) {
-            draggingVolume = false;
-            return true;
-        }
-        if (draggingSeek) {
-            draggingSeek = false;
-            player.seekToFraction(scrubFraction);
-            return true;
-        }
-        return false;
-    }
-
-    @Override
     protected boolean overPopup(double mouseX, double mouseY) {
         return showVolumePopup
                 && inRect(mouseX, mouseY, volBarX - 3, volBarY - 3, MediaControls.VOL_BAR_W + 6, MediaControls.VOL_BAR_H + 6);
@@ -643,11 +426,6 @@ final class AudioWindow extends MediaWindow {
         }
         player.changeVolume((float) (scrollY * 0.1));
         return true;
-    }
-
-    @Override
-    protected boolean overExtraRegion(double mouseX, double mouseY) {
-        return panel.contains(mouseX, mouseY);
     }
 
     /**

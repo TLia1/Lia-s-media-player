@@ -50,7 +50,7 @@ public final class ClientHooks {
      * @param sender the display name the message arrived with, or {@code null} for a
      *               system message (and for any message whose sender the loader could
      *               not name). Only the sender filter reads it — see
-     *               {@link com.lia.mediaplayer.chat.MediaFilters}. It is a name rather
+     *               {@link MediaFilters}. It is a name rather
      *               than a UUID because that is what both loaders can produce from the
      *               same field ({@code ChatType.Bound#name()}) on every target version,
      *               and because a name is what someone writing a filter list has.

@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.history.HistoryEntry;
 import com.lia.mediaplayer.history.HistoryStore;
 import com.lia.mediaplayer.media.MediaTitleCache;
@@ -67,7 +66,7 @@ public final class HistoryScreen extends Screen {
     }
 
     private static MediaPlayerContext context() {
-        return (MediaPlayerContext) LiasMediaPlayerApi.getInstance();
+        return MediaPlayerContext.get();
     }
 
     private HistoryStore history() {
@@ -191,7 +190,7 @@ public final class HistoryScreen extends Screen {
         }
         List<HistoryEntry> matches = new ArrayList<>();
         for (HistoryEntry entry : all) {
-            String title = MediaTitleCache.getOrLoad(entry.url()).toLowerCase(Locale.ROOT);
+            String title = MediaPlayerContext.get().getTitleCache().getOrLoad(entry.url()).toLowerCase(Locale.ROOT);
             if (title.contains(needle) || entry.url().toLowerCase(Locale.ROOT).contains(needle)) {
                 matches.add(entry);
             }
@@ -297,7 +296,7 @@ public final class HistoryScreen extends Screen {
         g.fill(x + 1, rowY, x + w - 1, rowY + ROW_EN - 1,
                 (overRow && !overButtons) ? Theme.ROW_HOVER_BG : Theme.ROW_BG);
 
-        String label = kindPrefix(entry) + MediaTitleCache.getOrLoad(entry.url());
+        String label = kindPrefix(entry) + MediaPlayerContext.get().getTitleCache().getOrLoad(entry.url());
         g.drawString(font, Component.literal(Glyphs.fit(font, label, heartX - 8 - x)),
                 x + 4, rowY + (ROW_EN - font.lineHeight) / 2, Theme.TEXT);
 

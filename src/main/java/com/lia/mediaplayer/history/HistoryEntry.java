@@ -1,13 +1,15 @@
 package com.lia.mediaplayer.history;
 
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.playlist.Playlist;
 
 /**
  * One thing that was played, as {@link HistoryStore} remembers it.
  *
  * <p>Only the URL is kept, never the name: titles come from
- * {@link com.lia.mediaplayer.media.MediaTitleCache}, which resolves them for the rows
- * actually on screen. That is the same bargain {@link com.lia.mediaplayer.playlist.Playlist}
+ * {@link MediaTitleCache}, which resolves them for the rows
+ * actually on screen. That is the same bargain {@link Playlist}
  * makes — a saved list of links, not a saved list of names that would go stale the day a
  * video is renamed.</p>
  *

@@ -10,11 +10,15 @@
 // the loader's own buildscript, not here.
 
 import org.gradle.api.plugins.JavaPluginExtension
+import org.gradle.api.plugins.quality.Checkstyle
+import org.gradle.api.plugins.quality.CheckstyleExtension
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
 
 // Per-version: Mojang shipped Java 21 for 1.21.1-1.21.11 and moved to Java 25 in 26.1.
 // Gradle provisions whichever toolchain is missing through the foojay resolver applied
@@ -25,10 +29,62 @@ extensions.configure<JavaPluginExtension> {
     )
 }
 
+// ---------------------------------------------------------------------------
+// Source-level quality checks
+// ---------------------------------------------------------------------------
+// Checkstyle, JaCoCo and -Werror run on **one** target, named by `quality.target` in
+// gradle.properties. All fourteen compile the same rewritten src/ tree, so running them
+// everywhere would be the same report fourteen times — and it would make a Minecraft
+// deprecation on a version nobody has ported yet fail the whole matrix.
+val qualityTarget = project.name == project.property("quality.target").toString()
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    // There is no linter on this project; this is the closest thing to one.
-    options.compilerArgs.add("-Xlint:deprecation")
+    // Compiler warnings the codebase is currently clean of, so a new one means a new
+    // problem rather than one more line of noise nobody reads.
+    options.compilerArgs.add("-Xlint:deprecation,unchecked,rawtypes,fallthrough")
+    if (qualityTarget) {
+        // Teeth, on the one target where a warning is definitely about this code and
+        // not about the Minecraft version it happens to be compiled against.
+        options.compilerArgs.add("-Werror")
+    }
+}
+
+if (qualityTarget) {
+    apply(plugin = "checkstyle")
+    extensions.configure<CheckstyleExtension> {
+        toolVersion = "10.21.2"
+        configFile = rootProject.layout.projectDirectory.file("config/checkstyle/checkstyle.xml").asFile
+        // The ruleset is short and every rule in it is meant to hold, so a finding is a
+        // failure rather than a number in a report nobody opens.
+        maxWarnings = 0
+        isIgnoreFailures = false
+    }
+    tasks.withType<Checkstyle>().configureEach {
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+    }
+
+    apply(plugin = "jacoco")
+    extensions.configure<JacocoPluginExtension> {
+        toolVersion = "0.8.12"
+    }
+    tasks.named<Test>("test") {
+        finalizedBy("jacocoTestReport")
+    }
+    tasks.named<JacocoReport>("jacocoTestReport") {
+        dependsOn("test")
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+        // Deliberately no coverage *threshold*. Most of this codebase is rendering and
+        // process plumbing that no unit test can reach, so a bar would either be set so
+        // low it says nothing or would push people to test the wrong things. The number
+        // is published so the trend is visible; that is the whole intent.
+    }
 }
 
 dependencies {
@@ -38,12 +94,13 @@ dependencies {
     "testImplementation"("org.junit.jupiter:junit-jupiter-params:5.10.2")
     "testRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
-    // Careful: this Mockito cannot generate mocks under Java 25, which the 26.x targets
-    // compile and test against — it fails at mock creation, not at compile time, so it
-    // passes on the 1.21.x half of the matrix and fails on the other. Prefer a
-    // hand-written test double (see ShowCommandTest), or bump this first.
-    "testImplementation"("org.mockito:mockito-core:5.11.0")
-    "testImplementation"("org.mockito:mockito-junit-jupiter:5.11.0")
+    // Kept current on purpose: mock generation is a runtime concern, so a Mockito whose
+    // Byte Buddy predates the JDK it runs on fails at mock creation, not at compile time —
+    // it would pass on the 1.21.x half of the matrix (Java 21) and fail on the 26.x half
+    // (Java 25). Bump this whenever a target moves to a newer JDK. A hand-written test
+    // double is still preferred where one is easy to write (see ShowCommandTest).
+    "testImplementation"("org.mockito:mockito-core:5.23.0")
+    "testImplementation"("org.mockito:mockito-junit-jupiter:5.23.0")
 }
 
 tasks.withType<Test>().configureEach {

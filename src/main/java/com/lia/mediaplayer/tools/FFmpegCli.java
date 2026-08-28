@@ -6,12 +6,18 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -137,8 +143,8 @@ public final class FFmpegCli {
      * Reads a process' stderr to the end, capped so a very chatty run cannot grow unbounded.
      */
     private static void drainStderr(Process process, StringBuilder sink) {
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (sink.length() < 2000) {
@@ -280,7 +286,7 @@ public final class FFmpegCli {
 
         Process process = start(command);
         int needed = width * height * 4;
-        java.util.concurrent.Future<byte[]> readFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+        Future<byte[]> readFuture = CompletableFuture.supplyAsync(() -> {
             try (InputStream in = process.getInputStream()) {
                 return in.readNBytes(needed);
             } catch (IOException e) {
@@ -309,7 +315,7 @@ public final class FFmpegCli {
     // Command building helpers
     // ------------------------------------------------------------------
 
-    private static final java.util.Set<Process> ACTIVE_PROCESSES = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<Process> ACTIVE_PROCESSES = ConcurrentHashMap.newKeySet();
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

@@ -1,14 +1,26 @@
 package com.lia.mediaplayer.tools;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.media.MediaUrlResolver;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Locates — and, when necessary, downloads — the external command-line tools the
@@ -16,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <ul>
  *   <li><b>yt-dlp</b> — resolves a YouTube page link to a direct media URL
- *       (see {@link com.lia.mediaplayer.media.MediaUrlResolver}). Distributed as a single self-contained
+ *       (see {@link MediaUrlResolver}). Distributed as a single self-contained
  *       executable.</li>
  *   <li><b>ffmpeg</b> (and its sibling <b>ffprobe</b>) — decodes video frames and
  *       audio (see {@link FFmpegCli}). Distributed as a per-platform archive that
@@ -242,8 +254,8 @@ public final class MediaBinaries {
     private static final int YT_DLP_MAX_AGE_DAYS = 30;
 
     /** True while a tools update is running, so the UI can say so and not start a second. */
-    private static final java.util.concurrent.atomic.AtomicBoolean UPDATING =
-            new java.util.concurrent.atomic.AtomicBoolean();
+    private static final AtomicBoolean UPDATING =
+            new AtomicBoolean();
 
     /**
      * Whether a {@linkplain #updateToolsAsync update} is in flight.
@@ -274,17 +286,17 @@ public final class MediaBinaries {
      * the date of is more likely a distribution's own packaging than an old copy, and
      * nagging about it every launch would be worse than missing one update.</p>
      */
-    static boolean isStale(@Nullable String version, java.time.LocalDate today) {
+    static boolean isStale(@Nullable String version, LocalDate today) {
         if (version == null || version.isBlank()) {
             return false;
         }
-        java.util.regex.Matcher matcher =
-                java.util.regex.Pattern.compile("(\\d{4})\\.(\\d{2})\\.(\\d{2})").matcher(version);
+        Matcher matcher =
+                Pattern.compile("(\\d{4})\\.(\\d{2})\\.(\\d{2})").matcher(version);
         if (!matcher.find()) {
             return false;
         }
         try {
-            java.time.LocalDate released = java.time.LocalDate.of(
+            LocalDate released = LocalDate.of(
                     Integer.parseInt(matcher.group(1)),
                     Integer.parseInt(matcher.group(2)),
                     Integer.parseInt(matcher.group(3)));
@@ -300,11 +312,11 @@ public final class MediaBinaries {
      */
     private static void checkYtDlpFreshness() {
         String version = ytDlpVersion();
-        if (!isStale(version, java.time.LocalDate.now())) {
+        if (!isStale(version, LocalDate.now())) {
             return;
         }
         LiasMediaPlayer.LOGGER.info("yt-dlp {} is more than {} days old", version, YT_DLP_MAX_AGE_DAYS);
-        if (com.lia.mediaplayer.config.ConfigStore.AUTO_UPDATE_TOOLS.getValue()) {
+        if (ConfigStore.AUTO_UPDATE_TOOLS.getValue()) {
             updateTools();
         } else {
             toast("gui.liasmediaplayer.toast.outdated");
@@ -377,10 +389,10 @@ public final class MediaBinaries {
                     .redirectErrorStream(true)
                     .start();
             String output;
-            try (java.io.InputStream in = process.getInputStream()) {
-                output = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            try (InputStream in = process.getInputStream()) {
+                output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
-            if (!process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+            if (!process.waitFor(15, TimeUnit.SECONDS) || process.exitValue() != 0) {
                 return null;
             }
             String version = output.strip().lines().findFirst().orElse("").strip();
@@ -389,7 +401,7 @@ public final class MediaBinaries {
             }
             VERSION_CACHE.put(executable, version);
             return version;
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -456,7 +468,7 @@ public final class MediaBinaries {
      */
     private static Path gameDirectory() {
         try {
-            java.io.File dir = net.minecraft.client.Minecraft.getInstance().gameDirectory;
+            File dir = net.minecraft.client.Minecraft.getInstance().gameDirectory;
             return dir.toPath();
         } catch (Exception ignored) {
             return Path.of(System.getProperty("user.dir", "."));
@@ -519,7 +531,7 @@ public final class MediaBinaries {
         if (res) {
             ffmpegState = existed ? InstallState.REINSTALLED : InstallState.INSTALLED;
             try {
-                java.nio.file.Files.writeString(managedDir.resolve(".ffmpeg-updated-8.1.2"), "updated");
+                Files.writeString(managedDir.resolve(".ffmpeg-updated-8.1.2"), "updated");
             } catch (Exception ignored) {
             }
         } else {

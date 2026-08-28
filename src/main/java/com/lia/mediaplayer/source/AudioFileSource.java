@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -13,9 +15,9 @@ import net.minecraft.network.chat.Component;
  * while their audio-only siblings {@code .weba}/{@code .oga}/{@code .m4a} are audio.
  * That keeps every link claimed by exactly one feature.</p>
  */
-public final class AudioFileSource implements com.lia.mediaplayer.api.MediaSource {
+public final class AudioFileSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[audio]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.audio");
 
     @Override
     public boolean matches(String url) {
@@ -23,8 +25,8 @@ public final class AudioFileSource implements com.lia.mediaplayer.api.MediaSourc
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.AUDIO;
+    public MediaKind kind() {
+        return MediaKind.AUDIO;
     }
 
     @Override

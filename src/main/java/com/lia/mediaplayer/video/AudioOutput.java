@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.tools.FFmpegCli;
 import org.jetbrains.annotations.Nullable;
 
@@ -76,7 +77,7 @@ public class AudioOutput {
     }
 
     private void applyGain(SourceDataLine line) {
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+        MediaPlayerContext ctx = MediaPlayerContext.get();
         lastAppliedGain = ctx.getVolumeManager().apply(line, lastAppliedGain);
     }
 

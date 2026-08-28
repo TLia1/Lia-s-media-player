@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -9,9 +11,9 @@ import net.minecraft.network.chat.Component;
  * so it plays in the audio bar. Artists get their own sub-domain, which is why the host
  * test accepts any {@code *.bandcamp.com} rather than a fixed list.</p>
  */
-public final class BandcampSource implements com.lia.mediaplayer.api.MediaSource {
+public final class BandcampSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[bandcamp]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.bandcamp");
 
     @Override
     public boolean matches(String url) {
@@ -19,8 +21,8 @@ public final class BandcampSource implements com.lia.mediaplayer.api.MediaSource
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.AUDIO;
+    public MediaKind kind() {
+        return MediaKind.AUDIO;
     }
 
     @Override

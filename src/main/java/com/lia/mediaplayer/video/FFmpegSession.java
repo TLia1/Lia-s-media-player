@@ -21,7 +21,9 @@ public class FFmpegSession {
     @Nullable
     private Thread audioThread;
 
-    public void start(String mediaUrl, int videoWidth, int videoHeight, double startSeconds, boolean hasAudio, int audioSampleRate, int audioChannels, int sessionGen, Consumer<InputStream> audioLoop) throws IOException {
+    public void start(String mediaUrl, int videoWidth, int videoHeight, double startSeconds,
+                      boolean hasAudio, int audioSampleRate, int audioChannels, int sessionGen,
+                      Consumer<InputStream> audioLoop) throws IOException {
         kill();
 
         Process video = FFmpegCli.openVideo(mediaUrl, videoWidth, videoHeight, startSeconds);

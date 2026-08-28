@@ -47,4 +47,24 @@ public class BooleanOption extends ConfigOption<Boolean> {
                 .append(Component.literal(": "))
                 .append(Component.translatable(getValue() ? "options.on" : "options.off"));
     }
+
+    // ---- Covariant builder overrides (see ConfigOption's javadoc) ------------
+
+    @Override
+    public BooleanOption withDescription(String descriptionKey) {
+        super.withDescription(descriptionKey);
+        return this;
+    }
+
+    @Override
+    public BooleanOption withWarning(String warningKey) {
+        super.withWarning(warningKey);
+        return this;
+    }
+
+    @Override
+    public BooleanOption withWidth(OptionWidth width) {
+        super.withWidth(width);
+        return this;
+    }
 }

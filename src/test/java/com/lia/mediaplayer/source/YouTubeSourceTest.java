@@ -46,6 +46,7 @@ class YouTubeSourceTest {
 
     @Test
     void label_ReturnsYoutubeLabel() {
-        assertEquals("[youtube]", source.label("https://www.youtube.com/watch?v=dQw4w9WgXcQ").getString());
+        assertEquals("chat.liasmediaplayer.label.youtube",
+                source.label("https://www.youtube.com/watch?v=dQw4w9WgXcQ").getString());
     }
 }

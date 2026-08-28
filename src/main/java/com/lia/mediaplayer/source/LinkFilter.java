@@ -1,5 +1,8 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.config.StringOption;
+import com.lia.mediaplayer.chat.MediaFilters;
+
 import java.util.List;
 import java.util.Locale;
 
@@ -11,10 +14,10 @@ import java.util.Locale;
  * config — so the rules can be unit-tested without a game, and so the one place that
  * decides what "listed" means is not spread over the chat handlers. The policy built on
  * top of them (which list applies, and in which mode) lives in
- * {@link com.lia.mediaplayer.chat.MediaFilters}.</p>
+ * {@link MediaFilters}.</p>
  *
  * <p>Entries are expected to be lower-cased already, which
- * {@link com.lia.mediaplayer.api.config.StringOption#entries()} guarantees.</p>
+ * {@link StringOption#entries()} guarantees.</p>
  */
 public final class LinkFilter {
 

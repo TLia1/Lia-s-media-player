@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 
 import net.minecraft.client.gui.Font;
@@ -25,7 +26,7 @@ final class ImageWindow extends MediaWindow {
     }
 
     private ImagePreviewCache.Entry entry() {
-        return ImagePreviewCache.getOrLoad(url);
+        return MediaPlayerContext.get().getImagePreviewCache().getOrLoad(url);
     }
 
     @Override
@@ -35,7 +36,7 @@ final class ImageWindow extends MediaWindow {
 
     @Override
     protected void close() {
-        ((com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance()).getImageManager().close(this);
+        MediaPlayerContext.get().getImageManager().close(this);
     }
 
     @Override

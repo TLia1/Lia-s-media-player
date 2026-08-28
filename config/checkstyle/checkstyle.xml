@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  A deliberately small ruleset.
+
+  This project has no formatter and no house style document, and importing a full
+  Google/Sun ruleset now would produce hundreds of findings about a codebase nobody has
+  complained about the look of. What is here is the short list of things that were
+  actually found by hand in a review and fixed by hand — which means each one will come
+  back the moment nothing checks for it:
+
+    * fully-qualified names written inline instead of imported (185 of them, once);
+    * star imports, and imports of a class that is already in scope;
+    * lines long enough that half of one is off the side of a diff.
+
+  Everything else is left alone on purpose. If a rule here ever fires on something that
+  is right, the rule is what should change.
+
+  It runs on one target only — see `quality.target` in gradle.properties. All fourteen
+  compile the same src/ tree, so running it on the rest would be the same report
+  fourteen times.
+-->
+<module name="Checker">
+    <property name="severity" value="error"/>
+    <property name="charset" value="UTF-8"/>
+    <property name="fileExtensions" value="java"/>
+
+    <!--
+      Not a Java rule but the cheapest one there is: a file whose last line has no
+      newline makes every later edit show up as touching that line too.
+    -->
+    <module name="NewlineAtEndOfFile"/>
+
+    <module name="LineLength">
+        <!--
+          Generous rather than 100/120: much of this codebase is prose in javadoc, which
+          reads worse rewrapped tight, and the point of the limit is only to stop a line
+          running off the side of a review diff.
+        -->
+        <property name="max" value="140"/>
+        <!--
+          A line that is nothing but a string literal: a long regex or a chunk of test
+          HTML. Breaking those across a `+` hides what they say.
+        -->
+        <property name="ignorePattern" value="^\s*&quot;"/>
+    </module>
+
+    <module name="TreeWalker">
+
+        <!-- ===== Imports ===== -->
+
+        <!--
+          The one this ruleset mainly exists for. The mod used to alternate without a
+          rule between importing its own classes and writing them out in full
+          (`com.lia.mediaplayer.api.MediaKind.IMAGE` mid-expression), which makes a
+          statement several times longer than what it does.
+
+          Only the mod's own package is checked, and only outside comments and imports.
+          Minecraft and loader classes are deliberately still written out in full inside
+          `//?` version guards: an import cannot itself be guarded, so a target that does
+          not select the branch would inherit a dead or unresolvable import.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="^(?!\s*(package|import)\b).*\bcom\.lia\.mediaplayer\.[a-z]"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Import this instead of writing the fully qualified name inline."/>
+        </module>
+
+        <!--
+          Deliberately NOT UnusedImports, however obvious a candidate it looks. This is a
+          Stonecutter tree: the branch of a `//?` guard that the active target does not
+          select sits inside a `/* */`, so an import that only that branch needs reads as
+          unused here and compiles on the target that does select it. ChatHitTest,
+          ModKeybinds and Tooltips each have one today. A check that tells a maintainer
+          to delete an import another target needs trades a harmless unused line for a
+          build failure on a version they were not looking at — the wrong way round.
+        -->
+        <module name="RedundantImport"/>
+
+        <module name="AvoidStarImport">
+            <!--
+              java.awt.* is imported wholesale by the two classes that scale a
+              BufferedImage; splitting it into Graphics2D + RenderingHints + Color is
+              noise, and it is the only package star-imported in main.
+            -->
+            <property name="excludes" value="java.awt"/>
+            <!--
+              `import static org.junit.jupiter.api.Assertions.*` is what half the test
+              files do and is the ordinary way to write a JUnit test. The rule is about
+              type imports, where a star import makes it unclear which package a name
+              came from; a static member import of assertEquals has no such ambiguity.
+            -->
+            <property name="allowStaticMemberImports" value="true"/>
+        </module>
+
+        <!-- ===== Shape ===== -->
+
+        <!--
+          `switch (x) { case A: doThing(); case B: ... }` — the classic. Cheap to check,
+          and the compiler's own -Xlint:fallthrough only sees some of them.
+        -->
+        <module name="FallThrough"/>
+
+        <!-- Nothing after `return`/`throw`/`break`, and no `;` on its own. -->
+        <module name="EmptyStatement"/>
+
+        <!-- `equals` without `hashCode` is a bug waiting for a HashSet. -->
+        <module name="EqualsHashCode"/>
+    </module>
+</module>

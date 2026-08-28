@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.screens.Screen;
 
@@ -120,7 +119,7 @@ final class WindowShortcuts {
         }
         // Volume is the one shared level (see media.Volume), so these three are answered
         // by the mod as a whole rather than by whichever window happens to be in front.
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
         if (context == null) {
             return false;
         }

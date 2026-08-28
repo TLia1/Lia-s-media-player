@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -13,9 +15,9 @@ import net.minecraft.network.chat.Component;
  * already end in a known extension and are handled by {@link ImageFileSource}, so
  * they are deliberately excluded here.</p>
  */
-public final class TenorSource implements com.lia.mediaplayer.api.MediaSource {
+public final class TenorSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[gif]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.gif");
 
     @Override
     public boolean matches(String url) {
@@ -23,8 +25,8 @@ public final class TenorSource implements com.lia.mediaplayer.api.MediaSource {
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.IMAGE;
+    public MediaKind kind() {
+        return MediaKind.IMAGE;
     }
 
     @Override

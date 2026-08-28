@@ -1,6 +1,8 @@
 package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import com.lia.mediaplayer.tools.MediaBinaries;
@@ -22,7 +24,7 @@ import java.util.function.Consumer;
 
 /**
  * Expands a YouTube playlist page into the watch links it contains, so a playlist can
- * be queued in a player or imported into a saved {@link com.lia.mediaplayer.playlist.Playlist}.
+ * be queued in a player or imported into a saved {@link Playlist}.
  *
  * <p>Like {@link MediaUrlResolver} this shells out to {@code yt-dlp} — there is no way
  * to enumerate a playlist from the watch page alone — but it asks for a
@@ -169,7 +171,7 @@ public final class YouTubePlaylistResolver {
      * so the configured yt-dlp timeout is doubled here.
      */
     private static long timeoutSeconds() {
-        return com.lia.mediaplayer.config.ConfigStore.YT_DLP_TIMEOUT_SECONDS.getValue() * 2L;
+        return ConfigStore.YT_DLP_TIMEOUT_SECONDS.getValue() * 2L;
     }
 
     private static List<String> readLines(Process process) {

@@ -1,6 +1,6 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.MediaPlayerContext;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -248,7 +248,7 @@ final class QueuePanel {
         // play order are enough), which is what lets it be half as wide.
         if (mode.hasTitles()) {
             int labelMaxW = upX - 4 - labelX;
-            String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
+            String label = (index + 1) + ". " + MediaPlayerContext.get().getTitleCache().getOrLoad(url);
             g.drawString(font, Component.literal(Glyphs.fit(font, label, labelMaxW)),
                     labelX, rowY + (rowH - font.lineHeight) / 2, Theme.TEXT);
         }

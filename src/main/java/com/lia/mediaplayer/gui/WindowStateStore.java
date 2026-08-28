@@ -4,15 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.lia.mediaplayer.LiasMediaPlayer;
-import net.minecraft.client.Minecraft;
+import com.lia.mediaplayer.playlist.PlaylistStore;
+import com.lia.mediaplayer.storage.JsonFileStore;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -29,10 +23,10 @@ import java.util.Map;
  * not of the clip that happened to be playing. One entry per kind also bounds the file
  * at three objects however long the mod is used.</p>
  *
- * <p>Same shape as {@link com.lia.mediaplayer.playlist.PlaylistStore}: loaded lazily,
- * written through a temp file and an atomic move, and never thrown from — a media
- * player that refuses to start because a preferences file is unreadable would be a
- * worse failure than forgetting where the window was.</p>
+ * <p>Same shape as {@link PlaylistStore}: loaded lazily,
+ * written through a {@link JsonFileStore} (temp file plus atomic move), and never thrown
+ * from — a media player that refuses to start because a preferences file is unreadable
+ * would be a worse failure than forgetting where the window was.</p>
  *
  * <p>The JSON is built field by field rather than by reflection, because the Gson that
  * ships with Minecraft ranges from 2.8 to 2.14 across the fourteen targets and record
@@ -127,6 +121,7 @@ public final class WindowStateStore {
         }
     }
 
+    private final JsonFileStore file = new JsonFileStore("windows.json");
     private final Map<String, State> states = new LinkedHashMap<>();
     private boolean loaded;
     private boolean dirty;
@@ -210,47 +205,13 @@ public final class WindowStateStore {
             return;
         }
         loaded = true;
-        Path path = file();
-        if (path == null || !Files.isRegularFile(path)) {
-            return;
-        }
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            StringBuilder text = new StringBuilder();
-            char[] buffer = new char[4096];
-            int read;
-            while ((read = reader.read(buffer)) > 0) {
-                text.append(buffer, 0, read);
-            }
-            states.putAll(fromJson(text.toString()));
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not read window state from {}: {}", path, e.toString());
+        String text = file.read();
+        if (text != null) {
+            states.putAll(fromJson(text));
         }
     }
 
     private void save() {
-        Path path = file();
-        if (path == null) {
-            return;
-        }
-        try {
-            Files.createDirectories(path.getParent());
-            Path tmp = path.resolveSibling("windows.json.tmp");
-            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                writer.write(toJson(states));
-            }
-            Files.move(tmp, path, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException | RuntimeException e) {
-            LiasMediaPlayer.LOGGER.warn("Could not save window state to {}: {}", path, e.toString());
-        }
-    }
-
-    private Path file() {
-        try {
-            return Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("liasmediaplayer").resolve("windows.json");
-        } catch (Exception e) {
-            return null;
-        }
+        file.write(toJson(states));
     }
 }

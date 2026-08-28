@@ -1,9 +1,11 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.media.MediaTitleCache;
+import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
+import com.lia.mediaplayer.source.Urls;
+import com.lia.mediaplayer.source.YouTubePlaylistSource;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -108,8 +110,8 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         super(Component.translatable("gui.liasmediaplayer.playlists.title"));
     }
 
-    private static com.lia.mediaplayer.MediaPlayerContext getContext() {
-        return (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstance();
+    private static MediaPlayerContext getContext() {
+        return MediaPlayerContext.get();
     }
 
     @Override
@@ -330,17 +332,17 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         String url = addBox.getValue().strip();
         // A YouTube playlist link stands for all of its videos, so it is expanded into
         // the entries instead of being stored as one unplayable page link.
-        if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+        if (YouTubePlaylistSource.isPlaylist(url)) {
             importYouTubePlaylist(selected, url, false);
             addBox.setValue("");
             return;
         }
         // Same rule as importClipboard: only real http(s) links get stored, so a playlist
         // can never feed something else to the player on a later session.
-        if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
+        if (Urls.isHttp(url)) {
             selected.add(url);
             getContext().getPlaylistStore().save();
-            MediaTitleCache.getOrLoad(url); // warm the name for the list
+            MediaPlayerContext.get().getTitleCache().getOrLoad(url); // warm the name for the list
             addBox.setValue("");
             clampScroll();
         }
@@ -361,7 +363,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
             }
             for (String entry : result.urls()) {
                 target.add(entry);
-                MediaTitleCache.getOrLoad(entry); // warm the names for the list
+                MediaPlayerContext.get().getTitleCache().getOrLoad(entry); // warm the names for the list
             }
             if (renameIfDefault && !result.title().isBlank() && target.name().equals(defaultName)) {
                 target.setName(result.title());
@@ -424,7 +426,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         List<String> youtubePlaylists = new ArrayList<>();
         for (String line : in.split("\n")) {
             String url = line.strip();
-            if (com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)) {
+            if (YouTubePlaylistSource.isPlaylist(url)) {
                 youtubePlaylists.add(url);
             } else if (url.startsWith("http://") || url.startsWith("https://")) {
                 direct.add(url);
@@ -471,7 +473,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         for (int i = 0; i < urls.size(); i++) {
             String url = urls.get(i);
             if (needle.isEmpty()
-                    || MediaTitleCache.getOrLoad(url).toLowerCase(Locale.ROOT).contains(needle)
+                    || MediaPlayerContext.get().getTitleCache().getOrLoad(url).toLowerCase(Locale.ROOT).contains(needle)
                     || url.toLowerCase(Locale.ROOT).contains(needle)) {
                 shown.add(i);
             }
@@ -652,7 +654,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         // enough for the grip, the picture and the three buttons to fill the row, the
         // name is what has to give — Glyphs.fit reads a width of zero as "no limit".
         if (labelMax >= 16) {
-            String label = (index + 1) + ". " + MediaTitleCache.getOrLoad(url);
+            String label = (index + 1) + ". " + MediaPlayerContext.get().getTitleCache().getOrLoad(url);
             g.drawString(font, Component.literal(Glyphs.fit(font, label, labelMax)),
                     labelX, rowY + (ROW_EN - font.lineHeight) / 2, Theme.TEXT);
         }

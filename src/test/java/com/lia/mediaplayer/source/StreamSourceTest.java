@@ -31,7 +31,8 @@ class StreamSourceTest {
 
     @Test
     void label_ReturnsVideoLabel() {
-        assertEquals("[video]", source.label("https://example.com/stream.m3u8").getString());
+        assertEquals("chat.liasmediaplayer.label.video",
+                source.label("https://example.com/stream.m3u8").getString());
     }
 
     @Test

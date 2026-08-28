@@ -1,13 +1,17 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * The registry of every {@link com.lia.mediaplayer.api.MediaSource} the mod knows about, and the single
+ * The registry of every {@link MediaSource} the mod knows about, and the single
  * place the rest of the mod asks "what, if anything, is this link?".
  *
  * <p>Previously this knowledge was scattered: image rules lived in the image chat
@@ -27,7 +31,7 @@ public class MediaSources {
     /**
      * The registered sources, in match order. Mutable so addons can append.
      */
-    private final List<com.lia.mediaplayer.api.MediaSource> registered = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(
+    private final List<MediaSource> registered = new CopyOnWriteArrayList<>(List.of(
             new TenorSource(),       // a tenor.com/view page (resolved to a GIF later)
             new GiphySource(),       // a giphy.com/gifs page (rewritten to a GIF)
             new ImageFileSource(),   // a direct .png/.jpg/.gif/... file
@@ -49,10 +53,10 @@ public class MediaSources {
 
     /**
      * Registers a custom media source. Called by the API facade and by the
-     * {@link com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent}.
+     * {@link MediaSourceRegistrationEvent}.
      * Sources are appended after the built-in ones.
      */
-    public void register(com.lia.mediaplayer.api.MediaSource source) {
+    public void register(MediaSource source) {
         if (source != null) {
             registered.add(source);
         }
@@ -61,8 +65,8 @@ public class MediaSources {
     /**
      * The first source that recognizes {@code url}, if any.
      */
-    public Optional<com.lia.mediaplayer.api.MediaSource> find(String url) {
-        for (com.lia.mediaplayer.api.MediaSource source : registered) {
+    public Optional<MediaSource> find(String url) {
+        for (MediaSource source : registered) {
             if (source.matches(url)) {
                 return Optional.of(source);
             }
@@ -71,40 +75,33 @@ public class MediaSources {
     }
 
     /**
-     * The kind of {@code url}, or {@code null} if no source recognizes it (internal, returns API kind).
+     * The kind of {@code url}, or {@code null} if no source recognizes it. {@link MediaKind}
+     * is an {@code api} type, so this is also what {@code MediaPlayerContext} hands to addons.
      */
     @Nullable
-    public com.lia.mediaplayer.api.MediaKind kindOf(String url) {
-        return find(url).map(com.lia.mediaplayer.api.MediaSource::kind).orElse(null);
-    }
-
-    /**
-     * The kind of {@code url}, or {@code null} — for the public API.
-     */
-    @Nullable
-    public com.lia.mediaplayer.api.MediaKind apiKindOf(String url) {
-        return kindOf(url);
+    public MediaKind kindOf(String url) {
+        return find(url).map(MediaSource::kind).orElse(null);
     }
 
     /**
      * Whether {@code url} is a recognized image/GIF link.
      */
     public boolean isImage(String url) {
-        return kindOf(url) == com.lia.mediaplayer.api.MediaKind.IMAGE;
+        return kindOf(url) == MediaKind.IMAGE;
     }
 
     /**
      * Whether {@code url} is a recognized video/stream/YouTube link.
      */
     public boolean isVideo(String url) {
-        return kindOf(url) == com.lia.mediaplayer.api.MediaKind.VIDEO;
+        return kindOf(url) == MediaKind.VIDEO;
     }
 
     /**
      * Whether {@code url} is a recognized direct audio file.
      */
     public boolean isAudio(String url) {
-        return kindOf(url) == com.lia.mediaplayer.api.MediaKind.AUDIO;
+        return kindOf(url) == MediaKind.AUDIO;
     }
 
     /**
@@ -117,12 +114,12 @@ public class MediaSources {
     /**
      * Whether the source claiming {@code url} needs the external extractor
      * ({@code yt-dlp}) to turn it into something ffmpeg can open — see
-     * {@link com.lia.mediaplayer.api.MediaSource#requiresExtractor()}. {@code false}
+     * {@link MediaSource#requiresExtractor()}. {@code false}
      * for a link nothing recognizes, which is the same answer a direct file gives:
      * hand it to ffmpeg and let it say why it could not be opened.
      */
     public boolean requiresExtractor(String url) {
-        return find(url).map(com.lia.mediaplayer.api.MediaSource::requiresExtractor).orElse(false);
+        return find(url).map(MediaSource::requiresExtractor).orElse(false);
     }
 
     /**

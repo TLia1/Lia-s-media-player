@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 
 import net.minecraft.util.Mth;
 
@@ -188,7 +187,7 @@ final class Theme {
      * nothing, and installing only happens on the tick the value actually moves.</p>
      */
     static void refresh() {
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
         if (context == null) {
             return;
         }

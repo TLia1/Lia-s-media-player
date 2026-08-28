@@ -9,7 +9,8 @@ class TenorResolverTest {
 
     @Test
     void extractMediaUrl_WithContentUrlMeta_ReturnsUrl() {
-        String html = "<html><head><meta itemprop=\"contentUrl\" content=\"https://media.tenor.com/m/ABCDEFGH123/tenor.gif\"></head><body></body></html>";
+        String html = "<html><head><meta itemprop=\"contentUrl\" "
+                + "content=\"https://media.tenor.com/m/ABCDEFGH123/tenor.gif\"></head><body></body></html>";
         String extracted = TenorResolver.extractMediaUrl(html);
         assertEquals("https://c.tenor.com/ABCDEFGH123/tenor.gif", extracted);
     }

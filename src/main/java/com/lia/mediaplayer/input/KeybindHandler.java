@@ -1,7 +1,6 @@
 package com.lia.mediaplayer.input;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.gui.ConfigScreen;
 import com.lia.mediaplayer.gui.Keys;
 import com.lia.mediaplayer.gui.MediaControlScreen;
@@ -53,7 +52,7 @@ public final class KeybindHandler {
             }
         }
 
-        MediaPlayerContext ctx = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx == null) return;
 
         while (ModKeybinds.PLAY_PAUSE.consumeClick()) {
@@ -70,11 +69,11 @@ public final class KeybindHandler {
                 ctx.getVideoManager().nextFrontMost();
             }
         }
+        // "Previous" is an audio-only transport: a video window plays one queue entry at a
+        // time and has no previous() to go back to, so a front-most video simply ignores it.
         while (ModKeybinds.PREVIOUS.consumeClick()) {
             if (ctx.getAudioManager().hasFrontMost()) {
                 ctx.getAudioManager().previousFrontMost();
-            } else if (ctx.getVideoManager().hasFrontMost()) {
-                ctx.getVideoManager().previousFrontMost();
             }
         }
 

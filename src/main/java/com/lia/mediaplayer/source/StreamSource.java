@@ -1,14 +1,16 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
  * An adaptive-streaming manifest ffmpeg can open directly: HLS ({@code .m3u8}) or
  * DASH ({@code .mpd}). Shown as a {@code [video]} label, like a direct file.
  */
-public final class StreamSource implements com.lia.mediaplayer.api.MediaSource {
+public final class StreamSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[video]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.video");
 
     @Override
     public boolean matches(String url) {
@@ -16,8 +18,8 @@ public final class StreamSource implements com.lia.mediaplayer.api.MediaSource {
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

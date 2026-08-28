@@ -52,7 +52,7 @@ class YouTubePlaylistSourceTest {
     @Test
     void kindAndLabel() {
         assertEquals(MediaKind.VIDEO, source.kind());
-        assertEquals("[youtube playlist]",
+        assertEquals("chat.liasmediaplayer.label.youtube_playlist",
                 source.label("https://www.youtube.com/playlist?list=PL123").getString());
     }
 

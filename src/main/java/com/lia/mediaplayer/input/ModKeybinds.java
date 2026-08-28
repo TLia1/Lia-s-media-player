@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.input;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.gui.AudioPlayerManager;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -14,7 +15,7 @@ import net.minecraft.client.KeyMapping;
  * mod key out of the box — the player assigns whatever keys they like).
  *
  * <p>The bindings act on the <em>active</em> audio bar (see
- * {@link com.lia.mediaplayer.gui.AudioPlayerManager}); the actual reaction to a press
+ * {@link AudioPlayerManager}); the actual reaction to a press
  * lives in {@link KeybindHandler}. Registering the mappings with the game is the job
  * of the per-loader bridge in {@code platform}, which is the only part of this that
  * differs between NeoForge and Fabric; this class just declares them.</p>

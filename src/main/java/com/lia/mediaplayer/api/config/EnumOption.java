@@ -74,4 +74,24 @@ public class EnumOption<E extends Enum<E>> extends ConfigOption<E> {
         Component translated = Component.translatable(key);
         return translated.getString().equals(key) ? Component.literal(value.name()) : translated;
     }
+
+    // ---- Covariant builder overrides (see ConfigOption's javadoc) ------------
+
+    @Override
+    public EnumOption<E> withDescription(String descriptionKey) {
+        super.withDescription(descriptionKey);
+        return this;
+    }
+
+    @Override
+    public EnumOption<E> withWarning(String warningKey) {
+        super.withWarning(warningKey);
+        return this;
+    }
+
+    @Override
+    public EnumOption<E> withWidth(OptionWidth width) {
+        super.withWidth(width);
+        return this;
+    }
 }

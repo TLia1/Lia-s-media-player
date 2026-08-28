@@ -1,8 +1,10 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.chat.MediaFilters;
+
 /**
  * How the client-side link filter treats the two host lists (see
- * {@link com.lia.mediaplayer.chat.MediaFilters}).
+ * {@link MediaFilters}).
  */
 public enum FilterMode {
     /** No host filtering: every recognized link is offered, whoever posted it. */

@@ -1,14 +1,22 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.history.HistoryStore;
+import com.lia.mediaplayer.image.ImagePreviewCache;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Registry of the pinned {@link ImageWindow}s, keyed by source URL.
  *
  * <p>Unlike {@link VideoPlayerManager}, the windows here own no native resources
- * of their own — the textures live in {@link com.lia.mediaplayer.image.ImagePreviewCache} — so closing a
+ * of their own — the textures live in {@link ImagePreviewCache} — so closing a
  * window is just a map removal.</p>
  *
  * <p>All methods run on the render/main thread (the only place GUI events fire),
@@ -27,7 +35,7 @@ public class ImageWindowManager {
      * Ensures a (visible) pinned window exists for the URL.
      */
     public ImageWindow show(String url) {
-        com.lia.mediaplayer.history.HistoryStore.record(url, com.lia.mediaplayer.api.MediaKind.IMAGE);
+        HistoryStore.record(url, MediaKind.IMAGE);
         ImageWindow window = windows.get(url);
         if (window == null) {
             evictIfFull();
@@ -70,7 +78,7 @@ public class ImageWindowManager {
     }
 
     private void evictIfFull() {
-        while (windows.size() >= com.lia.mediaplayer.config.ConfigStore.MAX_PINNED_IMAGES.getValue()) {
+        while (windows.size() >= ConfigStore.MAX_PINNED_IMAGES.getValue()) {
             Iterator<Map.Entry<String, ImageWindow>> it = windows.entrySet().iterator();
             if (!it.hasNext()) {
                 return;

@@ -1,16 +1,19 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaSource;
+
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
 
 /**
- * Small URL-parsing helpers shared by the {@link com.lia.mediaplayer.api.MediaSource}
+ * Small URL-parsing helpers shared by the {@link MediaSource}
  * implementations, so the extension-by-file-suffix sources don't each re-implement the
  * same defensive path/host parsing.
  *
  * <p>{@link #isHttp(String)} is the gate every built-in source applies before looking at
- * a link: media URLs reach {@code ffmpeg}, {@code yt-dlp}, {@link java.net.HttpURLConnection}
+ * a link: media URLs reach {@code ffmpeg}, {@code yt-dlp}, {@link HttpURLConnection}
  * and the system browser, and all of those interpret far more than {@code http(s)} —
  * {@code file:}, {@code concat:}, a custom OS protocol handler, or a string starting with
  * {@code -} that a command-line tool would read as an option. Chat links can be crafted by

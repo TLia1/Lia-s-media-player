@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.playlist;
 
+import com.lia.mediaplayer.source.Urls;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,8 +46,19 @@ public final class Playlist {
         return urls().isEmpty();
     }
 
+    /**
+     * Appends {@code url}, ignoring anything that is not a real {@code http(s)} link.
+     *
+     * <p>This is the choke point every entry passes through — the screens, the clipboard
+     * import and the public API all end up here — so the same rule
+     * {@link Urls#isHttp(String)} states for chat links holds for a stored playlist: what
+     * comes back out of {@code playlists.json} is handed to {@code ffmpeg} and
+     * {@code yt-dlp}, and neither may be given a {@code file:} or {@code concat:} URL.</p>
+     */
     public void add(String url) {
-        urls().add(url);
+        if (Urls.isHttp(url)) {
+            urls().add(url);
+        }
     }
 
     public void removeAt(int index) {

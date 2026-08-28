@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.source;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaSource;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -9,9 +11,9 @@ import net.minecraft.network.chat.Component;
  * <p>Neither is a media file — {@code v.redd.it} serves a DASH manifest whose audio is a
  * separate track — so both go through yt-dlp, which muxes the two back together.</p>
  */
-public final class RedditVideoSource implements com.lia.mediaplayer.api.MediaSource {
+public final class RedditVideoSource implements MediaSource {
 
-    private static final Component LABEL = Component.literal("[reddit]");
+    private static final Component LABEL = Component.translatable("chat.liasmediaplayer.label.reddit");
 
     @Override
     public boolean matches(String url) {
@@ -19,8 +21,8 @@ public final class RedditVideoSource implements com.lia.mediaplayer.api.MediaSou
     }
 
     @Override
-    public com.lia.mediaplayer.api.MediaKind kind() {
-        return com.lia.mediaplayer.api.MediaKind.VIDEO;
+    public MediaKind kind() {
+        return MediaKind.VIDEO;
     }
 
     @Override

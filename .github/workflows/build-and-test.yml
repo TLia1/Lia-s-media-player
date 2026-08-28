@@ -49,6 +49,25 @@ jobs:
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
           echo "Building: $targets"
 
+      # Stonecutter rewrites src/ in place for whichever target is active, so a commit
+      # made from a switched tree carries every guard inverted — a diff touching most of
+      # the mod, in which the actual change is invisible. `Reset active project` puts it
+      # back; this is what notices when someone forgets, in seconds and without Gradle.
+      - name: Check the committed tree is on the VCS target
+        run: |
+          active=$(grep -oE 'stonecutter active "[^"]+"' stonecutter.gradle.kts | sed -e 's/.*"\(.*\)"/\1/')
+          expected=$(grep -oE '^quality\.target=.*' gradle.properties | cut -d= -f2)
+          if [ -z "$active" ] || [ -z "$expected" ]; then
+            echo "::error::Could not read the active Stonecutter target or quality.target"
+            exit 1
+          fi
+          if [ "$active" != "$expected" ]; then
+            echo "::error::src/ is committed switched to '$active'; expected '$expected'."
+            echo "::error::Run './gradlew \"Reset active project\"' and commit the result."
+            exit 1
+          fi
+          echo "Active target: $active"
+
   build:
     name: Build ${{ matrix.target }}
     needs: targets
@@ -79,13 +98,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Gradle does not look at setup-java's install locations on its own, so
-      # point it at both explicitly. Without this it would fall back to
-      # downloading a toolchain through the foojay resolver on every 26.x job.
-      - name: Build and test ${{ matrix.target }}
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # Split from the build below on purpose: `build` runs the tests anyway (via
+      # `check`), so a failing test used to surface as "the build failed" with the
+      # reason somewhere in the log. As its own step it is named in the job list.
+      #
+      # `-Porg.gradle.java.installations.fromEnv`: Gradle does not look at setup-java's
+      # install locations on its own, so point it at both explicitly. Without this it
+      # would fall back to downloading a toolchain through the foojay resolver on every
+      # 26.x job.
+      - name: Test ${{ matrix.target }}
         run: |
-          chmod +x gradlew
-          ./gradlew ":${{ matrix.target }}:build" ":${{ matrix.target }}:test" \
+          ./gradlew ":${{ matrix.target }}:test" \
+            -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          ./gradlew ":${{ matrix.target }}:build" \
             -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
 
       - name: Upload ${{ matrix.target }} jar
@@ -94,4 +125,63 @@ jobs:
         with:
           name: mod-jar-${{ matrix.target }}
           path: versions/${{ matrix.target }}/build/libs/*.jar
+          retention-days: 14
+
+  # Checkstyle, -Werror and coverage, on the one target named by `quality.target` in
+  # gradle.properties. All fourteen compile the same src/ tree, so this is once, not
+  # fourteen times — and it is the tree as committed, which is what a reviewer reads.
+  quality:
+    name: Lint & coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Read the quality target
+        id: target
+        run: echo "name=$(grep -oE '^quality\.target=.*' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkstyle
+        run: |
+          chmod +x gradlew
+          ./gradlew ":${{ steps.target.outputs.name }}:checkstyleMain" \
+                    ":${{ steps.target.outputs.name }}:checkstyleTest"
+
+      - name: Tests and coverage
+        run: ./gradlew ":${{ steps.target.outputs.name }}:jacocoTestReport"
+
+      # No threshold, deliberately: most of this codebase is rendering and process
+      # plumbing no unit test can reach, so a bar would be either meaningless or
+      # counter-productive. The number is published so the direction is visible.
+      - name: Report coverage
+        if: always()
+        run: |
+          report="versions/${{ steps.target.outputs.name }}/build/reports/jacoco/test/jacocoTestReport.xml"
+          [ -f "$report" ] || exit 0
+          # The last counters in the document are the report-wide totals.
+          line=$(grep -o '<counter type="LINE" missed="[0-9]*" covered="[0-9]*"/>' "$report" | tail -1)
+          missed=$(echo "$line" | sed -e 's/.*missed="\([0-9]*\)".*/\1/')
+          covered=$(echo "$line" | sed -e 's/.*covered="\([0-9]*\)".*/\1/')
+          total=$((missed + covered))
+          [ "$total" -gt 0 ] || exit 0
+          echo "### Line coverage: $((100 * covered / total))% ($covered / $total)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            versions/${{ steps.target.outputs.name }}/build/reports/checkstyle
+            versions/${{ steps.target.outputs.name }}/build/reports/jacoco
           retention-days: 14

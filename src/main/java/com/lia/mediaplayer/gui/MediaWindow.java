@@ -1,13 +1,10 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
-import com.lia.mediaplayer.api.LiasMediaPlayerApi;
-import net.minecraft.Util;
+import com.lia.mediaplayer.media.MediaTitleCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 
 /**
  * Base class for the on-screen media windows (a {@link VideoWindow} or an
@@ -24,8 +21,27 @@ import net.minecraft.util.Mth;
  *
  * <p>The chrome around that content — the softened box, the title bar carrying the
  * media's name and the corner buttons, the 1 px edge that marks the front window, the
- * control bar strip and the open animation — is drawn here and only here, so a new
- * window type inherits the whole look by implementing {@link #drawContent}.</p>
+ * control bar strip and the open animation — is the same for every window type, so a new
+ * one inherits the whole look by implementing {@link #drawContent}.</p>
+ *
+ * <p>What this class does itself is <b>coordinate</b>: it asks the subclass what it is
+ * showing, asks each of four collaborators to do their part with it, and publishes the
+ * resulting rectangles for the subclass to draw into. The four are worth knowing by
+ * name, because a change usually belongs in one of them rather than here:</p>
+ * <ul>
+ *   <li>{@link WindowPlacement} — where the window is and how big, and the arithmetic
+ *       that decides it;</li>
+ *   <li>{@link WindowGestures} — the mouse state between events: which drag is running,
+ *       whether two clicks were a double-click, how long the cursor has been still;</li>
+ *   <li>{@link WindowChrome} (with {@link WindowButtons}) — everything drawn that is not
+ *       the picture;</li>
+ *   <li>{@link WindowLinkActions} — what the corner buttons do with the link: keep it,
+ *       open it, copy it.</li>
+ * </ul>
+ *
+ * <p>Three of the four need no Minecraft to run, which is the point: the layout maths,
+ * the double-click rule and the button row are now reachable from a unit test, and each
+ * of them is the sort of thing whose failure mode is a window nobody can drag back.</p>
  */
 abstract class MediaWindow {
     protected static final int PADDING = 3;
@@ -38,22 +54,6 @@ abstract class MediaWindow {
      * How long a window takes to settle into place when it appears.
      */
     private static final int OPEN_MS = 160;
-    /**
-     * How long the mark left by a click stays on screen.
-     */
-    private static final int FLASH_MS = 220;
-    /**
-     * How long the copy button keeps saying it copied something.
-     */
-    private static final int COPIED_MS = 1600;
-    /**
-     * How long two clicks may be apart and still count as a double-click.
-     */
-    private static final int DOUBLE_CLICK_MS = 300;
-    /**
-     * How far the second click of a double-click may land from the first.
-     */
-    private static final int DOUBLE_CLICK_SLOP = 4;
     /**
      * How long the cursor has to sit still before theatre mode drops its chrome.
      */
@@ -70,7 +70,6 @@ abstract class MediaWindow {
      * Smallest the scaled content is allowed to get, in pixels.
      */
     protected static final int MIN_CONTENT = 48;
-    private static final double MAX_SCALE = 6.0;
 
     enum ClickResult {NONE, HANDLED, CLOSE}
 
@@ -105,9 +104,14 @@ abstract class MediaWindow {
      */
     private final long openedAt = Anim.now();
 
-    // Where the last click landed and when, for the flash that reports it.
-    private int flashX, flashY;
-    private long flashAt;
+    /** Where this window is and how big — see {@link WindowPlacement}. */
+    private final WindowPlacement placement = new WindowPlacement();
+
+    /** What the mouse is doing to it — see {@link WindowGestures}. */
+    private final WindowGestures gestures = new WindowGestures();
+
+    /** What its corner buttons do with the link — see {@link WindowLinkActions}. */
+    private final WindowLinkActions actions = new WindowLinkActions();
 
     MediaWindow() {
         bringToFront();
@@ -127,66 +131,27 @@ abstract class MediaWindow {
         return zOrder;
     }
 
-    // Cached geometry from the last layout (full-screen coordinates).
+    // ------------------------------------------------------------------
+    // The last layout's result (full-screen coordinates)
+    //
+    // These are what the subclass draws into and what the mouse handlers test against,
+    // so they are the window's own rather than the placement's: they describe the frame
+    // that was drawn, while WindowPlacement holds the intent they were computed from.
+    // ------------------------------------------------------------------
+
     protected int boxX, boxY, boxW, boxH;
     protected int contentX, contentY, contentW, contentH;
-    protected int closeBtnX, closeBtnY;
-    protected int hideBtnX, hideBtnY;
-    private int linkBtnX, linkBtnY;
-    private int copyBtnX, copyBtnY;
-    private int favBtnX, favBtnY;
+    /** The corner button row; see {@link WindowButtons}. */
+    private WindowButtons buttons = WindowButtons.layout(0, 0, false);
     private int gripX, gripY;
     /**
      * {@link #TITLE_BAR} or {@code 0}, resolved once per layout so every derived
      * coordinate agrees with what {@link #render} draws.
      */
     private int titleBarH;
-    /**
-     * Right edge available to the title text: the leftmost corner button.
-     */
-    private int titleTextRight;
-
-    // Manual placement / sizing: once the user drags or resizes the window it
-    // stops auto-anchoring and uses these values instead.
-    private boolean userPlaced;
-    private int userX, userY;
-    private boolean userSized;
-    private double userScale;
-    private double lastScale = 1.0; // effective scale used by the last layout
-    private boolean initialPositionApplied;
-
-    // Active drag gestures.
-    private boolean draggingMove;
-    private boolean draggingResize;
-    private int grabDX, grabDY;
-
-    // Theatre mode: the window fills the screen and the geometry it had before is put
-    // aside so leaving puts it back exactly where it was.
-    private boolean theater;
-    private boolean savedPlaced, savedSized;
-    private int savedX, savedY;
-    private double savedScale;
-
-    // Where the cursor last was and when it last moved, which is what tells theatre
-    // mode whether anyone is still looking for the controls.
-    private int lastMouseX = Integer.MIN_VALUE, lastMouseY = Integer.MIN_VALUE;
-    private long lastMouseMoveAt = Anim.now();
 
     /** Set every frame from {@code render}'s {@code withControls}; see {@link #isInteractive()}. */
     private boolean interactive;
-
-    // The previous click, for spotting a double-click on the picture.
-    private long lastClickAt;
-    private int lastClickX, lastClickY;
-
-    /**
-     * When the copy button last put something on the clipboard.
-     *
-     * <p>A copy leaves nothing on screen to show for itself — the clipboard is
-     * somewhere else — so the button says so itself for a moment afterwards. See
-     * {@link #copyTooltip()}.</p>
-     */
-    private long copiedAt;
 
     /**
      * Whether the state loaded from {@code windows.json} has been applied yet. Read on
@@ -194,12 +159,6 @@ abstract class MediaWindow {
      * mod's context exists still finds the store.
      */
     private boolean restoredState;
-
-    /**
-     * A restored content width still waiting for a real source size to be turned into
-     * a scale; {@code 0} when there is nothing pending. See {@link #applyPendingWidth}.
-     */
-    private int pendingWidth;
 
     // ------------------------------------------------------------------
     // Subclass contract
@@ -275,21 +234,7 @@ abstract class MediaWindow {
      * the box — and should keep {@code super}'s figure as their own floor.
      */
     protected int minContentWidth() {
-        return Math.max(MIN_CONTENT, cornerButtonsWidth());
-    }
-
-    /**
-     * How wide the row of corner buttons is: close, the browser link, the copy button
-     * and the favourite heart, plus the hide button on the windows that have one.
-     *
-     * <p>It is part of the minimum because they are laid out right-to-left from the
-     * window's right edge and nothing stops them running past its left one: a window
-     * narrower than its own buttons draws them over each other and over whatever is to
-     * its left.</p>
-     */
-    private int cornerButtonsWidth() {
-        int buttons = 4 + (hasHideButton() ? 1 : 0);
-        return buttons * (BUTTON + 2) + 4;
+        return Math.max(MIN_CONTENT, WindowButtons.width(hasHideButton()));
     }
 
     /**
@@ -333,11 +278,11 @@ abstract class MediaWindow {
 
     /**
      * The name shown in the title bar. Defaults to the media's resolved title, which
-     * {@link com.lia.mediaplayer.media.MediaTitleCache} already keeps for the queue
+     * {@link MediaTitleCache} already keeps for the queue
      * panels — so a YouTube window is named by its video, and a direct link by its file.
      */
     protected String windowTitle() {
-        return com.lia.mediaplayer.media.MediaTitleCache.getOrLoad(mediaUrl());
+        return MediaPlayerContext.get().getTitleCache().getOrLoad(mediaUrl());
     }
 
     /**
@@ -545,57 +490,32 @@ abstract class MediaWindow {
         int srcH = Math.max(1, sourceHeight());
 
         restoreStateOnce();
-        applyPendingWidth();
+        placement.applyPendingWidth(srcW, sourceSizeKnown());
 
-        double scale = userSized ? userScale : computeAutoScale(srcW, srcH, screenWidth, screenHeight);
         titleBarH = hasTitleBar() ? TITLE_BAR : 0;
+        WindowPlacement.Size size = placement.solve(
+                srcW, srcH, screenWidth, screenHeight,
+                computeAutoScale(srcW, srcH, screenWidth, screenHeight),
+                titleBarH, controlBarHeight(),
+                minContentWidth(), maxContentWidth(screenWidth),
+                openScale());
+        contentW = size.contentW();
+        contentH = size.contentH();
+        boxW = size.boxW();
+        boxH = size.boxH();
 
-        // Cap the content size so the whole box (with its title bar, control bar and
-        // padding) always fits on screen — otherwise a tall image or an over-sized
-        // resize pushes the bottom-right grip off-screen where it can't be grabbed
-        // again.
-        int minContentW = minContentWidth();
-        int chromeH = titleBarH + controlBarHeight() + PADDING * 2;
-        int maxContentW = Math.max(minContentW, maxContentWidth(screenWidth));
-        int maxContentH = Math.max(MIN_CONTENT, screenHeight - chromeH - 2);
-        // Width that keeps the (aspect-locked) height within maxContentH.
-        int widthCapFromHeight = Math.max(minContentW, (int) Math.floor(maxContentH * (double) srcW / srcH));
-        int widthCap = Math.min(maxContentW, widthCapFromHeight);
-
-        // Theatre mode is exactly the cap that was just computed: `widthCap` already
-        // knows about the chrome, the aspect ratio and the screen, so "as big as fits"
-        // needs no arithmetic of its own — and unlike going through MAX_SCALE, it fills
-        // the screen for a small source too.
-        int settledW = theater ? widthCap
-                : Mth.clamp((int) Math.round(srcW * scale), minContentW, widthCap);
-        // The scale the window *is* at, recorded before the opening animation scales it
-        // down: a wheel-zoom in the first frames must start from the real size, not from
-        // the momentary one.
-        lastScale = settledW / (double) srcW;
-
-        contentW = Math.max(MIN_CONTENT / 2, (int) Math.round(settledW * openScale()));
-        contentH = Math.max(1, (int) Math.round(contentW * (double) srcH / srcW));
-
-        boxW = contentW + PADDING * 2;
-        boxH = contentH + titleBarH + controlBarHeight() + PADDING * 2;
-
-        if (!userPlaced && !initialPositionApplied) {
-            // Placed from the size the window is *settling* into, not the smaller one it
-            // is drawn at on this first frame: the corner positions pin userX/userY once
-            // and never recompute them, so animating them would leave the window parked
-            // a few pixels short of the corner it was asked for.
-            int settledBoxH = Math.max(1, (int) Math.round(settledW * (double) srcH / srcW))
-                    + titleBarH + controlBarHeight() + PADDING * 2;
-            applyInitialPosition(screenWidth, screenHeight, settledW + PADDING * 2, settledBoxH);
-            initialPositionApplied = true;
+        if (placement.needsInitialPosition()) {
+            placement.applyInitialPosition(
+                    MediaPlayerContext.get().getConfigStore().defaultWindowPosition(),
+                    screenWidth, screenHeight, size.settledBoxW(), size.settledBoxH());
         }
 
-        if (theater) {
+        if (placement.isTheater()) {
             boxX = Math.max(0, (screenWidth - boxW) / 2);
             boxY = Math.max(0, (screenHeight - boxH) / 2);
-        } else if (userPlaced) {
-            boxX = Mth.clamp(userX, 2, Math.max(2, screenWidth - boxW - 2));
-            boxY = Mth.clamp(userY, 2, Math.max(2, screenHeight - boxH - 2));
+        } else if (placement.isPlaced()) {
+            boxX = placement.clampedX(screenWidth, boxW);
+            boxY = placement.clampedY(screenHeight, boxH);
         } else {
             computeAnchor(screenWidth, screenHeight, slot);
         }
@@ -607,32 +527,11 @@ abstract class MediaWindow {
         contentX = boxX + PADDING;
         contentY = boxY + titleBarH + PADDING;
 
-        // Buttons at the right end of the title bar (right to left: close, then hide
-        // if present, then the open-in-browser link). A window without a title bar
-        // keeps them where they have always been, over the top-right of the content.
-        if (titleBarH > 0) {
-            closeBtnX = boxX + boxW - PADDING - BUTTON;
-            closeBtnY = boxY + (titleBarH - BUTTON) / 2;
-        } else {
-            closeBtnX = contentX + contentW - BUTTON - 1;
-            closeBtnY = contentY + 1;
-        }
-        int next = closeBtnX;
-        if (hasHideButton()) {
-            hideBtnX = next - BUTTON - 2;
-            hideBtnY = closeBtnY;
-            next = hideBtnX;
-        }
-        linkBtnX = next - BUTTON - 2;
-        linkBtnY = closeBtnY;
-        // Beside the browser link rather than beside the heart: the two of them are the
-        // same gesture ("take this link somewhere else"), one to a window and one to the
-        // clipboard, and they are told apart by their glyphs, not by hunting for them.
-        copyBtnX = linkBtnX - BUTTON - 2;
-        copyBtnY = closeBtnY;
-        favBtnX = copyBtnX - BUTTON - 2;
-        favBtnY = closeBtnY;
-        titleTextRight = favBtnX - 3;
+        // The corner buttons live at the right end of the title bar. A window without
+        // one keeps them where they have always been, over the top-right of the content.
+        buttons = titleBarH > 0
+                ? WindowButtons.layout(boxX + boxW - PADDING, boxY + (titleBarH - BUTTON) / 2, hasHideButton())
+                : WindowButtons.layout(contentX + contentW - 1, contentY + 1, hasHideButton());
 
         gripX = boxX + boxW - GRIP;
         gripY = boxY + boxH - GRIP;
@@ -640,39 +539,12 @@ abstract class MediaWindow {
         layoutControls(Minecraft.getInstance().font);
     }
 
-    private void applyInitialPosition(int screenWidth, int screenHeight, int settledBoxW, int settledBoxH) {
-        WindowPosition position = ((MediaPlayerContext) LiasMediaPlayerApi.getInstance()).getConfigStore().defaultWindowPosition();
-        if (position == WindowPosition.CENTER) {
-            // Leave userPlaced as false to allow default cascading behavior
-            return;
-        }
-        userPlaced = true;
-        switch (position) {
-            case TOP_LEFT -> {
-                userX = PADDING;
-                userY = PADDING;
-            }
-            case TOP_RIGHT -> {
-                userX = screenWidth - settledBoxW - PADDING;
-                userY = PADDING;
-            }
-            case BOTTOM_LEFT -> {
-                userX = PADDING;
-                userY = screenHeight - settledBoxH - PADDING;
-            }
-            case BOTTOM_RIGHT -> {
-                userX = screenWidth - settledBoxW - PADDING;
-                userY = screenHeight - settledBoxH - PADDING;
-            }
-        }
-    }
-
     // ------------------------------------------------------------------
     // Persistence
     // ------------------------------------------------------------------
 
     private static WindowStateStore stateStore() {
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
         return context == null ? null : context.getWindowStateStore();
     }
 
@@ -692,42 +564,11 @@ abstract class MediaWindow {
         if (store == null) {
             return;
         }
-        WindowStateStore.State state = store.get(stateKey());
         // The remembered spot belongs to one window. A second player of the same kind
         // takes it only if the first is not already sitting there — otherwise the two
         // would land exactly on top of each other, and the cascade in computeAnchor
         // exists precisely to stop that.
-        if (state.placed() && MediaWindowOverlay.isSoleWindowOfKind(this)) {
-            userPlaced = true;
-            userX = state.x();
-            userY = state.y();
-            // The configured default position must not overwrite what was restored.
-            initialPositionApplied = true;
-        }
-        if (state.sized() && state.width() > 0) {
-            pendingWidth = state.width();
-        }
-        applyRestoredState(state);
-    }
-
-    /**
-     * Turns a restored content width into the scale the window actually works in, once
-     * there is a real source size to divide it by.
-     *
-     * <p>A video window exists before its player has decoded a single frame, and
-     * {@link #sourceWidth()} reports a 320x180 placeholder until then. Converting the
-     * width against that placeholder would restore a box several times too large the
-     * moment the real resolution arrived, so the width waits here instead. A source
-     * whose size never resolves — a video that fails to open — simply keeps its
-     * auto-fit scale, which is the right answer for a window with nothing in it.</p>
-     */
-    private void applyPendingWidth() {
-        if (pendingWidth <= 0 || !sourceSizeKnown()) {
-            return;
-        }
-        userSized = true;
-        userScale = pendingWidth / (double) Math.max(1, sourceWidth());
-        pendingWidth = 0;
+        placement.restore(store.get(stateKey()), MediaWindowOverlay.isSoleWindowOfKind(this));
     }
 
     /**
@@ -748,15 +589,15 @@ abstract class MediaWindow {
      * at all, so it would wipe the saved position every time.</p>
      */
     final WindowStateStore.State captureState() {
-        if (!restoredState || draggingMove || draggingResize || theater) {
+        if (!restoredState || gestures.isDragging() || placement.isTheater()) {
             return null;
         }
-        // The width the window settles at, not the animated `contentW` of this frame:
-        // recording the opening animation's momentary size would save a box a little
-        // smaller than the one on screen.
-        int width = userSized ? (int) Math.round(sourceWidth() * userScale) : 0;
         return decorateState(new WindowStateStore.State(
-                userPlaced, userX, userY, userSized, width,
+                placement.isPlaced(), placement.x(), placement.y(),
+                // The width the window settles at, not the animated `contentW` of this
+                // frame: recording the opening animation's momentary size would save a
+                // box a little smaller than the one on screen.
+                placement.isSized(), placement.storedWidth(sourceWidth()),
                 false, RepeatMode.OFF, false));
     }
 
@@ -790,12 +631,13 @@ abstract class MediaWindow {
     final void render(GuiGraphics g, int mouseX, int mouseY, boolean withControls, boolean focused) {
         Font font = Minecraft.getInstance().font;
         double fade = openEase();
-        noteCursor(mouseX, mouseY);
+        gestures.noteCursor(mouseX, mouseY);
         boolean controls = (withControls || alwaysShowControls()) && chromeShown();
 
         Panels.fill(g, boxX, boxY, boxX + boxW, boxY + boxH, Theme.withAlpha(Theme.WINDOW_BG, fade));
         if (titleBarH > 0 && chromeShown()) {
-            renderTitleBar(g, font, fade);
+            WindowChrome.titleBar(g, font, boxX, boxY, boxW, titleBarH,
+                    titleTextRight(), windowTitle(), fade);
         }
         if (controls && controlBarHeight() > 0) {
             int barTop = contentY + contentH;
@@ -819,31 +661,15 @@ abstract class MediaWindow {
 
         interactive = withControls;
         renderControls(g, font, mouseX, mouseY);
-        renderCornerButtons(g, mouseX, mouseY);
-        if (!theater) {
-            renderGrip(g, mouseX, mouseY); // nothing to resize while the screen is the size
+        String url = mediaUrl();
+        WindowChrome.cornerButtons(g, mouseX, mouseY, buttons, titleBarH > 0,
+                actions.isFavorite(url), () -> actions.copyTooltip(url, positionMicros()));
+        if (!placement.isTheater()) {
+            // Nothing to resize while the screen is the size.
+            WindowChrome.grip(g, gripX, gripY,
+                    inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || gestures.isResizing());
         }
-        renderClickFlash(g);
-    }
-
-    /**
-     * Records where the cursor is, which is the whole of theatre mode's idle detection.
-     *
-     * <p>Done from {@code render} rather than from a move event because there is no
-     * mouse-move hook: {@code ClientHooks} carries press, drag, release and scroll, and
-     * the render hook is the one place the cursor position is reported on every version
-     * and on both loaders. It fires once a frame, which is exactly the resolution
-     * vanilla's own drag dispatch has.</p>
-     */
-    private void noteCursor(int mouseX, int mouseY) {
-        if (mouseX < 0 && mouseY < 0) {
-            return; // the HUD overlay draws with no cursor at all, not with a still one
-        }
-        if (mouseX != lastMouseX || mouseY != lastMouseY) {
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            lastMouseMoveAt = Anim.now();
-        }
+        WindowChrome.clickFlash(g, gestures.flashX(), gestures.flashY(), gestures.flashProgress());
     }
 
     /**
@@ -853,11 +679,11 @@ abstract class MediaWindow {
      * on the HUD, where there is no cursor at all.
      */
     protected final int cursorX() {
-        return lastMouseX;
+        return gestures.cursorX();
     }
 
     protected final int cursorY() {
-        return lastMouseY;
+        return gestures.cursorY();
     }
 
     /**
@@ -875,133 +701,7 @@ abstract class MediaWindow {
      * layout is unchanged either way, so nothing moves when they return.</p>
      */
     private boolean chromeShown() {
-        return !theater || Anim.now() - lastMouseMoveAt < THEATER_IDLE_MS;
-    }
-
-    /**
-     * The strip above the content: the media's name on the left, the corner buttons on
-     * the right (drawn by {@link #renderCornerButtons}).
-     */
-    private void renderTitleBar(GuiGraphics g, Font font, double fade) {
-        Panels.fillTop(g, boxX, boxY, boxX + boxW, boxY + titleBarH,
-                Theme.withAlpha(Theme.TITLE_BAR_BG, fade));
-        int textX = boxX + 4;
-        int maxW = titleTextRight - textX;
-        if (maxW < 8) {
-            return; // too narrow to say anything; the buttons win
-        }
-        // Vanilla's font renderer reads a near-zero alpha as "fully opaque", so the
-        // first frame of the fade would show the title at full strength. See
-        // NowPlayingBanner, which has the same floor for the same reason.
-        if (fade * 255 < 8) {
-            return;
-        }
-        g.drawString(font, Component.literal(Glyphs.fit(font, windowTitle(), maxW)),
-                textX, boxY + (titleBarH - font.lineHeight) / 2 + 1,
-                Theme.withAlpha(Theme.TEXT_SUBTLE, fade));
-    }
-
-    private void renderCornerButtons(GuiGraphics g, int mouseX, int mouseY) {
-        // The heart: what turns "this played once" into something the library keeps.
-        // It is a window button rather than a history-screen one because the moment you
-        // know you want to keep a track is while it is playing.
-        boolean favorite = isFavorite();
-        boolean overFav = inRect(mouseX, mouseY, favBtnX, favBtnY, BUTTON, BUTTON);
-        drawButtonBackdrop(g, favBtnX, favBtnY);
-        // Filled once it is kept, hollow while it is not — the same pair the history
-        // screen draws, so the button means one thing in both places.
-        if (favorite) {
-            Glyphs.heart(g, favBtnX, favBtnY, overFav ? Theme.ICON_HOVER : Theme.DANGER);
-        } else {
-            Glyphs.heartOutline(g, favBtnX, favBtnY, overFav ? Theme.ICON_HOVER : Theme.ICON);
-        }
-        if (overFav) {
-            Tooltips.request(Component.translatable(favorite
-                    ? "gui.liasmediaplayer.control.unfavorite"
-                    : "gui.liasmediaplayer.control.favorite"));
-        }
-
-        boolean overLink = inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON);
-        drawButtonBackdrop(g, linkBtnX, linkBtnY);
-        Glyphs.externalLink(g, linkBtnX, linkBtnY, overLink ? Theme.ICON_HOVER : Theme.ICON);
-        if (overLink) {
-            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.open_browser"));
-        }
-
-        boolean overCopy = inRect(mouseX, mouseY, copyBtnX, copyBtnY, BUTTON, BUTTON);
-        drawButtonBackdrop(g, copyBtnX, copyBtnY);
-        Glyphs.copy(g, copyBtnX, copyBtnY, overCopy ? Theme.ICON_HOVER : Theme.ICON);
-        if (overCopy) {
-            Tooltips.request(copyTooltip());
-        }
-
-        boolean overClose = inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON);
-        drawButtonBackdrop(g, closeBtnX, closeBtnY);
-        Glyphs.close(g, closeBtnX, closeBtnY, overClose ? Theme.DANGER : Theme.ICON);
-        if (overClose) {
-            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.close"));
-        }
-
-        if (hasHideButton()) {
-            boolean overHide = inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON);
-            drawButtonBackdrop(g, hideBtnX, hideBtnY);
-            Glyphs.minimize(g, hideBtnX, hideBtnY, overHide ? Theme.ICON_HOVER : Theme.ICON);
-            if (overHide) {
-                Tooltips.request(Component.translatable("gui.liasmediaplayer.control.hide"));
-            }
-        }
-    }
-
-    /**
-     * The dark square behind a corner button — needed only when the button sits over
-     * the picture. In a title bar the strip is already the backdrop, and painting a
-     * second one there just puts three darker squares on it.
-     */
-    private void drawButtonBackdrop(GuiGraphics g, int x, int y) {
-        if (titleBarH == 0) {
-            g.fill(x, y, x + BUTTON, y + BUTTON, Theme.CORNER_BUTTON_BG);
-        }
-    }
-
-    /**
-     * A small diagonal grip in the bottom-right corner, highlighted on hover.
-     */
-    private void renderGrip(GuiGraphics g, int mouseX, int mouseY) {
-        boolean active = inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || draggingResize;
-        // The cursor cannot be swapped for a resize arrow — that is a GLFW window-level
-        // call with no vanilla seam behind it, and a stuck cursor outlives the window —
-        // so the affordance is drawn instead: the grip lights up and gains a backdrop.
-        if (active) {
-            g.fill(gripX, gripY, gripX + GRIP, gripY + GRIP, Theme.CORNER_BUTTON_BG);
-        }
-        int color = active ? Theme.ICON_HOVER : Theme.ICON;
-        for (int i = 1; i <= 3; i++) {
-            int o = i * 2;
-            g.fill(gripX + GRIP - o, gripY + GRIP - 1, gripX + GRIP, gripY + GRIP, color);
-            g.fill(gripX + GRIP - 1, gripY + GRIP - o, gripX + GRIP, gripY + GRIP, color);
-        }
-    }
-
-    /**
-     * The mark a click leaves behind: a small square that expands from where the cursor
-     * was and fades out.
-     *
-     * <p>This is the window equivalent of a button's pressed state. A window is not a
-     * screen widget, so its controls are hit-tested rectangles rather than widgets with
-     * a held state to draw from — a real "pressed" look would mean every one of the
-     * dozen control glyphs in the two player windows tracking the mouse button itself.
-     * Marking the point that was clicked instead reports the press from one place, and
-     * covers the controls that are not buttons at all (the seek bar, a queue row).</p>
-     */
-    private void renderClickFlash(GuiGraphics g) {
-        double t = Anim.progress(flashAt, FLASH_MS);
-        if (t >= 1.0) {
-            return;
-        }
-        double eased = Anim.easeOut(t);
-        int half = (int) Math.round(3 + 6 * eased);
-        Panels.fill(g, flashX - half, flashY - half, flashX + half, flashY + half,
-                Theme.withAlpha(Theme.PRESS_FLASH, 1.0 - eased));
+        return !placement.isTheater() || gestures.idleMillis() < THEATER_IDLE_MS;
     }
 
     // ------------------------------------------------------------------
@@ -1013,12 +713,10 @@ abstract class MediaWindow {
         // wakes hidden theatre chrome: a click aimed at a control nobody can see must
         // bring the controls back rather than press the control blindly.
         boolean chromeWasShown = chromeShown();
-        noteCursor((int) Math.round(mouseX), (int) Math.round(mouseY));
+        gestures.noteCursor((int) Math.round(mouseX), (int) Math.round(mouseY));
         ClickResult result = routeClick(mouseX, mouseY, button, chromeWasShown);
         if (result != ClickResult.NONE) {
-            flashX = (int) Math.round(mouseX);
-            flashY = (int) Math.round(mouseY);
-            flashAt = Anim.now();
+            gestures.flash(mouseX, mouseY);
         }
         return result;
     }
@@ -1028,29 +726,29 @@ abstract class MediaWindow {
             return ClickResult.NONE;
         }
         if (chromeWasShown) {
-            if (inRect(mouseX, mouseY, closeBtnX, closeBtnY, BUTTON, BUTTON)) {
+            if (buttons.overClose(mouseX, mouseY)) {
                 return ClickResult.CLOSE;
             }
-            if (inRect(mouseX, mouseY, linkBtnX, linkBtnY, BUTTON, BUTTON)) {
-                openLink();
+            if (buttons.overLink(mouseX, mouseY)) {
+                actions.openInBrowser(mediaUrl());
                 return ClickResult.HANDLED;
             }
-            if (inRect(mouseX, mouseY, copyBtnX, copyBtnY, BUTTON, BUTTON)) {
-                copyLink(Keys.shiftDown());
+            if (buttons.overCopy(mouseX, mouseY)) {
+                actions.copyLink(mediaUrl(), positionMicros(), Keys.shiftDown());
                 return ClickResult.HANDLED;
             }
-            if (inRect(mouseX, mouseY, favBtnX, favBtnY, BUTTON, BUTTON)) {
-                toggleFavorite();
+            if (buttons.overFavorite(mouseX, mouseY)) {
+                actions.toggleFavorite(mediaUrl());
                 return ClickResult.HANDLED;
             }
-            if (hasHideButton() && inRect(mouseX, mouseY, hideBtnX, hideBtnY, BUTTON, BUTTON)) {
+            if (buttons.overHide(mouseX, mouseY)) {
                 visible = false;
                 // Same outline a close leaves: from the screen's point of view the window
                 // went away, and it should go away the same way either time.
                 MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
                 return ClickResult.HANDLED;
             }
-            if (!theater && inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
+            if (!placement.isTheater() && inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
                 beginResize();
                 return ClickResult.HANDLED;
             }
@@ -1062,7 +760,7 @@ abstract class MediaWindow {
         // A second click on the picture enlarges it to fill the screen, and a third
         // puts it back — checked before the move grab below, which the first click of
         // the pair has already harmlessly started and released.
-        if (isDoubleClick(mouseX, mouseY) && supportsTheater()
+        if (gestures.isDoubleClick(mouseX, mouseY) && supportsTheater()
                 && inRect(mouseX, mouseY, contentX, contentY, contentW, contentH)) {
             toggleTheater();
             return ClickResult.HANDLED;
@@ -1076,57 +774,30 @@ abstract class MediaWindow {
         return ClickResult.NONE;
     }
 
-    /**
-     * Whether this click closes a double-click with the one before it: soon enough, and
-     * near enough that it was aimed at the same thing rather than being two separate
-     * clicks that happened to be quick.
-     */
-    private boolean isDoubleClick(double mouseX, double mouseY) {
-        int x = (int) Math.round(mouseX);
-        int y = (int) Math.round(mouseY);
-        long at = Anim.now();
-        boolean paired = at - lastClickAt <= DOUBLE_CLICK_MS
-                && Math.abs(x - lastClickX) <= DOUBLE_CLICK_SLOP
-                && Math.abs(y - lastClickY) <= DOUBLE_CLICK_SLOP;
-        // Reset rather than extend, so three fast clicks are one pair and a stray
-        // click, not two overlapping pairs.
-        lastClickAt = paired ? 0 : at;
-        lastClickX = x;
-        lastClickY = y;
-        return paired;
-    }
-
     final boolean mouseDragged(double mouseX, double mouseY) {
-        if (draggingResize) {
-            applyResize(mouseX);
+        if (gestures.isResizing()) {
+            // The cursor sets the right edge of the content.
+            placement.resizeTo((int) Math.round(mouseX) - boxX - PADDING,
+                    minContentWidth(), sourceWidth());
             return true;
         }
-        if (draggingMove) {
-            int x = (int) Math.round(mouseX) - grabDX;
-            int y = (int) Math.round(mouseY) - grabDY;
+        if (gestures.isMoving()) {
+            int x = gestures.moveToX(mouseX);
+            int y = gestures.moveToY(mouseY);
             // Shift is the "no, I meant exactly there" modifier, the same escape hatch
             // every drawing program gives its grid.
             if (!Keys.shiftDown()) {
                 x = Snap.axis(x, boxW, MediaWindowOverlay.snapGuidesX(this), Snap.THRESHOLD);
                 y = Snap.axis(y, boxH, MediaWindowOverlay.snapGuidesY(this), Snap.THRESHOLD);
             }
-            userX = x;
-            userY = y;
+            placement.moveTo(x, y);
             return true;
         }
         return onControlDrag(mouseX, mouseY);
     }
 
     final boolean mouseReleased() {
-        boolean handled = false;
-        if (draggingResize) {
-            draggingResize = false;
-            handled = true;
-        }
-        if (draggingMove) {
-            draggingMove = false;
-            handled = true;
-        }
+        boolean handled = gestures.release();
         if (onControlRelease()) {
             handled = true;
         }
@@ -1146,17 +817,32 @@ abstract class MediaWindow {
     }
 
     // ------------------------------------------------------------------
-    // Move / resize helpers
+    // Move / resize
     // ------------------------------------------------------------------
 
     private void beginMove(double mouseX, double mouseY) {
-        if (theater) {
+        if (placement.isTheater()) {
             return; // the window is the screen; there is nowhere to move it to
         }
-        pinPosition();
-        draggingMove = true;
-        grabDX = (int) Math.round(mouseX) - boxX;
-        grabDY = (int) Math.round(mouseY) - boxY;
+        placement.pin(boxX, boxY);
+        gestures.beginMove(mouseX, mouseY, boxX, boxY);
+    }
+
+    private void beginResize() {
+        placement.pin(boxX, boxY);
+        placement.beginResize();
+        gestures.beginResize();
+    }
+
+    /**
+     * Wheel zoom around the current size ({@code steps} = wheel notches).
+     */
+    protected final void zoom(double steps) {
+        if (placement.isTheater()) {
+            return; // the size is the screen's; a zoom here would only be felt on the way out
+        }
+        placement.pin(boxX, boxY);
+        placement.zoom(steps, minContentWidth(), sourceWidth());
     }
 
     // ------------------------------------------------------------------
@@ -1167,15 +853,15 @@ abstract class MediaWindow {
      * Whether this window currently fills the screen.
      */
     final boolean isTheater() {
-        return theater;
+        return placement.isTheater();
     }
 
     /**
      * Swaps between the window's own size and filling the screen, putting the exact
      * geometry back on the way out.
      *
-     * <p>Nothing about the layout is recomputed here: {@link #layout} already branches
-     * on the flag, so a toggle is this bookkeeping plus one frame.</p>
+     * <p>Nothing about the layout is recomputed here: {@link WindowPlacement#solve}
+     * already branches on the flag, so a toggle is this bookkeeping plus one frame.</p>
      *
      * @return {@code true} when the window has a picture to enlarge and the mode changed
      */
@@ -1183,51 +869,15 @@ abstract class MediaWindow {
         if (!supportsTheater()) {
             return false;
         }
-        if (theater) {
-            theater = false;
-            userPlaced = savedPlaced;
-            userX = savedX;
-            userY = savedY;
-            userSized = savedSized;
-            userScale = savedScale;
-        } else {
-            savedPlaced = userPlaced;
-            savedX = userX;
-            savedY = userY;
-            savedSized = userSized;
-            savedScale = userScale;
-            theater = true;
+        boolean entering = !placement.isTheater();
+        placement.toggleTheater();
+        if (entering) {
             onEnterTheater();
         }
         // The chrome is on when the mode changes either way, so the controls that just
         // moved are visible where they landed rather than already timed out.
-        lastMouseMoveAt = Anim.now();
+        gestures.wake();
         return true;
-    }
-
-    private void beginResize() {
-        pinPosition();
-        draggingResize = true;
-        userSized = true;
-    }
-
-    private void applyResize(double mouseX) {
-        int newW = (int) Math.round(mouseX) - boxX - PADDING;
-        double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());
-        userScale = Mth.clamp(newW / (double) Math.max(1, sourceWidth()), minScale, MAX_SCALE);
-    }
-
-    /**
-     * Wheel zoom around the current size ({@code steps} = wheel notches).
-     */
-    protected final void zoom(double steps) {
-        if (theater) {
-            return; // the size is the screen's; a zoom here would only be felt on the way out
-        }
-        pinPosition();
-        userSized = true;
-        double minScale = minContentWidth() / (double) Math.max(1, sourceWidth());
-        userScale = Mth.clamp(lastScale * (1.0 + 0.1 * steps), minScale, MAX_SCALE);
     }
 
     /**
@@ -1268,176 +918,7 @@ abstract class MediaWindow {
      * rather than counting the buttons itself.
      */
     protected final int titleTextRight() {
-        return titleTextRight;
-    }
-
-    /**
-     * Which player this window's media belongs to, for the history entry the heart
-     * creates. Asked of the source registry rather than hard-coded per subclass, so an
-     * addon's own source lands in the library under its own kind.
-     */
-    private com.lia.mediaplayer.api.MediaKind mediaKind() {
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
-        return context == null ? null : context.getMediaSources().kindOf(mediaUrl());
-    }
-
-    private boolean isFavorite() {
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
-        return context != null && context.getHistoryStore().isFavorite(mediaUrl());
-    }
-
-    private void toggleFavorite() {
-        MediaPlayerContext context = (MediaPlayerContext) LiasMediaPlayerApi.getInstanceOrNull();
-        if (context != null) {
-            context.getHistoryStore().toggleFavorite(mediaUrl(), mediaKind());
-        }
-    }
-
-    /**
-     * Opens the media's source URL in the system browser.
-     */
-    private void openLink() {
-        String url = mediaUrl();
-        // openUri hands the string to the OS handler (xdg-open / FileProtocolHandler /
-        // open), which happily launches whatever protocol is registered for it. The URL
-        // originates from a chat component, so only ever pass on a real http(s) link.
-        if (com.lia.mediaplayer.source.Urls.isHttp(url)) {
-            Util.getPlatform().openUri(url);
-        }
-    }
-
-    /**
-     * Puts the media's link on the clipboard — plainly, or with the moment currently
-     * playing written into it.
-     *
-     * <p>The timestamp is the whole point of the button existing next to the browser
-     * one: "have a look at this video" is a link anybody can already copy out of chat,
-     * and "have a look at <em>this bit</em>" is not. It is behind {@code Shift} rather
-     * than being a button of its own because it is the same action on the same link:
-     * a second glyph to aim at would say there were two things to copy.</p>
-     *
-     * @param atPosition write the current playback position into the link, where the
-     *                   site has a way of saying it
-     */
-    private void copyLink(boolean atPosition) {
-        String url = mediaUrl();
-        if (!com.lia.mediaplayer.source.Urls.isHttp(url)) {
-            return; // the same gate openLink applies, for the same reason
-        }
-        String copied = atPosition ? timestampedUrl(url) : url;
-        try {
-            Minecraft.getInstance().keyboardHandler.setClipboard(copied);
-        } catch (RuntimeException e) {
-            return; // no clipboard on this platform; saying "copied" would be a lie
-        }
-        copiedAt = Anim.now();
-    }
-
-    /**
-     * {@code url} with the playback position in it, or {@code url} itself when there is
-     * no position to write (a pinned image, a live stream at the start) or no way to
-     * write it for this site.
-     */
-    private String timestampedUrl(String url) {
-        long micros = positionMicros();
-        if (micros <= 0) {
-            return url;
-        }
-        return com.lia.mediaplayer.source.ShareLink.atSeconds(url, micros / 1_000_000L);
-    }
-
-    /**
-     * What the copy button says: that it just copied something, what {@code Shift} would
-     * add, or — where the site cannot express a position — plainly what it does.
-     */
-    private Component copyTooltip() {
-        if (Anim.progress(copiedAt, COPIED_MS) < 1.0) {
-            return Component.translatable("gui.liasmediaplayer.control.copy_link.done");
-        }
-        long micros = positionMicros();
-        if (micros <= 0 || !com.lia.mediaplayer.source.ShareLink.supportsTimestamp(mediaUrl())) {
-            return Component.translatable("gui.liasmediaplayer.control.copy_link");
-        }
-        String at = com.lia.mediaplayer.source.ShareLink.clockTime(micros / 1_000_000L);
-        return Component.translatable(Keys.shiftDown()
-                ? "gui.liasmediaplayer.control.copy_link.at"
-                : "gui.liasmediaplayer.control.copy_link.shift", at);
-    }
-
-    /**
-     * Freezes the current auto-anchored position so move/resize don't make it jump.
-     */
-    private void pinPosition() {
-        if (!userPlaced) {
-            userPlaced = true;
-            userX = boxX;
-            userY = boxY;
-        }
-    }
-
-    /**
-     * The tooltips for the controls both player windows share, so the two never drift
-     * apart on what a button claims to do. Each is looked up fresh from the current
-     * state: a tooltip that named the button rather than its effect ("loop") would say
-     * nothing the glyph does not already say.
-     */
-    protected static Component playTooltip(boolean playing) {
-        return Component.translatable(playing
-                ? "gui.liasmediaplayer.control.pause"
-                : "gui.liasmediaplayer.control.play");
-    }
-
-    protected static Component loopTooltip(RepeatMode mode) {
-        return Component.translatable(switch (mode) {
-            case OFF -> "gui.liasmediaplayer.control.loop.off";
-            case ALL -> "gui.liasmediaplayer.control.loop.all";
-            case ONE -> "gui.liasmediaplayer.control.loop.one";
-        });
-    }
-
-    protected static Component shuffleTooltip(boolean on) {
-        return Component.translatable(on
-                ? "gui.liasmediaplayer.control.shuffle.on"
-                : "gui.liasmediaplayer.control.shuffle.off");
-    }
-
-    /**
-     * The two "jump {@value MediaControls#SKIP_MICROS} micros" buttons, drawn the same
-     * way by both player windows: greyed out (and inert) when there is no duration to
-     * jump within, which is what a live stream has.
-     */
-    protected final void renderSkipButton(GuiGraphics g, int x, int y, boolean forward,
-                                          boolean seekable, int mouseX, int mouseY) {
-        boolean over = inRect(mouseX, mouseY, x, y, BUTTON, BUTTON);
-        Glyphs.seekStep(g, x, y, forward,
-                seekable ? (over ? Theme.ICON_HOVER : Theme.ICON) : Theme.ICON_DISABLED);
-        if (over && seekable) {
-            Tooltips.request(skipTooltip(forward));
-        }
-    }
-
-    protected static Component skipTooltip(boolean forward) {
-        return Component.translatable(forward
-                        ? "gui.liasmediaplayer.control.skip_forward"
-                        : "gui.liasmediaplayer.control.skip_back",
-                MediaControls.SKIP_MICROS / 1_000_000L);
-    }
-
-    protected static Component volumeTooltip(boolean muted) {
-        return Component.translatable(muted
-                ? "gui.liasmediaplayer.control.unmute"
-                : "gui.liasmediaplayer.control.mute");
-    }
-
-    /**
-     * Colour for a toggle button (loop, shuffle) in each of its four states, so both
-     * player windows draw their toggles the same way.
-     */
-    protected static int toggleColor(boolean active, boolean hovered) {
-        if (active) {
-            return hovered ? Theme.ICON_HOVER : Theme.ICON_ACTIVE;
-        }
-        return hovered ? Theme.ICON_HOVER : Theme.ICON_INACTIVE;
+        return buttons.leftEdge() - 3;
     }
 
     static boolean inRect(double mx, double my, int x, int y, int w, int h) {

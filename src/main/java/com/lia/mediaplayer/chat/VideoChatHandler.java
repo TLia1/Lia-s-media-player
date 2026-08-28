@@ -1,7 +1,8 @@
 package com.lia.mediaplayer.chat;
 
-import com.lia.mediaplayer.media.MediaTitleCache;
-import com.lia.mediaplayer.video.VideoThumbnailCache;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.gui.MediaWindowOverlay;
+import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -9,7 +10,7 @@ import net.minecraft.network.chat.Style;
 /**
  * Rewrites incoming chat so video, stream and YouTube links (including a YouTube
  * playlist page) become an aqua, underlined {@code [video]} / {@code [youtube]} label. Clicking the label is handled
- * by {@link com.lia.mediaplayer.gui.MediaWindowOverlay}, which spawns or queues the
+ * by {@link MediaWindowOverlay}, which spawns or queues the
  * in-game player; this class only does the chat rewrite and the disconnect cleanup.
  *
  * <p>The component-walking is delegated to {@link ChatLinkRewriter}; this class only
@@ -24,21 +25,21 @@ public final class VideoChatHandler {
     private static final ChatLinkRewriter.LinkRewrite VIDEO_LINKS = new ChatLinkRewriter.LinkRewrite() {
         @Override
         public boolean matches(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isVideo(url) && MediaFilters.allowsUrl(url);
         }
 
         @Override
         public Component label(String url) {
-            com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
-            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.literal("[video]");
+            MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
+            return ctx != null ? ctx.getMediaSources().labelFor(url) : Component.translatable("chat.liasmediaplayer.label.video");
         }
 
         @Override
         public Style style(Style inherited, String url) {
             // A playlist page clicks through to the whole list rather than one video,
             // so it gets its own tooltip.
-            String tooltip = com.lia.mediaplayer.source.YouTubePlaylistSource.isPlaylist(url)
+            String tooltip = YouTubePlaylistSource.isPlaylist(url)
                     ? "gui.liasmediaplayer.tooltip.youtube_playlist"
                     : "gui.liasmediaplayer.tooltip.video";
             return inherited
@@ -62,11 +63,11 @@ public final class VideoChatHandler {
 
     /** Drops every open video window and the thumbnail/title caches when leaving a world. */
     public static void onDisconnect() {
-        com.lia.mediaplayer.MediaPlayerContext ctx = (com.lia.mediaplayer.MediaPlayerContext) com.lia.mediaplayer.api.LiasMediaPlayerApi.getInstanceOrNull();
+        MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
         if (ctx != null) {
             ctx.getVideoManager().disposeAll();
+            ctx.getThumbnailCache().clear();
+            ctx.getTitleCache().clear();
         }
-        VideoThumbnailCache.clear();
-        MediaTitleCache.clear();
     }
 }
