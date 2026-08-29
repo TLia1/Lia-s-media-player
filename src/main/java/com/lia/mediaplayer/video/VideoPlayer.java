@@ -41,6 +41,23 @@ public final class VideoPlayer implements MediaPlayback {
     private final int frameQueueCapacity;
     private final BlockingQueue<VideoFrame> frameQueue;
     private final BlockingQueue<ByteBuffer> freeBuffers;
+    /**
+     * Bytes in one decoded frame, known once the stream has been probed.
+     */
+    private int frameBytes;
+    /**
+     * How many frame buffers have been handed out to {@link #freeBuffers} so far.
+     *
+     * <p>The pool grows on demand up to {@link #bufferPoolLimit()} rather than being
+     * filled up front. A buffer is {@code width * height * 4} bytes of <em>off-heap</em>
+     * memory — 1.5 MiB at 480p, 3.5 MiB at 720p — so pre-allocating the whole pool
+     * reserved around a hundred megabytes per player, and close to a gigabyte across
+     * four 720p windows, before a single frame had been decoded. A stream that keeps up
+     * with the clock never needs more than three or four.</p>
+     *
+     * <p>Decode thread only, except for the reset in {@link #decodeLoop}.</p>
+     */
+    private int buffersAllocated;
     private volatile Thread decodeThread;
     private volatile boolean running = true;
     private volatile State state = State.LOADING;
@@ -67,6 +84,31 @@ public final class VideoPlayer implements MediaPlayback {
     private final Condition gateSignal = gate.newCondition();
     private volatile boolean seekRequested;
     private volatile long seekTargetMicros;
+    /**
+     * Whether anything is going to look at the picture.
+     *
+     * <p>False while the window is hidden, and then ffmpeg is started without a video
+     * stream at all. Hiding a player is how the mod is used as a music player, and a
+     * hidden window used to pay the full price of a video it was throwing away frame by
+     * frame: the decode, the scale, and fifty megabytes a second down a pipe, all so
+     * that {@link #discardDueFrames} could drop the result. {@code -vn} is the honest
+     * version of that, and it leaves only the sound — which is the part someone hiding
+     * the window still wants.</p>
+     *
+     * <p>Only meaningful for a stream that has sound. A silent video with no picture has
+     * no output at all, so one keeps decoding as before rather than becoming a session
+     * that produces nothing and can never reach its end.</p>
+     */
+    private volatile boolean pictureWanted = true;
+    /**
+     * Set by the audio pump when its stream ends, so the decode thread can notice the
+     * track is over while there is no video stream to reach EOF instead.
+     *
+     * <p>With a picture, end-of-track is a null frame out of {@link #readVideoFrame};
+     * without one, nothing else would ever say so and a hidden player would sit on a
+     * finished track forever instead of advancing its queue.</p>
+     */
+    private volatile boolean audioStreamEnded;
     /**
      * Where playback is <em>going</em> while a seek is in flight, or {@code -1}.
      *
@@ -243,6 +285,46 @@ public final class VideoPlayer implements MediaPlayback {
         }
     }
 
+    /**
+     * Says whether the picture is still being looked at.
+     *
+     * <p>Relaunching through {@link #seekTo} rather than by a path of its own: swapping
+     * a session for one with a different set of streams is exactly what a seek already
+     * does, at exactly the position this needs, and it is the one relaunch path that has
+     * been proven against real streams. The only cost is that turning the picture back
+     * on shows the window's "seeking" notice for the second ffmpeg takes to produce a
+     * frame — which is the truth about what is happening.</p>
+     *
+     * <p>Before playback has started there is no session to swap: the flag is recorded
+     * and {@link #startSession} reads it when it opens the first one.</p>
+     */
+    public void setPictureWanted(boolean wanted) {
+        if (pictureWanted == wanted) {
+            return;
+        }
+        pictureWanted = wanted;
+        // A silent stream produces video either way (see sessionHasVideo), so there is
+        // nothing to relaunch for. Nor is there before the stream has been probed: the
+        // wish is recorded above and startSession reads it when it opens the first
+        // session — which is the case a hidden window advancing its queue lands in,
+        // since the player it hands this to has not started yet.
+        if (hasAudio && (state == State.PLAYING || state == State.PAUSED)) {
+            seekTo(positionMicros());
+        }
+    }
+
+    /**
+     * Whether the running session carries a picture.
+     *
+     * <p>Not the same question as {@link #pictureWanted}: a stream with no sound has
+     * nothing else to produce, so it keeps its video stream even while hidden rather
+     * than becoming a session with no output at all — one that could never reach its own
+     * end, and would leave a queue stuck on it forever.</p>
+     */
+    private boolean sessionHasVideo() {
+        return pictureWanted || !hasAudio;
+    }
+
     public void seekToFraction(double fraction) {
         if (durationMicros <= 0) {
             return;
@@ -403,10 +485,8 @@ public final class VideoPlayer implements MediaPlayback {
             hasAudio = info.hasAudio() && audioOutput.open(info);
 
             freeBuffers.clear();
-            int frameBytes = videoWidth * videoHeight * 4;
-            for (int i = 0; i < frameQueueCapacity + 4; i++) {
-                freeBuffers.offer(ByteBuffer.allocateDirect(frameBytes));
-            }
+            frameBytes = videoWidth * videoHeight * 4;
+            buffersAllocated = 0;
 
             startSession(0);
             clock.start(0, audioOutput.getLine());
@@ -420,11 +500,20 @@ public final class VideoPlayer implements MediaPlayback {
                     performSeek();
                 }
 
+                if (!sessionHasVideo()) {
+                    if (awaitPictureOrEnd()) {
+                        continue; // the picture is wanted again, or a seek/stop landed
+                    }
+                    onEndOfStream(); // the sound ran out, and there is no frame to say so
+                    continue;
+                }
+
                 VideoFrame decoded = readVideoFrame();
                 if (decoded == null) {
                     if (seekRequested || !running) {
                         continue;
                     }
+                    reportStreamEnd();
                     onEndOfStream();
                     continue;
                 }
@@ -447,16 +536,18 @@ public final class VideoPlayer implements MediaPlayback {
     private VideoFrame readVideoFrame() throws IOException, InterruptedException {
         ReadableByteChannel channel = session.getVideoChannel();
         if (channel == null) {
+            // A session that was asked for a picture and has no channel to read it from
+            // is a bug, not a finished track — and the caller cannot tell the two apart,
+            // because both arrive here as a null frame. Say so rather than let it be
+            // mistaken for the end of the video and close the window in silence.
+            if (sessionHasVideo()) {
+                LiasMediaPlayer.LOGGER.warn(
+                        "No video channel for {} despite the session being asked for one", url);
+            }
             return null;
         }
 
-        ByteBuffer buffer = null;
-        while (running && !seekRequested) {
-            buffer = freeBuffers.poll(50, TimeUnit.MILLISECONDS);
-            if (buffer != null) {
-                break;
-            }
-        }
+        ByteBuffer buffer = takeBuffer();
         if (buffer == null) {
             return null;
         }
@@ -474,6 +565,75 @@ public final class VideoPlayer implements MediaPlayback {
         long ts = sessionBaseMicros + frameIndex * frameDurationMicros;
         frameIndex++;
         return new VideoFrame(ts, sessionGen, videoWidth, videoHeight, buffer);
+    }
+
+    /**
+     * A buffer to decode the next frame into: one the render thread has given back, or
+     * a freshly allocated one while the pool is still under its limit.
+     *
+     * <p>Growing on demand is what keeps the memory bill proportional to how far behind
+     * the pipeline actually runs. A stream that keeps up with the clock cycles three or
+     * four buffers forever; only one that has to buffer ahead through a stall pays for
+     * the rest, and only for as long as the player lives.</p>
+     *
+     * <p>Buffers are never freed by hand, and deliberately: {@link #dispose} interrupts
+     * the decode thread rather than joining it, so a {@code memFree} here could land
+     * while that thread is still reading ffmpeg's pipe into the very buffer being
+     * released. A use-after-free on the render path takes the game down with no Java
+     * stack to explain it; letting the collector reclaim them costs a GC cycle of
+     * latency and cannot.</p>
+     *
+     * @return a buffer, or {@code null} when the player is stopping or a seek has landed
+     */
+    @Nullable
+    private ByteBuffer takeBuffer() throws InterruptedException {
+        while (running && !seekRequested) {
+            ByteBuffer pooled = freeBuffers.poll();
+            if (pooled != null) {
+                return pooled;
+            }
+            if (buffersAllocated < bufferPoolLimit()) {
+                buffersAllocated++;
+                return ByteBuffer.allocateDirect(frameBytes);
+            }
+            // The pool is at its limit and every buffer is either queued or on screen:
+            // wait for the render thread to hand one back. This is the back-pressure
+            // that paces ffmpeg — see the "no -re" note in FFmpegCli.openVideo.
+            ByteBuffer waited = freeBuffers.poll(50, TimeUnit.MILLISECONDS);
+            if (waited != null) {
+                return waited;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The most frame buffers this player will ever hold: everything the queue can take,
+     * plus the one being decoded into, the one on screen, and a little slack.
+     */
+    private int bufferPoolLimit() {
+        return frameQueueCapacity + 4;
+    }
+
+    /**
+     * Parks the decode thread while the session is running without a video stream.
+     *
+     * <p>There is nothing to read in that state — {@link #readVideoFrame} would answer
+     * null and be taken for the end of the track — so the thread waits here instead,
+     * and the sound plays on its own thread meanwhile.</p>
+     *
+     * @return {@code true} when something other than the end of the sound woke it
+     */
+    private boolean awaitPictureOrEnd() throws InterruptedException {
+        gate.lock();
+        try {
+            while (running && !sessionHasVideo() && !seekRequested && !audioStreamEnded) {
+                gateSignal.await();
+            }
+            return !running || sessionHasVideo() || seekRequested;
+        } finally {
+            gate.unlock();
+        }
     }
 
     private boolean awaitResumeOrSeek() throws InterruptedException {
@@ -506,11 +666,37 @@ public final class VideoPlayer implements MediaPlayback {
         }
 
         clock.seekTo(target, audioOutput.getLine());
+        if (!sessionHasVideo()) {
+            // Same reasoning as the failed-launch branch above: a session with no video
+            // stream will never produce the frame that ends the seek. Leaving it in
+            // flight would freeze positionMicros() on the target, and a hidden player
+            // whose clock never advances is one whose queue never moves on.
+            clearPendingSeek();
+        }
         // Note what is *not* here: the seek is not over because ffmpeg has been
         // launched. It is over when the first frame it produces reaches the screen,
         // which prepareFrame decides.
         if (state == State.ENDED) {
             state = State.PLAYING;
+        }
+    }
+
+    /**
+     * Says in the log why the video stream stopped, when ffmpeg has something to say
+     * about it.
+     *
+     * <p>A stream that simply ran out is the normal case and stays quiet at DEBUG. A
+     * process that quit with a status, or wrote to stderr, is a failure wearing the same
+     * clothes — the decode thread sees an EOF either way — and that one gets a warning
+     * with ffmpeg's own words in it. Without this a player that closes itself a second
+     * after opening leaves nothing in the log but its own silence.</p>
+     */
+    private void reportStreamEnd() {
+        String detail = session.describeEnd();
+        if (!detail.isEmpty()) {
+            LiasMediaPlayer.LOGGER.warn("Video stream for {} ended early — {}", url, detail);
+        } else {
+            LiasMediaPlayer.LOGGER.debug("Video stream for {} reached its end", url);
         }
     }
 
@@ -553,10 +739,27 @@ public final class VideoPlayer implements MediaPlayback {
         int gen = ++sessionGen;
         frameIndex = 0;
         sessionBaseMicros = Math.round(startSeconds * 1_000_000.0);
+        audioStreamEnded = false;
 
-        session.start(mediaUrl, videoWidth, videoHeight, startSeconds, hasAudio,
+        session.start(mediaUrl, videoWidth, videoHeight, startSeconds, sessionHasVideo(), hasAudio,
                 audioOutput.getSampleRate(), audioOutput.getChannels(), gen, (in) -> {
-            audioOutput.pumpAudio(gen, () -> sessionGen, () -> running, in);
+            audioOutput.pumpAudio(gen, () -> sessionGen, () -> running, in,
+                    () -> onAudioStreamEnded(gen));
         });
+    }
+
+    /**
+     * The audio pump reporting that its stream reached its end.
+     *
+     * <p>Ignored while there is a picture: the null frame out of the video stream is the
+     * authority there, and it arrives with the frames still queued ahead of it, whereas
+     * the sound is written to the line before the last frames have been shown.</p>
+     */
+    private void onAudioStreamEnded(int gen) {
+        if (gen != sessionGen || sessionHasVideo()) {
+            return;
+        }
+        audioStreamEnded = true;
+        signalGate();
     }
 }

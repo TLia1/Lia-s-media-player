@@ -31,7 +31,9 @@ final class ImageHoverPreview {
      */
     static void render(GuiGraphics guiGraphics, int mouseX, int mouseY,
                        int screenWidth, int screenHeight) {
-        Style style = ChatHitTest.hoveredStyle(mouseX, mouseY);
+        // Cached: this runs every frame, and re-running the hit test that often is the
+        // single most expensive thing the mod does while the chat is merely open.
+        Style style = ChatHitTest.hoveredStyleCached(mouseX, mouseY);
         if (style == null) {
             return;
         }

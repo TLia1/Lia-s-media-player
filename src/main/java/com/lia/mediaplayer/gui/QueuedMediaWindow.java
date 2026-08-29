@@ -99,6 +99,18 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
      */
     protected abstract void warmCaches(String url);
 
+    /**
+     * A fresh player has replaced the previous one; give it whatever the window already
+     * knows that a new player cannot.
+     *
+     * <p>Called before {@code start()}, so a subclass can set the new player up before
+     * it opens anything. What needs it today is visibility: a hidden video window
+     * advancing to its next track would otherwise get a player that starts decoding a
+     * picture nobody is looking at, since only the window knows it is hidden.</p>
+     */
+    protected void onPlayerSwapped(P freshPlayer) {
+    }
+
     // ------------------------------------------------------------------
     // Queue
     // ------------------------------------------------------------------
@@ -207,6 +219,7 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
         draggingSeek = false;
         draggingVolume = false;
         player = createPlayer(url);
+        onPlayerSwapped(player);
         player.start();
         announceIfHidden(url);
     }

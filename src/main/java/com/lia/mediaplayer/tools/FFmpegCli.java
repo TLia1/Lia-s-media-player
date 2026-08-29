@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lia.mediaplayer.config.ConfigStore;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedReader;
@@ -14,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -147,8 +149,10 @@ public final class FFmpegCli {
                 new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (sink.length() < 2000) {
-                    sink.append(line).append('\n');
+                synchronized (sink) {
+                    if (sink.length() < MAX_STDERR_CHARS) {
+                        sink.append(line).append('\n');
+                    }
                 }
             }
         } catch (IOException ignored) {
@@ -211,6 +215,7 @@ public final class FFmpegCli {
         List<String> command = new ArrayList<>(List.of(
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"));
         addSeek(command, startSeconds);
+        addHardwareDecoding(command);
         // We intentionally do NOT pass "-re" here. "-re" caps ffmpeg's output at the
         // native frame rate, which leaves no slack to pre-buffer and — worse — stops
         // the video catching back up after a network stall, so the picture drifts
@@ -224,12 +229,107 @@ public final class FFmpegCli {
         command.add(url);
         command.add("-an"); // no audio on this process
         command.add("-vf");
-        command.add("scale=" + width + ":" + height);
+        // Bilinear rather than swscale's bicubic default. Every frame is scaled, at
+        // frame rate, on the CPU — and then scaled again by the GPU when the window
+        // blits it into a box that is smaller still. Paying for bicubic's extra taps at
+        // the first of those two steps buys nothing anyone can see at the second.
+        command.add("scale=" + width + ":" + height + ":flags=bilinear");
         command.add("-pix_fmt");
         command.add("rgba");
         command.add("-f");
         command.add("rawvideo");
         command.add("-");
+        return start(command);
+    }
+
+    /**
+     * Starts <em>one</em> ffmpeg that decodes the stream once and writes both of its
+     * outputs at the same time: raw {@code rgba} video frames to stdout, exactly as
+     * {@link #openVideo} does, and {@code s16le} PCM to a TCP connection it opens back
+     * to {@code audioHost}:{@code audioPort}.
+     *
+     * <h4>Why a socket, and why one process</h4>
+     *
+     * <p>Playing a video used to mean two ffmpeg processes on the same URL — one with
+     * {@code -an}, one with {@code -vn}. Both of them downloaded the stream, and both
+     * demuxed it; only the decode of the track each one kept was not duplicated. For a
+     * network stream that is twice the bandwidth and two connections to the same host,
+     * and every seek paid for two relaunches instead of one.
+     *
+     * <p>One process cannot simply write both to stdout — they would interleave into
+     * nonsense — and Java cannot hand a child an extra file descriptor to write the
+     * second one to. ffmpeg's {@code tcp://} output is the way out that works on every
+     * platform the mod ships to: the mod listens on the loopback interface, ffmpeg
+     * connects back, and the PCM arrives on a stream that behaves exactly like the pipe
+     * it replaces. A named pipe would do the same on Linux and macOS and not on Windows.
+     *
+     * <h4>What changes for the caller</h4>
+     *
+     * <p><b>The two outputs now pace each other.</b> One process has one muxing loop, so
+     * a consumer that stops reading either output stops <em>both</em> — measured, not
+     * assumed: leaving the audio socket undrained freezes the video within a second, as
+     * soon as the socket buffer fills. That is not a new hazard so much as an old one
+     * made symmetric. {@code VideoPlayer.resume} already relaunches unconditionally
+     * because "while paused nobody reads ffmpeg's pipes"; the same reasoning now covers
+     * the sound. What it does add is that {@code VideoPlayer.discardDueFrames} — which
+     * keeps an undrawn window's frame queue moving — is load-bearing for the
+     * <em>audio</em> of that window too, not only for its progress.
+     *
+     * <h4>The listening socket</h4>
+     *
+     * <p>Bound to the loopback address with a backlog of one, and closed the moment the
+     * connection is accepted. Another process on the same machine could in principle win
+     * the race and feed PCM to a sound line; the window is the few milliseconds between
+     * bind and connect, it requires local code execution to exploit, and the payload it
+     * could deliver is audible noise. Binding to anything but loopback, on the other
+     * hand, would put that port on the network, so it is spelled out rather than left to
+     * a default.
+     *
+     * @param audioHost the address the listener is actually bound to, already in the
+     *                  literal form a URL wants — bracketed when it is IPv6. It is passed
+     *                  in rather than assumed to be {@code 127.0.0.1}: the loopback
+     *                  address a JVM picks is {@code ::1} whenever IPv6 is preferred, and
+     *                  a listener on {@code [::1]} refuses an IPv4 connection outright.
+     *                  Hardcoding one family here is what made ffmpeg answer
+     *                  "Connection refused" against a port that was demonstrably open.
+     * @param audioPort the port {@link java.net.ServerSocket} is already listening on
+     */
+    public static Process openVideoWithAudio(String url, int width, int height, double startSeconds,
+                                             int sampleRate, int channels,
+                                             String audioHost, int audioPort) throws IOException {
+        String ffmpeg = requireFfmpeg();
+        List<String> command = new ArrayList<>(List.of(
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"));
+        addSeek(command, startSeconds);
+        addHardwareDecoding(command);
+        addInputNetworkOptions(command, url);
+        command.add("-i");
+        command.add(url);
+
+        // Output 1 — video to stdout. Same shape as openVideo; see the "no -re" note there.
+        command.add("-map");
+        command.add("0:v:0");
+        command.add("-vf");
+        command.add("scale=" + width + ":" + height + ":flags=bilinear");
+        command.add("-pix_fmt");
+        command.add("rgba");
+        command.add("-f");
+        command.add("rawvideo");
+        command.add("pipe:1");
+
+        // Output 2 — audio to the loopback listener. Same shape as openAudio.
+        command.add("-map");
+        command.add("0:a:0");
+        command.add("-f");
+        command.add("s16le");
+        command.add("-acodec");
+        command.add("pcm_s16le");
+        command.add("-ar");
+        command.add(Integer.toString(sampleRate));
+        command.add("-ac");
+        command.add(Integer.toString(channels));
+        command.add("tcp://" + audioHost + ":" + audioPort);
+
         return start(command);
     }
 
@@ -274,6 +374,12 @@ public final class FFmpegCli {
         command.add("-i");
         command.add(url);
         command.add("-frames:v");
+        command.add("1");
+        // One frame is one frame: ffmpeg's default thread count would spin up a worker
+        // per core for it. A queue panel asks for these in bursts — one per track the
+        // moment a playlist opens — so left alone they take the whole machine for a
+        // second at exactly the wrong time. See the pool in VideoThumbnailCache.
+        command.add("-threads");
         command.add("1");
         command.add("-an");
         command.add("-vf");
@@ -323,15 +429,60 @@ public final class FFmpegCli {
         }, "FFmpeg-ShutdownHook"));
     }
 
+    /**
+     * The last few lines each running process wrote to stderr.
+     *
+     * <p>These used to go to {@code Redirect.DISCARD}, on the reasoning that a real
+     * failure would surface as an early EOF on stdout and that ffprobe had already
+     * validated the URL. The first half is true and the second is not enough: an EOF says
+     * only <em>that</em> ffmpeg stopped, never <em>why</em>, and the caller's log then
+     * shows a player that closed itself with nothing to explain it. ffmpeg puts the
+     * reason on stderr — a rejected option, a stream map that matches nothing, a decoder
+     * that would not open — and it costs one bounded buffer to keep it.</p>
+     *
+     * <p>Bounded twice over: {@link #MAX_STDERR_CHARS} per process, and the entry is
+     * dropped when the process exits.</p>
+     */
+    private static final Map<Process, StringBuilder> STDERR = new ConcurrentHashMap<>();
+
+    /** Enough for the handful of lines ffmpeg writes before giving up. */
+    private static final int MAX_STDERR_CHARS = 4000;
+
+    /**
+     * What {@code process} wrote to stderr, trimmed, or an empty string.
+     *
+     * <p>Worth reading whenever a stream ends sooner than it should have — which for the
+     * streaming processes is the only symptom that ever reaches the caller.</p>
+     */
+    public static String stderrOf(Process process) {
+        StringBuilder captured = STDERR.get(process);
+        if (captured == null) {
+            return "";
+        }
+        synchronized (captured) {
+            return captured.toString().trim();
+        }
+    }
+
     private static Process start(List<String> command) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command);
-        // We never read stderr from the streaming processes, so discard it to
-        // avoid a full-pipe stall; real failures surface as an early stdout EOF
-        // (and ffprobe has already validated the URL up front).
-        builder.redirectError(ProcessBuilder.Redirect.DISCARD);
+        // Piped rather than discarded, and drained on a thread of its own: a pipe nobody
+        // reads fills up and stalls the process behind it, which is what DISCARD was
+        // there to avoid. Draining keeps that safety and keeps the diagnosis.
+        builder.redirectErrorStream(false);
         Process p = builder.start();
         ACTIVE_PROCESSES.add(p);
-        p.onExit().thenAccept(process -> ACTIVE_PROCESSES.remove(process));
+
+        StringBuilder captured = new StringBuilder();
+        STDERR.put(p, captured);
+        Thread drain = new Thread(() -> drainStderr(p, captured), "liasmediaplayer-ffmpeg-err");
+        drain.setDaemon(true);
+        drain.start();
+
+        p.onExit().thenAccept(process -> {
+            ACTIVE_PROCESSES.remove(process);
+            STDERR.remove(process);
+        });
         return p;
     }
 
@@ -349,6 +500,40 @@ public final class FFmpegCli {
                 + "https://ffmpeg.org/download.html, then either add it to PATH or launch Minecraft "
                 + "with -Dliasmediaplayer.ffmpeg=C:\\\\path\\\\to\\\\ffmpeg.exe "
                 + "(and -Dliasmediaplayer.ffprobe=... for ffprobe).";
+    }
+
+    /**
+     * The hardware decoder override, or {@code "auto"} to let ffmpeg pick.
+     *
+     * <p>Forcing a method by name is an escape hatch, not a setting, and it is sharp:
+     * ffmpeg falls back to software when {@code auto} finds nothing and when a
+     * <em>recognized</em> method has no usable device, but it refuses to open the input
+     * at all when the name is one it does not know — so a typo here is a video that
+     * never plays rather than one that plays slowly. Same shape as
+     * {@code liasmediaplayer.ytdlp.clients}: the thing a bug report can ask someone to
+     * try, without a config option nobody else should touch.</p>
+     */
+    private static final String HWACCEL_METHOD =
+            System.getProperty("liasmediaplayer.hwaccel", "auto");
+
+    /**
+     * Asks the decoder to run on the GPU, unless the player has turned it off.
+     *
+     * <p>Decoding is the single largest slice of what playing a video costs, and on
+     * H.264 or HEVC it is the slice a GPU does essentially for free. The frames still
+     * come back to system memory to be scaled and converted — no {@code
+     * -hwaccel_output_format} here, because keeping them on the GPU would mean a
+     * {@code scale_vaapi} / {@code scale_cuda} chain that differs per platform — so this
+     * moves the decode off the CPU and leaves the rest where it was.</p>
+     *
+     * <p>An input option, so it must be added before {@code -i}.</p>
+     */
+    private static void addHardwareDecoding(List<String> command) {
+        if (!ConfigStore.HARDWARE_DECODING.getValue() || HWACCEL_METHOD.isBlank()) {
+            return;
+        }
+        command.add("-hwaccel");
+        command.add(HWACCEL_METHOD);
     }
 
     private static void addSeek(List<String> command, double startSeconds) {

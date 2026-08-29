@@ -189,6 +189,8 @@
   "gui.liasmediaplayer.toast.update_failed": "Impossible de mettre à jour les outils médias",
   "config.liasmediaplayer.auto_update_tools": "Mettre yt-dlp à jour automatiquement",
   "config.liasmediaplayer.auto_update_tools.description": "Remplace yt-dlp au lancement quand celui qui est installé date de plus de 30 jours. YouTube casse régulièrement les anciennes versions.",
+  "config.liasmediaplayer.hardware_decoding": "Décodage vidéo matériel",
+  "config.liasmediaplayer.hardware_decoding.description": "Laisse le GPU décoder la vidéo à la place du processeur, ce qui est le poste le plus lourd d'une lecture. Revient tout seul au processeur quand aucun décodeur GPU n'est disponible. À désactiver si une vidéo reste noire ou si le jeu plante pendant le décodage.",
   "key.liasmediaplayer.controls": "Ouvrir les contrôles média",
   "gui.liasmediaplayer.controls.title": "Contrôles média",
   "gui.liasmediaplayer.controls.hint": "Déplacez, cliquez, utilisez les raccourcis — Échap pour fermer",

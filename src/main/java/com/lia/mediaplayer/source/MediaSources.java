@@ -7,7 +7,9 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -24,7 +26,19 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>Sources are tested in registration order and the first match wins. The built-in
  * sources are mutually exclusive, so order only matters if a future source overlaps
- * an existing one. All methods are stateless and safe to call from any thread.</p>
+ * an existing one. All methods are safe to call from any thread.</p>
+ *
+ * <h2>The lookup cache</h2>
+ *
+ * <p>{@link #find} used to be a pure function and nothing else, which read well and cost
+ * more than it looked. Answering it walks up to fourteen sources, and almost every one
+ * of them parses the URL — {@code Urls.isHttp} builds a {@code URI}, then the source
+ * builds another for the host or the path — so one lookup is a couple of dozen parses.
+ * That would be fine if it were asked once per link. It is not: the chat rewriter asks
+ * three times per URL per message (once per media kind), and the hover preview asks
+ * again <em>every frame</em> the cursor rests on a link. Caching the answer per URL turns
+ * the per-frame cost into a hash lookup, and the URLs repeat by construction — a message
+ * stays on screen for tens of seconds.</p>
  */
 public class MediaSources {
 
@@ -48,6 +62,40 @@ public class MediaSources {
             new AudioFileSource()    // a direct .mp3/.ogg/.wav/... file
     ));
 
+    /**
+     * How many resolved URLs to remember. A cap rather than an eviction policy: the map
+     * is a memo of a pure function, so throwing all of it away and refilling it costs
+     * only the lookups that come back, and there is nothing to release.
+     */
+    private static final int MAX_CACHED_LOOKUPS = 512;
+
+    /**
+     * URL to the source that claims it — {@link #NONE} standing in for "nothing does",
+     * since a {@link ConcurrentHashMap} cannot hold a null value and "no source" is
+     * exactly the answer worth not recomputing.
+     */
+    private final Map<String, MediaSource> lookupCache = new ConcurrentHashMap<>();
+
+    /**
+     * The sentinel for "no source claims this URL". Never registered, never returned.
+     */
+    private static final MediaSource NONE = new MediaSource() {
+        @Override
+        public boolean matches(String url) {
+            return false;
+        }
+
+        @Override
+        public MediaKind kind() {
+            return MediaKind.VIDEO;
+        }
+
+        @Override
+        public Component label(String url) {
+            return Component.literal(url);
+        }
+    };
+
     public MediaSources() {
     }
 
@@ -59,6 +107,9 @@ public class MediaSources {
     public void register(MediaSource source) {
         if (source != null) {
             registered.add(source);
+            // A new source may claim links an earlier answer said nothing claimed, so
+            // every cached "no" is now suspect.
+            lookupCache.clear();
         }
     }
 
@@ -66,12 +117,25 @@ public class MediaSources {
      * The first source that recognizes {@code url}, if any.
      */
     public Optional<MediaSource> find(String url) {
+        if (url == null) {
+            return Optional.empty();
+        }
+        MediaSource cached = lookupCache.get(url);
+        if (cached != null) {
+            return cached == NONE ? Optional.empty() : Optional.of(cached);
+        }
+        MediaSource found = NONE;
         for (MediaSource source : registered) {
             if (source.matches(url)) {
-                return Optional.of(source);
+                found = source;
+                break;
             }
         }
-        return Optional.empty();
+        if (lookupCache.size() >= MAX_CACHED_LOOKUPS) {
+            lookupCache.clear();
+        }
+        lookupCache.put(url, found);
+        return found == NONE ? Optional.empty() : Optional.of(found);
     }
 
     /**

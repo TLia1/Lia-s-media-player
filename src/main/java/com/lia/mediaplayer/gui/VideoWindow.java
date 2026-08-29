@@ -69,6 +69,31 @@ final class VideoWindow extends QueuedMediaWindow<VideoPlayer> {
     }
 
     /**
+     * Tells the player to stop producing a picture nobody is going to look at.
+     *
+     * <p>Hiding a player is how someone uses the mod as a music player, and until this
+     * the sound was the only part of a hidden window that was not wasted: the video was
+     * still decoded, still scaled, and still pushed down a pipe for
+     * {@code VideoPlayer.discardDueFrames} to throw away. The player relaunches ffmpeg
+     * without a video stream instead — and relaunches it with one when the window comes
+     * back, which shows the usual "seeking" notice for the second that takes.</p>
+     */
+    @Override
+    void setVisible(boolean visible) {
+        super.setVisible(visible);
+        player.setPictureWanted(visible);
+    }
+
+    /**
+     * A hidden window that advances to the next track keeps its next player picture-free
+     * too, rather than quietly going back to decoding one.
+     */
+    @Override
+    protected void onPlayerSwapped(VideoPlayer freshPlayer) {
+        freshPlayer.setPictureWanted(isVisible());
+    }
+
+    /**
      * The panel shows a thumbnail beside each row, so the picture is warmed as well as
      * the name.
      */

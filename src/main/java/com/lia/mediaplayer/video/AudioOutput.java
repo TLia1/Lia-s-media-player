@@ -122,12 +122,28 @@ public class AudioOutput {
         }
     }
 
-    public void pumpAudio(int expectedGen, IntSupplier currentGenSupplier, BooleanSupplier isRunningSupplier, InputStream in) {
+    /**
+     * Reads PCM from one session and writes it to the line until the stream ends, the
+     * player stops, or a newer session supersedes this one.
+     *
+     * @param onEndOfStream run when the stream ended of its own accord, rather than
+     *                      because the session was replaced or the player stopped. It is
+     *                      how a window with no picture learns its track is over — see
+     *                      {@code VideoPlayer.onAudioStreamEnded}.
+     */
+    public void pumpAudio(int expectedGen, IntSupplier currentGenSupplier, BooleanSupplier isRunningSupplier,
+                          InputStream in, Runnable onEndOfStream) {
         byte[] buffer = new byte[8192];
+        boolean drained = false;
         try {
             int read;
             SourceDataLine line = audioLine;
-            while (isRunningSupplier.getAsBoolean() && currentGenSupplier.getAsInt() == expectedGen && (read = in.read(buffer)) >= 0) {
+            while (isRunningSupplier.getAsBoolean() && currentGenSupplier.getAsInt() == expectedGen) {
+                read = in.read(buffer);
+                if (read < 0) {
+                    drained = true;
+                    break;
+                }
                 if (currentGenSupplier.getAsInt() != expectedGen) {
                     break;
                 }
@@ -137,11 +153,15 @@ public class AudioOutput {
                 }
             }
         } catch (Exception ignored) {
+            // Process killed, pipe or socket closed (typically a seek or a dispose).
         } finally {
             try {
                 in.close();
             } catch (IOException ignored) {
             }
+        }
+        if (drained && isRunningSupplier.getAsBoolean() && currentGenSupplier.getAsInt() == expectedGen) {
+            onEndOfStream.run();
         }
     }
 }

@@ -134,6 +134,27 @@ public final class MediaWindowOverlay {
     }
 
     /**
+     * Whether the window stack is being drawn at all right now.
+     *
+     * <p>The stack is drawn on the bare HUD and over the screens {@link #acceptsWindows}
+     * names, and nowhere else — so a pause menu, a playlist screen or the config screen
+     * leaves every window undrawn however visible it is. That distinction matters far
+     * more than it looks, because drawing is what empties a video's frame queue: the
+     * queue fills, the decode thread jams against it, and ffmpeg blocks behind that. With
+     * one process serving both the picture and the sound, a blocked ffmpeg is silence as
+     * well as a frozen picture — which is how opening the escape menu came to stop the
+     * music.</p>
+     *
+     * <p>Kept next to {@link #acceptsWindows} and derived from it, so the two answers
+     * cannot drift: anything that starts drawing the stack on a new screen automatically
+     * stops draining its queues behind its back, and the other way round.</p>
+     */
+    private static boolean stackIsDrawn() {
+        Screen current = Screens.current();
+        return current == null || acceptsWindows(current);
+    }
+
+    /**
      * The top-most visible window matching {@code filter}, or {@code null}.
      *
      * <p>The filter is the point: "the window in front" is rarely the right target on
@@ -653,6 +674,9 @@ public final class MediaWindowOverlay {
         // between two frames, which is the only moment a texture can be freed without
         // the risk of a draw command still pointing at it. See TextureBridge.release.
         TextureBridge.flushReleases();
+        // A new chat line or a scroll moves every message under a cursor that has not
+        // moved, so the hover memo cannot outlive a tick. See ChatHitTest.
+        ChatHitTest.invalidate();
 
         MediaPlayerContext ctx = getContext();
         if (ctx == null) return;
@@ -660,12 +684,22 @@ public final class MediaWindowOverlay {
         saveWindowState(ctx);
 
         if (!ctx.getVideoManager().isEmpty()) {
+            // Asked once for the whole stack: it is a property of the open screen, not
+            // of any one window.
+            boolean drawn = stackIsDrawn();
             for (VideoWindow window : ctx.getVideoManager().getWindows()) {
-                if (!window.isVisible()) {
+                if (!drawn || !window.isVisible()) {
                     // Nothing is drawing this one, and drawing is what empties the frame
-                    // queue. Without this the decode thread jams against a full queue and
-                    // the track never reaches its end, so the loop below never advances a
-                    // hidden player to its next video. See VideoPlayer.discardDueFrames.
+                    // queue. Without this the decode thread jams against a full queue,
+                    // ffmpeg blocks behind it, and — since one process now carries the
+                    // sound too — the track goes silent as well as still. It is also what
+                    // lets an undrawn player reach the end of its track at all, so the
+                    // loop below can advance it to the next one.
+                    //
+                    // Two ways to be undrawn, and both belong here: the window is hidden,
+                    // or the screen in front of it is one the stack is not drawn over —
+                    // the pause menu and the playlist screen being the ones people
+                    // actually sit on while listening. See VideoPlayer.discardDueFrames.
                     window.player().discardDueFrames();
                 }
                 if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {

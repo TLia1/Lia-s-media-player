@@ -60,6 +60,14 @@ public class ConfigStore {
     public static final StringOption BLOCKED_SENDERS;
     /** Whether an outdated yt-dlp is replaced at launch instead of merely reported. */
     public static final BooleanOption AUTO_UPDATE_TOOLS;
+    /**
+     * Whether ffmpeg is asked to decode video on the GPU — see
+     * {@code FFmpegCli.addHardwareDecoding}. On because decoding is the largest single
+     * cost of playing a video and {@code -hwaccel auto} falls back to software on its
+     * own when there is nothing to use; off is the first thing to try when a video plays
+     * black or the decoder crashes on a particular driver.
+     */
+    public static final BooleanOption HARDWARE_DECODING;
 
     public static final Integer[] RESOLUTION_HEIGHTS = {144, 240, 360, 480, 720};
     public static final Integer[] RESOLUTION_WIDTHS = {256, 426, 640, 854, 1280};
@@ -130,9 +138,19 @@ public class ConfigStore {
         MAX_AUDIO_WINDOWS = slider("max_audio_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
         MAX_GIF_FRAMES = slider("max_gif_frames", 256, 10, 1000);
         MAX_IMAGE_CACHE_ENTRIES = slider("max_image_cache_entries", 30, 5, 100).withWidth(OptionWidth.HALF);
-        FRAME_QUEUE_CAPACITY = slider("frame_queue_capacity", 64, 16, 256)
+        // The ceiling on the frame pool, not its starting size — VideoPlayer allocates
+        // buffers as it actually needs them. One buffer is width*height*4 bytes of
+        // off-heap memory (1.5 MiB at 480p, 3.5 MiB at 720p), so the old default of 64
+        // reserved ~106 MiB per player before a single frame was decoded, and up to a
+        // gigabyte across four 720p windows. 24 frames is still 0.8 s of cushion at
+        // 30 fps, and the real network buffer is ffmpeg's, not this one.
+        FRAME_QUEUE_CAPACITY = slider("frame_queue_capacity", 24, 8, 128)
                 .withWarning(key("frame_queue_capacity") + ".warning");
-        MAX_IMAGE_CACHE_MEGABYTES = slider("max_image_cache_mb", 256, 64, 1024).withWidth(OptionWidth.HALF);
+        // This budget is VRAM, not heap: every cached preview is one texture per frame,
+        // held on a GPU that is already drawing the game. A quarter of a gigabyte of it
+        // is a lot to take by default from a machine with two, and the setting is right
+        // there for anyone who would rather spend it.
+        MAX_IMAGE_CACHE_MEGABYTES = slider("max_image_cache_mb", 96, 32, 1024).withWidth(OptionWidth.HALF);
         YT_DLP_TIMEOUT_SECONDS = slider("yt_dlp_timeout", 25, 5, 60);
         THEME = choice("theme", ThemeName.DARK);
         DEFAULT_WINDOW_POSITION = choice("default_window_position", WindowPosition.CENTER);
@@ -141,6 +159,7 @@ public class ConfigStore {
         ALLOWED_DOMAINS = text("allowed_domains");
         BLOCKED_SENDERS = text("blocked_senders");
         AUTO_UPDATE_TOOLS = toggle("auto_update_tools", true);
+        HARDWARE_DECODING = toggle("hardware_decoding", true);
     }
 
     public ConfigStore() {
@@ -160,6 +179,7 @@ public class ConfigStore {
         register(ALLOWED_DOMAINS);
         register(BLOCKED_SENDERS);
         register(AUTO_UPDATE_TOOLS);
+        register(HARDWARE_DECODING);
     }
 
     public synchronized void register(ConfigOption<?> option) {

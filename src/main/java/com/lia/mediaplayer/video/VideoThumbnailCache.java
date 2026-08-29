@@ -25,6 +25,11 @@ import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -56,6 +61,49 @@ public final class VideoThumbnailCache {
     private static final int MAX_ENTRIES = 64;
     private static final AtomicInteger TEXTURE_ID = new AtomicInteger();
 
+    /**
+     * How many thumbnails may be extracted with ffmpeg at the same time, across every
+     * panel and screen in the game.
+     *
+     * <p>Two, because the work behind one is not one process but up to three — a yt-dlp
+     * resolve for a page link, an {@code ffprobe}, and an {@code ffmpeg} that decodes to
+     * a single frame. Nothing bounded them: a queue panel draws every visible row at
+     * once and each row asks for its picture, so opening a playlist of direct links used
+     * to fire a dozen of those at the same instant, on a machine already running
+     * Minecraft. The cache is what makes that a one-off cost, and this is what stops the
+     * one-off cost landing all at once.</p>
+     */
+    private static final int MAX_CONCURRENT_EXTRACTIONS = 2;
+
+    /**
+     * The threads ffmpeg extractions run on.
+     *
+     * <p>Deliberately <em>not</em> {@link Util#ioPool()}: that pool is vanilla's, shared
+     * with chunk and texture loading, and an extraction holds its thread for as long as
+     * ffprobe and ffmpeg take (seconds, on a slow link). Two threads of our own that
+     * retire when idle keep that off vanilla's back and make the work legible under its
+     * own name in a profiler.</p>
+     *
+     * <p>Static rather than per-instance: the bound has to mean "two at a time in the
+     * game", not "two per cache".</p>
+     */
+    private static final ExecutorService EXTRACTOR = newExtractorPool();
+
+    private static ExecutorService newExtractorPool() {
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(
+                MAX_CONCURRENT_EXTRACTIONS, MAX_CONCURRENT_EXTRACTIONS,
+                30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "liasmediaplayer-thumbnail");
+                    thread.setDaemon(true);
+                    return thread;
+                });
+        // Nothing plays for most of a session; the threads should not outlive the burst
+        // that needed them.
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
+
     private final MediaCache<Thumb> cache = new MediaCache<>(() -> MAX_ENTRIES, Thumb::release);
 
     /**
@@ -78,8 +126,13 @@ public final class VideoThumbnailCache {
 
     private void startLoading(String url, Thumb thumb) {
         thumb.state = State.LOADING;
+        // A YouTube thumbnail is one small HTTP GET and belongs on the shared IO pool
+        // with the other downloads; everything else spawns ffmpeg and goes through the
+        // bounded extractor instead. Deciding here rather than inside build() is what
+        // keeps a picture that needs no process from queueing behind two that do.
+        Executor executor = YouTubeSource.isYouTube(url) ? Util.ioPool() : EXTRACTOR;
         CompletableFuture
-                .supplyAsync(() -> build(url), Util.ioPool())
+                .supplyAsync(() -> build(url), executor)
                 .whenCompleteAsync((image, error) -> onComplete(url, thumb, image, error),
                         Minecraft.getInstance());
     }

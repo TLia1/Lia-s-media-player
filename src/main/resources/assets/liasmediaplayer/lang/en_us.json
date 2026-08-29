@@ -189,6 +189,8 @@
   "gui.liasmediaplayer.toast.update_failed": "Could not update the media tools",
   "config.liasmediaplayer.auto_update_tools": "Update yt-dlp automatically",
   "config.liasmediaplayer.auto_update_tools.description": "Replaces yt-dlp at launch when the installed one is more than 30 days old. YouTube breaks older versions regularly.",
+  "config.liasmediaplayer.hardware_decoding": "Hardware video decoding",
+  "config.liasmediaplayer.hardware_decoding.description": "Lets the GPU decode video instead of the CPU, which is the largest single cost of playing one. Falls back to the CPU on its own when no GPU decoder is available. Turn off if a video plays black or the game crashes while decoding.",
   "key.liasmediaplayer.controls": "Open the media controls",
   "gui.liasmediaplayer.controls.title": "Media controls",
   "gui.liasmediaplayer.controls.hint": "Drag, click and use the shortcuts — Esc closes",

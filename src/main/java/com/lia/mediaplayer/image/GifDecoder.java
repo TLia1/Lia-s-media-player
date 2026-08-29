@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.gui.TextureBridge;
 import com.mojang.blaze3d.platform.NativeImage;
 import org.w3c.dom.Node;
 
@@ -241,12 +242,22 @@ public final class GifDecoder {
 
     /**
      * Converts an ARGB BufferedImage into Minecraft's ABGR NativeImage.
+     *
+     * <p>The bulk path in {@link TextureBridge#writeArgb} does this in one flat pass over
+     * the pixel block, which is what keeps a long GIF's decode from being dominated by
+     * per-pixel call overhead. The loop below is the fallback for the one case that path
+     * cannot serve — a legacy version where the pixel block's address could not be
+     * reached — and is left intact rather than removed so that case still produces a
+     * picture instead of a blank one.</p>
      */
     public static NativeImage toNativeImage(BufferedImage source) {
         int width = source.getWidth();
         int height = source.getHeight();
         int[] argb = source.getRGB(0, 0, width, height, null, 0, width);
         NativeImage image = new NativeImage(NativeImage.Format.RGBA, width, height, false);
+        if (TextureBridge.writeArgb(image, argb)) {
+            return image;
+        }
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int pixel = argb[y * width + x];

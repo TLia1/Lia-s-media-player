@@ -34,7 +34,51 @@ import org.jetbrains.annotations.Nullable;
  * overlay in the first place is {@link ChatOverlay}'s job, not this one's.</p>
  */
 final class ChatHitTest {
+
+    // --- The per-tick memo (see hoveredStyleCached) --------------------------
+    private static double cachedX = Double.NaN;
+    private static double cachedY = Double.NaN;
+    @Nullable
+    private static Style cachedStyle;
+    private static boolean cacheValid;
+
     private ChatHitTest() {
+    }
+
+    /**
+     * {@link #hoveredStyle} for callers that ask once a frame with a cursor that mostly
+     * is not moving.
+     *
+     * <p>From 1.21.11 the hit test is no longer a lookup: chat is drawn by replaying it,
+     * and asking what is under the cursor means replaying it a second time into a
+     * collector. The hover preview asks on every frame the chat screen is open — a
+     * hundred and more times a second, for an answer that can only change when the
+     * cursor moves or the chat does. This remembers it for both.</p>
+     *
+     * <p>Invalidated by {@link #invalidate()} once a client tick, which is the coarsest
+     * rate at which the chat itself can change, and by the cursor moving at all. The
+     * click path deliberately does not come through here: a click is rare, and it should
+     * read the screen as it is rather than as it was up to 50 ms ago.</p>
+     */
+    @Nullable
+    static Style hoveredStyleCached(double mouseX, double mouseY) {
+        if (cacheValid && mouseX == cachedX && mouseY == cachedY) {
+            return cachedStyle;
+        }
+        cachedStyle = hoveredStyle(mouseX, mouseY);
+        cachedX = mouseX;
+        cachedY = mouseY;
+        cacheValid = true;
+        return cachedStyle;
+    }
+
+    /**
+     * Drops the memo. Called once a client tick, because a new message or a scroll moves
+     * every line under the cursor without the cursor having moved.
+     */
+    static void invalidate() {
+        cacheValid = false;
+        cachedStyle = null;
     }
 
     /**

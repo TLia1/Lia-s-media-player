@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -172,6 +173,42 @@ public final class TextureBridge {
         //?} else {
         /*return image.getPointer();
         *///?}
+    }
+
+    /**
+     * Writes a whole {@code TYPE_INT_ARGB} pixel array into {@code image}'s native pixel
+     * block in one pass.
+     *
+     * <p>This exists because the obvious way to fill a {@link NativeImage} — a nested
+     * {@code x}/{@code y} loop calling {@code setPixel} — costs a bounds-checked
+     * multiply and a method call for every pixel, and the mod does it for every frame of
+     * every animated GIF. A 500x500 GIF at the default frame limit is sixty-four million
+     * of those. A flat loop writing through the pixel block's own address is the same
+     * work with none of the overhead, and it is a shape the JIT can vectorise.</p>
+     *
+     * <p>The channel shuffle is unconditional, unlike the per-pixel calls it replaces:
+     * {@code Format.RGBA} lays bytes out as R,G,B,A, which read back as {@code 0xAABBGGRR}
+     * on a little-endian machine, so a bulk write always produces ABGR whatever version
+     * of {@code setPixel} would have been used. (Minecraft has no big-endian target;
+     * {@code NativeImage} itself assumes the same thing.)</p>
+     *
+     * @return whether the write happened. {@code false} only on the legacy path when the
+     *         reflection on {@code NativeImage.pixels} failed, and the caller should
+     *         then fall back to per-pixel writes rather than ship a blank image.
+     */
+    public static boolean writeArgb(NativeImage image, int[] argb) {
+        long destination = pixelAddress(image);
+        if (destination == 0L) {
+            return false;
+        }
+        IntBuffer pixels = MemoryUtil.memIntBuffer(destination, argb.length);
+        for (int i = 0; i < argb.length; i++) {
+            int pixel = argb[i];
+            pixels.put(i, (pixel & 0xFF00FF00)
+                    | ((pixel & 0x00FF0000) >>> 16)
+                    | ((pixel & 0x000000FF) << 16));
+        }
+        return true;
     }
 
     /**
