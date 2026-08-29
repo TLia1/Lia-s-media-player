@@ -24,11 +24,13 @@ import net.minecraft.client.gui.screens.Screen;
  *       field is <em>empty</em>. None of them does anything to an empty text field, and
  *       an empty field is exactly the state "not typing yet" — so transport and seeking,
  *       the things reached most often, stay one keystroke away.</li>
- *   <li><strong>{@code Ctrl} plus a letter</strong>, always. The chat field binds
- *       {@code Ctrl+A/C/V/X} and nothing else, so the letters below are free whether or
- *       not a message is half-written. {@link Keys#controlDown()} is what decides, not
- *       the event's modifier bits, so this is {@code Cmd} on macOS like every other
- *       control-key check in the mod.</li>
+ *   <li><strong>{@code Ctrl} plus a letter, or {@code Ctrl} plus an arrow</strong>, always.
+ *       The chat field binds {@code Ctrl+A/C/V/X} and nothing else, so the keys below are
+ *       free whether or not a message is half-written. {@link Keys#controlDown()} is what
+ *       decides, not the event's modifier bits, so this is {@code Cmd} on macOS like every
+ *       other control-key check in the mod. Volume lives here rather than on the bare
+ *       arrow: an empty chat field is also the state vanilla uses bare Up/Down to recall
+ *       chat history, and the mod must not shadow that.</li>
  * </ul>
  *
  * <p>{@code Escape} is deliberately left alone: it closes the chat, which is what
@@ -85,6 +87,8 @@ final class WindowShortcuts {
                 case InputConstants.KEY_N -> Action.NEXT;
                 case InputConstants.KEY_P -> Action.PREVIOUS;
                 case InputConstants.KEY_F -> Action.THEATER;
+                case InputConstants.KEY_UP -> Action.VOLUME_UP;
+                case InputConstants.KEY_DOWN -> Action.VOLUME_DOWN;
                 default -> Action.NONE;
             };
         }
@@ -95,8 +99,6 @@ final class WindowShortcuts {
             case InputConstants.KEY_SPACE -> Action.PLAY_PAUSE;
             case InputConstants.KEY_LEFT -> shift ? Action.SEEK_BACK_FAR : Action.SEEK_BACK;
             case InputConstants.KEY_RIGHT -> shift ? Action.SEEK_FORWARD_FAR : Action.SEEK_FORWARD;
-            case InputConstants.KEY_UP -> Action.VOLUME_UP;
-            case InputConstants.KEY_DOWN -> Action.VOLUME_DOWN;
             default -> Action.NONE;
         };
     }

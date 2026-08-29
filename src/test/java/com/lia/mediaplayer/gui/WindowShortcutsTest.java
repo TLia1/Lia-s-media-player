@@ -47,11 +47,29 @@ class WindowShortcutsTest {
     }
 
     @Test
-    void verticalArrowsMoveTheVolume() {
+    void controlVerticalArrowsMoveTheVolume() {
         assertEquals(Action.VOLUME_UP,
-                WindowShortcuts.actionFor(InputConstants.KEY_UP, false, false, false));
+                WindowShortcuts.actionFor(InputConstants.KEY_UP, true, false, false));
         assertEquals(Action.VOLUME_DOWN,
+                WindowShortcuts.actionFor(InputConstants.KEY_DOWN, true, false, false));
+    }
+
+    @Test
+    void bareVerticalArrowsAreLeftToChatHistoryRecall() {
+        // Vanilla uses bare Up/Down on an empty field to recall chat history; the mod
+        // must not shadow that, so volume moved behind Ctrl.
+        assertEquals(Action.NONE,
+                WindowShortcuts.actionFor(InputConstants.KEY_UP, false, false, false));
+        assertEquals(Action.NONE,
                 WindowShortcuts.actionFor(InputConstants.KEY_DOWN, false, false, false));
+    }
+
+    @Test
+    void controlVerticalArrowsKeepWorkingMidMessage() {
+        assertEquals(Action.VOLUME_UP,
+                WindowShortcuts.actionFor(InputConstants.KEY_UP, true, false, true));
+        assertEquals(Action.VOLUME_DOWN,
+                WindowShortcuts.actionFor(InputConstants.KEY_DOWN, true, false, true));
     }
 
     @Test
