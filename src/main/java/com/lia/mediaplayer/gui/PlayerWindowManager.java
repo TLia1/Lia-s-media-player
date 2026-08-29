@@ -1,5 +1,8 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.MediaHandle;
+import com.lia.mediaplayer.api.MediaRequest;
+import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.history.HistoryStore;
 
 import org.jetbrains.annotations.Nullable;
@@ -64,13 +67,65 @@ public abstract class PlayerWindowManager<W extends QueuedMediaWindow<?>> {
      * Use this when the user wants a separate player rather than queueing.
      */
     public W open(String url) {
+        return open(url, null);
+    }
+
+    /**
+     * {@link #open(String)}, with a {@code MediaRequest}'s window options applied before
+     * the window has been laid out once — which is the only moment they can be applied
+     * without the placement being seen changing.
+     */
+    private W open(String url, @Nullable MediaRequest request) {
         evictIfFull();
         W window = create(url);
-        HistoryStore.record(url, window.playbackKind());
+        if (request != null) {
+            window.applyRequest(request);
+            window.requestStart(request.startMicros(), request.isAutoplay());
+        }
+        HistoryStore.record(url, window.mediaKind());
         windows.add(window);
         window.startPlayback();
         window.setVisible(true);
         return window;
+    }
+
+    /**
+     * Plays a whole {@link MediaRequest} and hands back a handle on what is playing it.
+     *
+     * <p>The window options a request carries — placement, sizing, chrome, geometry
+     * persistence — describe a <em>window</em>, so they only apply when this opens one.
+     * A request that queues into the front-most player (the default, and what a chat
+     * click does) leaves that window exactly as the user arranged it; ask for
+     * {@code newWindow(true)} when the geometry is the point.</p>
+     */
+    public MediaHandle play(MediaRequest request) {
+        List<String> urls = request.urls();
+        W target = request.isNewWindow() ? null : frontMost();
+        if (target != null) {
+            for (String url : urls) {
+                target.enqueue(url);
+            }
+            target.setVisible(true);
+            target.bringToFront();
+            return target.handle();
+        }
+        // Shuffled before the first one is opened, not only after — the same thing
+        // playAll does. Turning the flag on afterwards would reorder what is *queued*
+        // and leave the first track as whatever happened to be written first, so
+        // "shuffle this playlist" would play the same opening track every time.
+        List<String> order = urls;
+        if (request.isShuffle() && urls.size() > 1) {
+            order = new ArrayList<>(urls);
+            Collections.shuffle(order);
+        }
+        W window = open(order.getFirst(), request);
+        if (order.size() > 1) {
+            window.enqueueAll(order.subList(1, order.size()));
+        }
+        window.setShuffle(request.isShuffle());
+        window.setRepeat(request.repeat());
+        window.bringToFront();
+        return window.handle();
     }
 
     /**
@@ -209,24 +264,39 @@ public abstract class PlayerWindowManager<W extends QueuedMediaWindow<?>> {
     // ------------------------------------------------------------------
 
     public void togglePauseFrontMost() {
-        W window = frontMost();
+        W window = unlockedFrontMost();
         if (window != null) {
             window.player().togglePause();
         }
     }
 
     public void nextFrontMost() {
-        W window = frontMost();
+        W window = unlockedFrontMost();
         if (window != null) {
             window.advance();
         }
     }
 
     public void seekFrontMost(double fraction) {
-        W window = frontMost();
+        W window = unlockedFrontMost();
         if (window != null) {
             window.player().seekToFraction(fraction);
         }
+    }
+
+    /**
+     * The front-most window, unless it is held off the user's own transport by
+     * {@code api.sync.SyncControl.setLocked}.
+     *
+     * <p>These three are the <em>key binding</em> path — what a global shortcut does with
+     * no screen open — so they are the user's hands and the lock applies. The ID-addressed
+     * methods further down are the API's, and deliberately are not gated: an addon that
+     * locked a window still has to be able to drive it.</p>
+     */
+    @Nullable
+    private W unlockedFrontMost() {
+        W window = frontMost();
+        return window != null && window.isLocked() ? null : window;
     }
 
     // ------------------------------------------------------------------
@@ -244,6 +314,18 @@ public abstract class PlayerWindowManager<W extends QueuedMediaWindow<?>> {
     public long playAllPublic(List<String> urls, boolean shuffle) {
         W window = playAll(urls, shuffle);
         return window != null ? window.getId() : -1;
+    }
+
+    /**
+     * {@link #playAll(List, boolean)} for the API's handle-returning entry points.
+     * Separate from {@link #playAllPublic} because the window type is package-private:
+     * outside {@code gui} nothing can name it, so nothing outside can turn one into a
+     * handle either.
+     */
+    @Nullable
+    public MediaHandle playAllHandle(List<String> urls, boolean shuffle) {
+        W window = playAll(urls, shuffle);
+        return window == null ? null : window.handle();
     }
 
     // ------------------------------------------------------------------

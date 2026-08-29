@@ -1,11 +1,13 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Rewrites incoming chat so video, stream and YouTube links (including a YouTube
@@ -27,6 +29,11 @@ public final class VideoChatHandler {
         public boolean matches(String url) {
             MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isVideo(url) && MediaFilters.allowsUrl(url);
+        }
+
+        @Override
+        public MediaKind kind() {
+            return MediaKind.VIDEO;
         }
 
         @Override
@@ -58,7 +65,15 @@ public final class VideoChatHandler {
      * loader's chat event calls this and puts the result back.
      */
     public static Component rewrite(Component message) {
-        return ChatLinkRewriter.rewrite(message, VIDEO_LINKS);
+        return rewrite(message, null);
+    }
+
+    /**
+     * The same, told who sent the message — which is what a registered
+     * {@code MediaInterceptor} is asked about each link with.
+     */
+    public static Component rewrite(Component message, @Nullable String sender) {
+        return ChatLinkRewriter.rewrite(message, VIDEO_LINKS, sender);
     }
 
     /** Drops every open video window and the thumbnail/title caches when leaving a world. */

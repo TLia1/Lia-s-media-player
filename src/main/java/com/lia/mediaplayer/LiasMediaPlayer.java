@@ -3,6 +3,8 @@ package com.lia.mediaplayer;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.MediaSourceProvider;
 import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
+import com.lia.mediaplayer.api.event.PlaybackEvents;
 import com.lia.mediaplayer.tools.MediaBinaries;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
@@ -93,5 +95,10 @@ public final class LiasMediaPlayer {
         registrationEvent.getRegistered().forEach(source -> context.getMediaSources().register(source));
         LOGGER.info("Registered {} external media source(s) via API",
                 registrationEvent.getRegistered().size());
+
+        // The moment addons used to guess at by polling getInstanceOrNull(): the context
+        // is up, the config is loaded and every addon-supplied source is registered, so
+        // anything on the API is now safe to call.
+        PlaybackEvents.post(PlaybackEvent.lifecycle(PlaybackEvent.Type.LIFECYCLE_READY));
     }
 }

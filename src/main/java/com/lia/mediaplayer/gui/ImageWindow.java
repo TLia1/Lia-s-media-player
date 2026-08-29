@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 
 import net.minecraft.client.gui.Font;
@@ -32,6 +33,11 @@ final class ImageWindow extends MediaWindow {
     @Override
     protected String mediaUrl() {
         return url;
+    }
+
+    @Override
+    protected MediaKind mediaKind() {
+        return MediaKind.IMAGE;
     }
 
     @Override

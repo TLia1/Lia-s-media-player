@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
 import com.lia.mediaplayer.history.HistoryEntry;
 import com.lia.mediaplayer.history.HistoryStore;
 import com.lia.mediaplayer.media.MediaTitleCache;
@@ -165,6 +166,9 @@ public final class HistoryScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"),
                         b -> onClose())
                 .bounds(width / 2 - 80, height - 26, 160, 20).build());
+        // The same addon buttons the playlist screen shows: both are "the library", and a
+        // tab that is only reachable from one of them would be a puzzle.
+        ScreenTabs.addTo(this, width / 2 + 84, height - 26, this::addRenderableWidget);
     }
 
     private Component favoritesLabel() {
@@ -447,7 +451,8 @@ public final class HistoryScreen extends Screen {
             } else {
                 // A click on the row itself plays it, exactly as clicking the link in
                 // chat would have — same routing, same modifiers.
-                MediaWindowOverlay.play(entry.url(), Keys.altDown(), Keys.shiftDown());
+                MediaWindowOverlay.play(entry.url(), Keys.altDown(), Keys.shiftDown(),
+                        PlayOrigin.HISTORY);
                 onClose();
             }
             return true;

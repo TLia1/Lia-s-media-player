@@ -139,4 +139,71 @@ class WindowButtonsTest {
         WindowButtons buttons = row(true);
         assertEquals(buttons.favX(), buttons.leftEdge());
     }
+
+    // ------------------------------------------------------------------
+    // The addon buttons (api.window.WindowAction)
+    // ------------------------------------------------------------------
+
+    @Test
+    void anAddonButtonSitsLeftOfTheHeart() {
+        WindowButtons buttons = WindowButtons.layout(200, 10, false, true, 1);
+
+        assertEquals(1, buttons.actionCount());
+        assertTrue(buttons.actionX(0) < buttons.favX(),
+                "the mod's own buttons stay where the user already expects them");
+        assertEquals(buttons.favX() - (SIZE + 2), buttons.actionX(0));
+    }
+
+    @Test
+    void severalAddonButtonsExtendLeftwardsInOrder() {
+        WindowButtons buttons = WindowButtons.layout(200, 10, false, true, 3);
+
+        assertEquals(3, buttons.actionCount());
+        assertTrue(buttons.actionX(0) > buttons.actionX(1));
+        assertTrue(buttons.actionX(1) > buttons.actionX(2));
+        int step = buttons.actionX(0) - buttons.actionX(1);
+        assertEquals(step, buttons.actionX(1) - buttons.actionX(2));
+        assertEquals(step, buttons.favX() - buttons.actionX(0), "evenly, like the rest of the row");
+    }
+
+    @Test
+    void theTitleStopsAtTheLeftmostAddonButton() {
+        WindowButtons plain = WindowButtons.layout(200, 10, false);
+        WindowButtons withActions = WindowButtons.layout(200, 10, false, true, 2);
+
+        assertEquals(plain.favX(), plain.leftEdge());
+        assertEquals(withActions.actionX(1), withActions.leftEdge(),
+                "a title drawn over an addon button is the bug this figure prevents");
+    }
+
+    @Test
+    void eachAddonButtonAnswersForItsOwnRectangleAndNobodyElses() {
+        WindowButtons buttons = WindowButtons.layout(200, 10, false, true, 2);
+
+        assertEquals(0, buttons.actionAt(buttons.actionX(0) + 1, 11));
+        assertEquals(1, buttons.actionAt(buttons.actionX(1) + 1, 11));
+        assertEquals(-1, buttons.actionAt(buttons.favX() + 1, 11),
+                "the heart is not an addon button");
+        assertEquals(-1, buttons.actionAt(buttons.actionX(0) + 1, 100), "wrong row");
+        assertFalse(buttons.overFavorite(buttons.actionX(0) + 1, 11));
+    }
+
+    @Test
+    void aRowWithNoAddonButtonsIsTheRowItAlwaysWas() {
+        WindowButtons plain = WindowButtons.layout(200, 10, true);
+        WindowButtons explicitlyNone = WindowButtons.layout(200, 10, true, true, 0);
+
+        assertEquals(0, plain.actionCount());
+        assertEquals(plain.favX(), explicitlyNone.favX());
+        assertEquals(-1, plain.actionAt(plain.favX(), 11));
+    }
+
+    @Test
+    void everyAddonButtonIsCountedInTheRowsWidth() {
+        int none = WindowButtons.width(false, true, 0);
+        int three = WindowButtons.width(false, true, 3);
+
+        assertEquals(none, WindowButtons.width(false), "the old signature still means no actions");
+        assertEquals(none + 3 * (SIZE + 2), three);
+    }
 }

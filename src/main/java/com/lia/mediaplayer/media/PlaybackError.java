@@ -56,6 +56,16 @@ public final class PlaybackError {
             this.suggestsToolUpdate = suggestsToolUpdate;
         }
 
+        /**
+         * The stable id this cause is known by — {@code "extractor_outdated"},
+         * {@code "geo_blocked"} and the rest. It is what the message and hint keys are
+         * built from, and what {@code api.diag.MediaLogEntry} carries so an addon can
+         * match on the cause rather than on the wording.
+         */
+        public String id() {
+            return id;
+        }
+
         public String messageKey() {
             return "error.liasmediaplayer.cause." + id;
         }

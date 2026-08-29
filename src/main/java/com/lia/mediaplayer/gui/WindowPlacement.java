@@ -1,6 +1,10 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.window.Placement;
+import com.lia.mediaplayer.api.window.Sizing;
+
 import net.minecraft.util.Mth;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Where a media window is and how big it is — the arithmetic, and the state the
@@ -31,6 +35,16 @@ final class WindowPlacement {
     // auto-anchoring and uses these values instead.
     private boolean userPlaced;
     private int userX, userY;
+    /**
+     * Whether the <em>player</em> moved or resized this window, as opposed to it having
+     * been positioned by a restored state or by the default corner.
+     *
+     * <p>{@link #userPlaced} cannot answer that — it is on for all three — and the
+     * difference is what decides whether an API-supplied {@link Placement} keeps being
+     * re-resolved: a placement that survives a resolution change must not also survive
+     * the user dragging the window somewhere else.</p>
+     */
+    private boolean userMoved;
     private boolean userSized;
     private double userScale;
     /** Effective scale used by the last layout. */
@@ -49,6 +63,15 @@ final class WindowPlacement {
      * a scale; {@code 0} when there is nothing pending. See {@link #applyPendingWidth}.
      */
     private int pendingWidth;
+
+    // What the API asked for, if anything. Both are re-resolved on every layout pass
+    // rather than turned into fixed numbers once, which is what makes
+    // Placement.relative and Sizing.fractionOfScreen survive a resolution or GUI-scale
+    // change instead of leaving the window where the old screen size put it.
+    @Nullable
+    private Placement requestedPlacement;
+    @Nullable
+    private Sizing requestedSizing;
 
     /**
      * The sizes one layout pass produced.
@@ -84,6 +107,12 @@ final class WindowPlacement {
         srcW = Math.max(1, srcW);
         srcH = Math.max(1, srcH);
         double scale = userSized ? userScale : autoScale;
+        if (!userSized && requestedSizing != null) {
+            int wanted = requestedSizing.resolveContentWidth(srcW, srcH, screenW, screenH);
+            if (wanted > 0) {
+                scale = wanted / (double) srcW;
+            }
+        }
 
         int chromeH = titleBarH + controlBarH + MediaWindow.PADDING * 2;
         int capW = Math.max(minContentW, maxContentW);
@@ -145,6 +174,8 @@ final class WindowPlacement {
      * Freezes the current auto-anchored position so move/resize don't make it jump.
      */
     void pin(int boxX, int boxY) {
+        // Whatever the API asked for, the hand on the mouse wins from here on.
+        userMoved = true;
         if (!userPlaced) {
             userPlaced = true;
             userX = boxX;
@@ -158,6 +189,71 @@ final class WindowPlacement {
      */
     boolean needsInitialPosition() {
         return !userPlaced && !initialPositionApplied;
+    }
+
+    // ------------------------------------------------------------------
+    // What the API asked for
+    // ------------------------------------------------------------------
+
+    /**
+     * Records the {@link Placement} and {@link Sizing} a {@code MediaRequest} carried.
+     * Called once, before the window's first layout.
+     */
+    void request(@Nullable Placement placement, @Nullable Sizing sizing) {
+        if (placement != null && !placement.isRemembered()) {
+            requestedPlacement = placement;
+            // The configured default corner and the remembered spot are both answers to
+            // "where should this go?", and the caller has just given one.
+            initialPositionApplied = true;
+        }
+        if (sizing != null) {
+            requestedSizing = sizing;
+            if (sizing.isTheater() && !theater) {
+                toggleTheater();
+            } else {
+                // A restored width would otherwise be applied on top of the requested
+                // size the moment the source resolution arrived.
+                pendingWidth = 0;
+            }
+        }
+    }
+
+    /**
+     * Whether the position should be taken from the requested {@link Placement} this
+     * frame — true until the player drags the window somewhere of their own.
+     */
+    boolean hasRequestedPosition() {
+        return requestedPlacement != null && !userMoved;
+    }
+
+    /**
+     * The requested left edge, clamped on screen. Same clamp as {@link #clampedX}: an
+     * addon's coordinate is no more allowed to put a window out of reach than a drag is.
+     */
+    int requestedX(int screenW, int boxW) {
+        return Mth.clamp(requestedPlacement.resolveX(screenW, boxW), 2, Math.max(2, screenW - boxW - 2));
+    }
+
+    int requestedY(int screenH, int boxH) {
+        return Mth.clamp(requestedPlacement.resolveY(screenH, boxH), 2, Math.max(2, screenH - boxH - 2));
+    }
+
+    /** Replaces the requested placement, for {@code MediaWindowHandle.setPlacement}. */
+    void setRequestedPlacement(@Nullable Placement placement) {
+        requestedPlacement = placement == null || placement.isRemembered() ? null : placement;
+        userMoved = false;
+        userPlaced = requestedPlacement == null && userPlaced;
+        initialPositionApplied = true;
+    }
+
+    /** Replaces the requested sizing, for {@code MediaWindowHandle.setSizing}. */
+    void setRequestedSizing(@Nullable Sizing sizing) {
+        requestedSizing = sizing;
+        userSized = false;
+        pendingWidth = 0;
+        if (sizing != null && sizing.isTheater() != theater) {
+            toggleTheater();
+        }
     }
 
     /**
@@ -279,14 +375,14 @@ final class WindowPlacement {
      *                     exactly on top of each other
      */
     void restore(WindowStateStore.State state, boolean takePosition) {
-        if (state.placed() && takePosition) {
+        if (state.placed() && takePosition && requestedPlacement == null) {
             userPlaced = true;
             userX = state.x();
             userY = state.y();
             // The configured default position must not overwrite what was restored.
             initialPositionApplied = true;
         }
-        if (state.sized() && state.width() > 0) {
+        if (state.sized() && state.width() > 0 && requestedSizing == null) {
             pendingWidth = state.width();
         }
     }

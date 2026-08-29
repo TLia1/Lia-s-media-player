@@ -2,6 +2,7 @@ package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.media.PlaybackError;
 
@@ -57,7 +58,7 @@ final class AudioWindow extends QueuedMediaWindow<AudioPlayer> {
     }
 
     @Override
-    protected MediaKind playbackKind() {
+    protected MediaKind mediaKind() {
         return MediaKind.AUDIO;
     }
 
@@ -139,6 +140,9 @@ final class AudioWindow extends QueuedMediaWindow<AudioPlayer> {
 
     @Override
     protected int minContentWidth() {
+        if (!controlsEnabled()) {
+            return super.minContentWidth();
+        }
         Font font = Minecraft.getInstance().font;
         int buttons = 8; // play, prev, -10s, +10s, next, loop, shuffle, speaker
         if (!queue.isEmpty()) {
@@ -191,13 +195,16 @@ final class AudioWindow extends QueuedMediaWindow<AudioPlayer> {
         nextBtnX = fwdBtnX + BUTTON + 4;
 
         int cursor = nextBtnX + BUTTON + 4;
-        showQueueBtn = !queue.isEmpty();
+        showQueueBtn = !queue.isEmpty() && queuePanelAllowed();
         if (showQueueBtn) {
             queueBtnX = cursor;
             queueBtnY = playBtnY;
             cursor = queueBtnX + BUTTON + 4;
         } else {
             panel.closeIfEmpty();
+            if (!queuePanelAllowed()) {
+                panel.setOpen(false);
+            }
         }
         loopBtnX = cursor;
         shuffleBtnX = loopBtnX + BUTTON + 4;

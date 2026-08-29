@@ -1,30 +1,57 @@
 package com.lia.mediaplayer;
 
+import com.lia.mediaplayer.api.HistoryItem;
 import com.lia.mediaplayer.api.IMediaPlayerAPI;
 import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.MediaHandle;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaRequest;
 import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.api.audio.AudioOptions;
+import com.lia.mediaplayer.api.audio.MediaMixer;
 import com.lia.mediaplayer.api.config.ConfigOption;
+import com.lia.mediaplayer.api.diag.MediaPlayerStats;
+import com.lia.mediaplayer.api.policy.MediaInterceptors;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
+import com.lia.mediaplayer.api.render.MediaSurface;
+import com.lia.mediaplayer.api.render.SurfaceOptions;
+import com.lia.mediaplayer.api.sync.SyncControl;
+import com.lia.mediaplayer.api.tools.MediaInfo;
+import com.lia.mediaplayer.audio.HeadlessAudio;
 import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.gui.AudioPlayerManager;
 import com.lia.mediaplayer.gui.ImageWindowManager;
+import com.lia.mediaplayer.gui.MediaSyncControl;
+import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import com.lia.mediaplayer.gui.VideoPlayerManager;
 import com.lia.mediaplayer.gui.WindowStateStore;
+import com.lia.mediaplayer.history.HistoryEntry;
 import com.lia.mediaplayer.history.HistoryStore;
 import com.lia.mediaplayer.image.ImagePreviewCache;
+import com.lia.mediaplayer.media.AudioMixer;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.media.Volume;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
+import com.lia.mediaplayer.playlist.M3u;
+import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.MediaSources;
 import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
+import com.lia.mediaplayer.surface.SurfaceRegistry;
+import com.lia.mediaplayer.surface.SurfaceRenderer;
+import com.lia.mediaplayer.tools.FFmpegCli;
+import com.lia.mediaplayer.tools.MediaBinaries;
 import com.lia.mediaplayer.video.VideoThumbnailCache;
+import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class MediaPlayerContext implements IMediaPlayerAPI {
@@ -38,9 +65,17 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     private final WindowStateStore windowStateStore;
     private final HistoryStore historyStore;
     private final Volume volume;
+    private final AudioMixer mixer;
+    private final HeadlessAudio headlessAudio;
     private final ImagePreviewCache imagePreviewCache;
     private final VideoThumbnailCache thumbnailCache;
     private final MediaTitleCache titleCache;
+    private final SurfaceRegistry surfaceRegistry;
+    /**
+     * Watch-together, stateless — every call finds its window by id. One instance rather
+     * than a fresh one per {@code getSyncControl()} so an addon may hold it.
+     */
+    private final SyncControl syncControl = new MediaSyncControl();
 
     /**
      * The live context, on the understanding that the mod is up.
@@ -95,9 +130,12 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         this.windowStateStore = new WindowStateStore();
         this.historyStore = new HistoryStore();
         this.volume = new Volume();
+        this.mixer = new AudioMixer(volume);
+        this.headlessAudio = new HeadlessAudio(mixer);
         this.imagePreviewCache = new ImagePreviewCache();
         this.thumbnailCache = new VideoThumbnailCache();
         this.titleCache = new MediaTitleCache();
+        this.surfaceRegistry = new SurfaceRegistry();
     }
 
     public VideoPlayerManager getVideoManager() {
@@ -143,6 +181,30 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         return volume;
     }
 
+    /**
+     * The channel gains around {@link #getVolumeManager() the one master level}, and the
+     * factory for the per-sound gain every player multiplies in — see {@link AudioMixer}.
+     *
+     * <p>Covariant: this is also {@link IMediaPlayerAPI#getMixer()}, which promises the
+     * public {@link MediaMixer}. One method rather than two, because there is one mixer
+     * and the interface's view of it is a subset of this one's.</p>
+     */
+    @Override
+    public AudioMixer getMixer() {
+        return mixer;
+    }
+
+    /**
+     * The sounds addons are playing with no window — see {@link HeadlessAudio}.
+     *
+     * <p>Owned here for the reason the surfaces and the caches are: a lifecycle (emptied
+     * on disconnect) and a budget, which is what makes it a service rather than a static
+     * holder somebody would forget to empty.</p>
+     */
+    public HeadlessAudio getHeadlessAudio() {
+        return headlessAudio;
+    }
+
     // ====================================================================
     // Caches
     //
@@ -173,6 +235,17 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
      */
     public MediaTitleCache getTitleCache() {
         return titleCache;
+    }
+
+    /**
+     * The off-screen surfaces addons decode media into — see {@link SurfaceRegistry}.
+     *
+     * <p>Owned here for exactly the reason the three caches above are: it has a
+     * lifecycle (emptied on disconnect) and a budget, which is what makes it a service
+     * rather than a static holder somebody would forget to empty.</p>
+     */
+    public SurfaceRegistry getSurfaceRegistry() {
+        return surfaceRegistry;
     }
 
     // ====================================================================
@@ -217,20 +290,53 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     // Playback — Video
     // ====================================================================
 
+    /**
+     * The interceptor gate for the 2.0 {@code long}-id entry points — see
+     * {@code api.policy.MediaInterceptor}.
+     *
+     * <p>Answers the URL to play: the same one when nothing rewrote it, a different one
+     * when something did, and {@code null} when an interceptor said no — in which case
+     * the caller hands back {@code -1}, the same "nothing happened" these methods
+     * already use.</p>
+     *
+     * <p>These methods take a URL and give back an id, so <b>only the URL</b> of a
+     * rewritten request can be honoured here; a placement or a chrome an interceptor also
+     * set has nowhere to go and is not applied. That is the price of the 2.0 shape, and it
+     * is written down rather than half-applied — {@code play(MediaRequest)} is the entry
+     * point that honours everything.</p>
+     */
+    @Nullable
+    private static String gate(String url, @Nullable MediaKind kind, boolean newWindow) {
+        if (!MediaInterceptors.any() || !Urls.isHttp(url)) {
+            return url;
+        }
+        MediaRequest allowed = MediaInterceptors.beforePlay(
+                MediaRequest.of(url).as(kind).newWindow(newWindow), PlayOrigin.API);
+        return allowed == null ? null : allowed.url();
+    }
+
     @Override
     public long playVideo(String url) {
-        if (isYouTubePlaylist(url)) {
-            return playYouTubePlaylist(url, false);
+        String allowed = gate(url, MediaKind.VIDEO, false);
+        if (allowed == null) {
+            return -1;
         }
-        return videoManager.enqueuePublic(url);
+        if (isYouTubePlaylist(allowed)) {
+            return playYouTubePlaylist(allowed, false);
+        }
+        return videoManager.enqueuePublic(allowed);
     }
 
     @Override
     public long playVideoNewWindow(String url) {
-        if (isYouTubePlaylist(url)) {
-            return playYouTubePlaylist(url, false);
+        String allowed = gate(url, MediaKind.VIDEO, true);
+        if (allowed == null) {
+            return -1;
         }
-        return videoManager.openPublic(url);
+        if (isYouTubePlaylist(allowed)) {
+            return playYouTubePlaylist(allowed, false);
+        }
+        return videoManager.openPublic(allowed);
     }
 
     /**
@@ -267,18 +373,26 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     @Override
     public long playAudio(String url) {
-        if (isYouTubePlaylist(url)) {
-            return playYouTubePlaylist(url, true);
+        String allowed = gate(url, MediaKind.AUDIO, false);
+        if (allowed == null) {
+            return -1;
         }
-        return audioManager.enqueuePublic(url);
+        if (isYouTubePlaylist(allowed)) {
+            return playYouTubePlaylist(allowed, true);
+        }
+        return audioManager.enqueuePublic(allowed);
     }
 
     @Override
     public long playAudioNewWindow(String url) {
-        if (isYouTubePlaylist(url)) {
-            return playYouTubePlaylist(url, true);
+        String allowed = gate(url, MediaKind.AUDIO, true);
+        if (allowed == null) {
+            return -1;
         }
-        return audioManager.openPublic(url);
+        if (isYouTubePlaylist(allowed)) {
+            return playYouTubePlaylist(allowed, true);
+        }
+        return audioManager.openPublic(allowed);
     }
 
     @Override
@@ -292,7 +406,8 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
 
     @Override
     public long showImage(String url) {
-        return imageManager.showPublic(url);
+        String allowed = gate(url, MediaKind.IMAGE, true);
+        return allowed == null ? -1 : imageManager.showPublic(allowed);
     }
 
     // ====================================================================
@@ -395,6 +510,106 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     }
 
     // ====================================================================
+    // Playback — anything, with options
+    // ====================================================================
+
+    @Override
+    @Nullable
+    public MediaHandle play(MediaRequest request) {
+        return MediaWindowOverlay.play(request);
+    }
+
+    // ====================================================================
+    // Surfaces
+    // ====================================================================
+
+    @Override
+    public MediaSurface createImageSurface(String url) {
+        return surfaceRegistry.image(url);
+    }
+
+    @Override
+    public MediaSurface createImageSurface(String url, boolean keepPixels) {
+        return surfaceRegistry.image(url, keepPixels);
+    }
+
+    @Override
+    public MediaSurface createVideoSurface(String url, SurfaceOptions options) {
+        return surfaceRegistry.video(url, options);
+    }
+
+    @Override
+    public MediaSurface createThumbnailSurface(String url, double atSeconds) {
+        return surfaceRegistry.thumbnail(url, atSeconds);
+    }
+
+    @Override
+    public void drawSurface(GuiGraphics graphics, MediaSurface surface,
+                            int x, int y, int width, int height, boolean stretch) {
+        SurfaceRenderer.draw(graphics, surface, x, y, width, height, stretch);
+    }
+
+    // ====================================================================
+    // Headless audio and the mixer
+    // ====================================================================
+
+    @Override
+    @Nullable
+    public MediaHandle playHeadlessAudio(String url, AudioOptions options) {
+        return headlessAudio.play(url, options == null ? AudioOptions.defaults() : options);
+    }
+
+    // ====================================================================
+    // Watch-together
+    // ====================================================================
+
+    @Override
+    public SyncControl getSyncControl() {
+        return syncControl;
+    }
+
+    // ====================================================================
+    // Diagnostics
+    // ====================================================================
+
+    @Override
+    public MediaPlayerStats stats() {
+        return new MediaPlayerStats(
+                videoManager.getWindows().size(),
+                audioManager.getWindows().size(),
+                imageManager.getWindows().size(),
+                headlessAudio.size(),
+                surfaceRegistry.size(),
+                surfaceRegistry.decodingVideoCount(),
+                imagePreviewCache.estimatedBytes(),
+                imagePreviewCache.size(),
+                thumbnailCache.size(),
+                titleCache.size(),
+                MediaBinaries.isReady());
+    }
+
+    // ====================================================================
+    // Handles
+    // ====================================================================
+
+    @Override
+    @Nullable
+    public MediaHandle getHandle(long id) {
+        return MediaWindowOverlay.handleOf(id);
+    }
+
+    @Override
+    public List<MediaHandle> getHandles() {
+        return MediaWindowOverlay.handles();
+    }
+
+    @Override
+    @Nullable
+    public MediaHandle getFrontMost(MediaKind kind) {
+        return kind == null ? null : MediaWindowOverlay.frontMostHandle(kind);
+    }
+
+    // ====================================================================
     // Volume (thread-safe)
     // ====================================================================
 
@@ -425,14 +640,13 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
     @Override
     public List<PlaylistInfo> getPlaylists() {
         return playlistStore.all().stream()
-                .map(p -> new PlaylistInfo(p.name(), Collections.unmodifiableList(new ArrayList<>(p.urls()))))
+                .map(MediaPlayerContext::info)
                 .collect(Collectors.toList());
     }
 
     @Override
     public PlaylistInfo createPlaylist(String name) {
-        var p = playlistStore.create(name);
-        return new PlaylistInfo(p.name(), Collections.unmodifiableList(new ArrayList<>(p.urls())));
+        return info(playlistStore.create(name));
     }
 
     @Override
@@ -443,24 +657,248 @@ public class MediaPlayerContext implements IMediaPlayerAPI {
         if (!Urls.isHttp(url)) {
             return false;
         }
-        for (var p : playlistStore.all()) {
-            if (p.name().equals(playlistName)) {
-                p.add(url);
-                playlistStore.save();
-                return true;
-            }
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null) {
+            return false;
         }
-        return false;
+        playlist.add(url);
+        playlistStore.save();
+        return true;
     }
 
     @Override
     public boolean deletePlaylist(String playlistName) {
-        for (var p : playlistStore.all()) {
-            if (p.name().equals(playlistName)) {
-                playlistStore.delete(p);
-                return true;
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null) {
+            return false;
+        }
+        playlistStore.delete(playlist);
+        return true;
+    }
+
+    @Override
+    @Nullable
+    public PlaylistInfo getPlaylist(String playlistName) {
+        Playlist playlist = findPlaylist(playlistName);
+        return playlist == null ? null : info(playlist);
+    }
+
+    @Override
+    public boolean renamePlaylist(String from, String to) {
+        if (to == null || to.isBlank()) {
+            return false;
+        }
+        String name = to.strip();
+        Playlist playlist = findPlaylist(from);
+        // Names are how a playlist is addressed through this API, so two of them sharing
+        // one would make every other method here ambiguous.
+        if (playlist == null || (!name.equals(from) && findPlaylist(name) != null)) {
+            return false;
+        }
+        playlist.setName(name);
+        playlistStore.save();
+        return true;
+    }
+
+    @Override
+    public boolean removeFromPlaylist(String playlistName, String url) {
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null) {
+            return false;
+        }
+        int index = playlist.urls().indexOf(url);
+        if (index < 0) {
+            return false;
+        }
+        playlist.removeAt(index);
+        playlistStore.save();
+        return true;
+    }
+
+    @Override
+    public boolean reorderPlaylist(String playlistName, List<String> urls) {
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null || urls == null) {
+            return false;
+        }
+        // A permutation and nothing else: this method reorders, and letting it quietly
+        // add or drop entries would make it a second, undocumented way to edit a
+        // playlist — one that skips Playlist.add's http(s) gate.
+        List<String> wanted = new ArrayList<>(urls);
+        List<String> current = new ArrayList<>(playlist.urls());
+        List<String> sortedWanted = new ArrayList<>(wanted);
+        List<String> sortedCurrent = new ArrayList<>(current);
+        Collections.sort(sortedWanted);
+        Collections.sort(sortedCurrent);
+        if (!sortedWanted.equals(sortedCurrent)) {
+            return false;
+        }
+        playlist.urls().clear();
+        playlist.urls().addAll(wanted);
+        playlistStore.save();
+        return true;
+    }
+
+    @Override
+    @Nullable
+    public MediaHandle playPlaylist(String playlistName, boolean shuffle) {
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null || playlist.isEmpty()) {
+            return null;
+        }
+        // Through the audio player, which is what the playlist screen's own play button
+        // does — a saved playlist is a listening queue, whatever its links happen to be —
+        // and through the request path, so a registered MediaInterceptor is asked, with
+        // PLAYLIST as the origin.
+        return MediaWindowOverlay.play(MediaRequest.ofAll(new ArrayList<>(playlist.urls()))
+                .as(MediaKind.AUDIO)
+                .newWindow(true)
+                .shuffle(shuffle), PlayOrigin.PLAYLIST);
+    }
+
+    @Override
+    @Nullable
+    public MediaHandle playPlaylist(String playlistName, MediaRequest template) {
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null || playlist.isEmpty() || template == null) {
+            return null;
+        }
+        return MediaWindowOverlay.play(template.withUrls(new ArrayList<>(playlist.urls())),
+                PlayOrigin.PLAYLIST);
+    }
+
+    @Nullable
+    private Playlist findPlaylist(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (Playlist playlist : playlistStore.all()) {
+            if (name.equals(playlist.name())) {
+                return playlist;
             }
         }
-        return false;
+        return null;
+    }
+
+    private static PlaylistInfo info(Playlist playlist) {
+        return new PlaylistInfo(playlist.name(),
+                Collections.unmodifiableList(new ArrayList<>(playlist.urls())));
+    }
+
+    @Override
+    @Nullable
+    public String exportM3u(String playlistName) {
+        Playlist playlist = findPlaylist(playlistName);
+        if (playlist == null) {
+            return null;
+        }
+        // Whatever titles the mod has already resolved, and no probing: exporting a
+        // playlist must not be the thing that launches a hundred ffprobes.
+        return M3u.export(playlist, titleCache::peek);
+    }
+
+    @Override
+    @Nullable
+    public PlaylistInfo importM3u(String playlistName, String content) {
+        if (playlistName == null || playlistName.isBlank() || findPlaylist(playlistName) != null) {
+            return null;
+        }
+        List<String> urls = M3u.parse(content);
+        if (urls.isEmpty()) {
+            return null;
+        }
+        Playlist playlist = playlistStore.create(playlistName);
+        // Through Playlist.add, so the http(s) gate is applied here as well as in the
+        // parser: that is the choke point every stored entry passes, and an import is
+        // exactly the path that would otherwise get round it.
+        urls.forEach(playlist::add);
+        playlistStore.save();
+        return info(playlist);
+    }
+
+    // ====================================================================
+    // History (thread-safe — HistoryStore is synchronized throughout)
+    // ====================================================================
+
+    @Override
+    public List<HistoryItem> getHistory(int limit) {
+        List<HistoryEntry> all = historyStore.all();
+        if (limit > 0 && all.size() > limit) {
+            all = all.subList(0, limit);
+        }
+        return toItems(all);
+    }
+
+    @Override
+    public List<HistoryItem> getFavorites() {
+        return toItems(historyStore.favorites());
+    }
+
+    @Override
+    public boolean isFavorite(String url) {
+        return historyStore.isFavorite(url);
+    }
+
+    @Override
+    public void setFavorite(String url, boolean favorite) {
+        if (historyStore.isFavorite(url) != favorite) {
+            // toggleFavorite needs a kind for a URL it has never seen, which is exactly
+            // the case an addon hits when it keeps something straight off a link.
+            historyStore.toggleFavorite(url, mediaSources.kindOf(url));
+        }
+    }
+
+    @Override
+    public void clearHistory() {
+        historyStore.clear();
+    }
+
+    private static List<HistoryItem> toItems(List<HistoryEntry> entries) {
+        List<HistoryItem> items = new ArrayList<>(entries.size());
+        for (HistoryEntry entry : entries) {
+            items.add(new HistoryItem(entry.url(), entry.kind(), entry.playedAt(), entry.favorite()));
+        }
+        return Collections.unmodifiableList(items);
+    }
+
+    // ====================================================================
+    // Tools (thread-safe)
+    // ====================================================================
+
+    @Override
+    public boolean toolsReady() {
+        return MediaBinaries.isReady();
+    }
+
+    @Override
+    public CompletableFuture<Void> whenToolsReady() {
+        return MediaBinaries.whenReady();
+    }
+
+    @Override
+    public CompletableFuture<MediaInfo> probe(String url) {
+        // The gate from §17 of the API rules, applied in the API layer rather than left
+        // to the caller: an addon may not hand a local path to a downloaded binary.
+        if (!Urls.isHttp(url)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                FFmpegCli.MediaInfo probed = FFmpegCli.probe(url);
+                return new MediaInfo(probed.width(), probed.height(), probed.fps(),
+                        probed.durationMicros(), probed.hasVideo(), probed.hasAudio());
+            } catch (IOException e) {
+                // A link someone pasted failing to probe is an ordinary outcome, not an
+                // exceptional one; the caller gets null and decides what that means.
+                LiasMediaPlayer.LOGGER.debug("API probe failed for {}", url, e);
+                return null;
+            }
+        }, Util.ioPool());
+    }
+
+    @Override
+    @Nullable
+    public String ytDlpVersion() {
+        return MediaBinaries.ytDlpVersion();
     }
 }

@@ -100,8 +100,20 @@ public class Volume {
      * value the caller should remember as the new {@code lastApplied}.
      */
     public float apply(SourceDataLine line, float lastApplied) {
+        return apply(line, lastApplied, 1.0f);
+    }
+
+    /**
+     * As {@link #apply(SourceDataLine, float)}, with one sound's own share of the mix
+     * multiplied in — see {@link AudioGain}, which is the only caller that has one.
+     *
+     * <p>The multiplier is a plain number the caller has already worked out on the client
+     * thread; nothing here reads the world, so this stays as cheap as the two-argument
+     * form and remains safe to call from an audio pump for every buffer.</p>
+     */
+    public float apply(SourceDataLine line, float lastApplied, float multiplier) {
         try {
-            float v = effective();
+            float v = Math.max(0.0f, Math.min(1.0f, effective() * Math.max(0.0f, Math.min(1.0f, multiplier))));
             if (Math.abs(v - lastApplied) < 0.001f) {
                 return lastApplied; // no audible change since the last write
             }

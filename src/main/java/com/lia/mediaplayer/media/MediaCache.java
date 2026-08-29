@@ -146,4 +146,20 @@ public final class MediaCache<V> {
     public int size() {
         return entries.size();
     }
+
+    /**
+     * What the entries currently add up to, by the cache's own {@code sizeOf}. Zero for a
+     * cache declared without a budget, whose {@code sizeOf} is the constant zero.
+     *
+     * <p>Summed on demand rather than kept as a running total: it is asked for
+     * diagnostics, not per frame, and a running total would have to be maintained
+     * correctly at four sites for a number nothing depends on.</p>
+     */
+    public long estimatedBytes() {
+        long total = 0;
+        for (V value : entries.values()) {
+            total += sizeOf.applyAsLong(value);
+        }
+        return total;
+    }
 }

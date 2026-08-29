@@ -110,11 +110,40 @@ public final class VideoThumbnailCache {
      * Returns the thumbnail for a URL, starting a one-off background load the first time.
      */
     public Thumb getOrLoad(String url) {
-        Thumb thumb = cache.computeIfAbsent(url, u -> new Thumb());
+        return getOrLoad(url, url, -1.0);
+    }
+
+    /**
+     * The frame at {@code atSeconds}, rather than the one this cache would pick for a
+     * queue row — what the API's {@code MediaSurfaces.thumbnail(url, atSeconds)} needs.
+     *
+     * <p>Cached under a key of its own, so asking for two moments of the same video gives
+     * two pictures rather than whichever was asked for first. A YouTube link goes through
+     * ffmpeg here instead of taking its published poster: a timestamp was asked for, and
+     * the poster is not it.</p>
+     */
+    public Thumb getOrLoadAt(String url, double atSeconds) {
+        return getOrLoad(url + "#t=" + atSeconds, url, Math.max(0, atSeconds));
+    }
+
+    private Thumb getOrLoad(String key, String url, double atSeconds) {
+        Thumb thumb = cache.computeIfAbsent(key, u -> new Thumb());
         if (thumb.state == State.IDLE) {
-            startLoading(url, thumb);
+            startLoading(key, url, thumb, atSeconds);
         }
         return thumb;
+    }
+
+    /**
+     * Whether a thumbnail for {@code url} has already been decoded.
+     *
+     * <p>A peek, deliberately: unlike {@link #getOrLoad} it starts nothing. The API's
+     * {@code QueueEntry.hasThumbnail} is built on it, and reading a queue must not turn
+     * into a hundred ffmpeg launches for rows nobody has looked at.</p>
+     */
+    public boolean hasThumbnail(String url) {
+        Thumb thumb = cache.get(url);
+        return thumb != null && thumb.isLoaded();
     }
 
     /**
@@ -124,16 +153,22 @@ public final class VideoThumbnailCache {
         cache.clear();
     }
 
-    private void startLoading(String url, Thumb thumb) {
+    /** How many thumbnails are held — see {@code api.diag.MediaPlayerStats}. */
+    public int size() {
+        return cache.size();
+    }
+
+    private void startLoading(String key, String url, Thumb thumb, double atSeconds) {
         thumb.state = State.LOADING;
         // A YouTube thumbnail is one small HTTP GET and belongs on the shared IO pool
         // with the other downloads; everything else spawns ffmpeg and goes through the
         // bounded extractor instead. Deciding here rather than inside build() is what
         // keeps a picture that needs no process from queueing behind two that do.
-        Executor executor = YouTubeSource.isYouTube(url) ? Util.ioPool() : EXTRACTOR;
+        boolean poster = atSeconds < 0 && YouTubeSource.isYouTube(url);
+        Executor executor = poster ? Util.ioPool() : EXTRACTOR;
         CompletableFuture
-                .supplyAsync(() -> build(url), executor)
-                .whenCompleteAsync((image, error) -> onComplete(url, thumb, image, error),
+                .supplyAsync(() -> build(url, atSeconds), executor)
+                .whenCompleteAsync((image, error) -> onComplete(key, thumb, image, error),
                         Minecraft.getInstance());
     }
 
@@ -141,9 +176,10 @@ public final class VideoThumbnailCache {
     // Background work (IO pool) — never touch GL or the cache from here
     // ------------------------------------------------------------------
 
-    private static BufferedImage build(String url) {
+    private static BufferedImage build(String url, double atSeconds) {
         try {
-            BufferedImage raw = YouTubeSource.isYouTube(url) ? downloadYouTubeThumb(url) : grabFirstFrame(url);
+            boolean poster = atSeconds < 0 && YouTubeSource.isYouTube(url);
+            BufferedImage raw = poster ? downloadYouTubeThumb(url) : grabFrame(url, atSeconds);
             if (raw == null) {
                 throw new IOException("no thumbnail");
             }
@@ -204,7 +240,7 @@ public final class VideoThumbnailCache {
     }
 
     @Nullable
-    private static BufferedImage grabFirstFrame(String url) throws IOException {
+    private static BufferedImage grabFrame(String url, double atSeconds) throws IOException {
         String mediaUrl = MediaUrlResolver.resolve(url);
         FFmpegCli.MediaInfo info = FFmpegCli.probe(mediaUrl);
         if (!info.hasVideo()) {
@@ -215,11 +251,21 @@ public final class VideoThumbnailCache {
         int w = target[0];
         int h = target[1];
 
-        // Skip a touch into the clip so we don't land on a black intro frame, while
-        // staying safely before the end of short clips.
-        double at = 1.0;
-        if (info.durationMicros() > 0) {
-            at = Math.min(1.0, (info.durationMicros() / 1_000_000.0) * 0.5);
+        double at;
+        if (atSeconds >= 0) {
+            // A caller asked for a moment; keep it inside the clip so the grab has
+            // something to land on.
+            at = atSeconds;
+            if (info.durationMicros() > 0) {
+                at = Math.min(at, Math.max(0, info.durationMicros() / 1_000_000.0 - 0.1));
+            }
+        } else {
+            // Skip a touch into the clip so we don't land on a black intro frame, while
+            // staying safely before the end of short clips.
+            at = 1.0;
+            if (info.durationMicros() > 0) {
+                at = Math.min(1.0, (info.durationMicros() / 1_000_000.0) * 0.5);
+            }
         }
 
         byte[] rgba = FFmpegCli.grabRawFrame(mediaUrl, w, h, at);
@@ -272,16 +318,16 @@ public final class VideoThumbnailCache {
     // Main thread — create the texture and publish it
     // ------------------------------------------------------------------
 
-    private void onComplete(String url, Thumb thumb, @Nullable BufferedImage image, @Nullable Throwable error) {
+    private void onComplete(String key, Thumb thumb, @Nullable BufferedImage image, @Nullable Throwable error) {
         if (error != null || image == null) {
             thumb.state = State.FAILED;
             Throwable cause = error instanceof CompletionException && error.getCause() != null
                     ? error.getCause() : error;
-            LiasMediaPlayer.LOGGER.debug("No thumbnail for {}: {}", url, cause == null ? "?" : cause.toString());
+            LiasMediaPlayer.LOGGER.debug("No thumbnail for {}: {}", key, cause == null ? "?" : cause.toString());
             return;
         }
         // The entry may have been evicted while the load was in flight.
-        if (thumb.disposed || cache.get(url) != thumb) {
+        if (thumb.disposed || cache.get(key) != thumb) {
             return;
         }
         try {
@@ -295,7 +341,7 @@ public final class VideoThumbnailCache {
             thumb.state = State.LOADED;
         } catch (Exception e) {
             thumb.state = State.FAILED;
-            LiasMediaPlayer.LOGGER.debug("Failed to upload thumbnail for {}", url, e);
+            LiasMediaPlayer.LOGGER.debug("Failed to upload thumbnail for {}", key, e);
         }
     }
 

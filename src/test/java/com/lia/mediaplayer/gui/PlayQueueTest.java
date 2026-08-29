@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.RepeatMode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -283,5 +284,78 @@ class PlayQueueTest {
         queue.clear();
         assertFalse(queue.hasPrevious());
         assertNull(queue.previous("b"));
+    }
+
+    // ------------------------------------------------------------------
+    // The general-form edits the API's MediaQueue needs, and the version counter that
+    // lets a change be noticed without a callback at every mutation site.
+    // ------------------------------------------------------------------
+
+    @Test
+    void insert_ClampsRatherThanThrowing() {
+        queue.add("a");
+        queue.add("b");
+
+        queue.insert(1, "x");
+        assertEquals(List.of("a", "x", "b"), queue.snapshot());
+
+        queue.insert(-5, "head");
+        queue.insert(99, "tail");
+        assertEquals(List.of("head", "a", "x", "b", "tail"), queue.snapshot());
+    }
+
+    @Test
+    void move_TakesAnEntryStraightToItsNewIndex() {
+        queue.addAll(List.of("a", "b", "c", "d"));
+
+        queue.move(3, 0);
+        assertEquals(List.of("d", "a", "b", "c"), queue.snapshot());
+
+        queue.move(0, 2);
+        assertEquals(List.of("a", "b", "d", "c"), queue.snapshot());
+    }
+
+    @Test
+    void move_IgnoresIndicesItCannotUse() {
+        queue.addAll(List.of("a", "b"));
+        List<String> before = queue.snapshot();
+
+        queue.move(-1, 0);
+        queue.move(0, 5);
+        queue.move(1, 1);
+        assertEquals(before, queue.snapshot());
+    }
+
+    @Test
+    void version_ChangesOnEveryEditAndOnlyOnEdits() {
+        int start = queue.version();
+        assertEquals(start, queue.version(), "reading does not count as a change");
+
+        queue.add("a");
+        int afterAdd = queue.version();
+        assertNotEquals(start, afterAdd);
+
+        queue.snapshot();
+        queue.size();
+        assertEquals(afterAdd, queue.version());
+
+        queue.insert(0, "b");
+        int afterInsert = queue.version();
+        assertNotEquals(afterAdd, afterInsert);
+
+        queue.move(0, 1);
+        int afterMove = queue.version();
+        assertNotEquals(afterInsert, afterMove);
+
+        queue.remove(0);
+        assertNotEquals(afterMove, queue.version());
+    }
+
+    @Test
+    void version_ChangesWhenTheQueueAdvances() {
+        queue.addAll(List.of("a", "b"));
+        int before = queue.version();
+        queue.next("current");
+        assertNotEquals(before, queue.version());
     }
 }

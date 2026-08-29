@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -179,45 +180,90 @@ public final class MediaBinaries {
      * at mod construction; failures are logged and left for a later lazy retry
      * within the same session is not attempted (see {@link #DOWNLOAD_ATTEMPTED}).
      */
+    /**
+     * Completed by {@link #installAllAsync()} once it has finished, successfully or not.
+     * The API's {@code MediaTools.whenReady()} is this, and it is a
+     * {@link CompletableFuture} rather than a latch so an addon can chain off it without
+     * blocking a thread on a startup download.
+     */
+    private static final CompletableFuture<Void> INSTALL_FINISHED = new CompletableFuture<>();
+
+    /** Set by the installer thread; see {@link #isReady()}. */
+    private static volatile boolean allPresent;
+
+    /**
+     * Whether all three tools are present, as of the last time the installer looked.
+     *
+     * <p>Deliberately a flag rather than three {@code locate} calls: {@code locate} can
+     * trigger the download, and "is this ready?" must not be the thing that starts a
+     * network fetch — least of all from an addon polling it.</p>
+     */
+    public static boolean isReady() {
+        return allPresent;
+    }
+
+    /**
+     * Completes when the startup install has finished, whether or not it worked. Never
+     * completes exceptionally; ask {@link #isReady()} in the continuation.
+     *
+     * <p>A copy, so a caller cannot complete the mod's own future.</p>
+     */
+    public static CompletableFuture<Void> whenReady() {
+        return INSTALL_FINISHED.copy();
+    }
+
     public static void installAllAsync() {
         Thread thread = new Thread(() -> {
-            LiasMediaPlayer.LOGGER.info("Checking media tools (yt-dlp, ffmpeg) ...");
-            String ytDlp = safeLocate(Tool.YT_DLP);
-            String ffmpeg = safeLocate(Tool.FFMPEG);
-            safeLocate(Tool.FFPROBE);
-            LiasMediaPlayer.LOGGER.info("Media tools ready: yt-dlp={}, ffmpeg={}",
-                    ytDlp != null ? ytDlp : "MISSING",
-                    ffmpeg != null ? ffmpeg : "MISSING");
-
-            InstallState combinedState = InstallState.FOUND;
-            if (ytDlpState == InstallState.UNAVAILABLE || ffmpegState == InstallState.UNAVAILABLE) {
-                combinedState = InstallState.UNAVAILABLE;
-            } else if (ytDlpState == InstallState.REINSTALLED || ffmpegState == InstallState.REINSTALLED) {
-                combinedState = InstallState.REINSTALLED;
-            } else if (ytDlpState == InstallState.INSTALLED || ffmpegState == InstallState.INSTALLED) {
-                combinedState = InstallState.INSTALLED;
-            }
-
-            if (combinedState != InstallState.FOUND) {
-                String translationKey = switch (combinedState) {
-                    case UNAVAILABLE -> "gui.liasmediaplayer.toast.unavailable";
-                    case REINSTALLED -> "gui.liasmediaplayer.toast.reinstalled";
-                    case INSTALLED -> "gui.liasmediaplayer.toast.installed";
-                    default -> "gui.liasmediaplayer.toast.installed";
-                };
-                toast(translationKey);
-            }
-
-            // A yt-dlp that was already there is the case the install states above say
-            // nothing about, and it is the one that breaks: YouTube changes its player
-            // every few weeks and an extractor from three months ago simply stops
-            // resolving links. Checking the version costs one process launch at startup.
-            if (ytDlp != null && ytDlpState == InstallState.FOUND) {
-                checkYtDlpFreshness();
+            try {
+                install();
+            } finally {
+                // In a finally because something has to complete it: an addon waiting on
+                // whenReady() would otherwise wait for the session if a single process
+                // launch threw on the way past.
+                INSTALL_FINISHED.complete(null);
             }
         }, "liasmediaplayer-binary-installer");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** The body of {@link #installAllAsync()}, on the installer thread. */
+    private static void install() {
+        LiasMediaPlayer.LOGGER.info("Checking media tools (yt-dlp, ffmpeg) ...");
+        String ytDlp = safeLocate(Tool.YT_DLP);
+        String ffmpeg = safeLocate(Tool.FFMPEG);
+        String ffprobe = safeLocate(Tool.FFPROBE);
+        allPresent = ytDlp != null && ffmpeg != null && ffprobe != null;
+        LiasMediaPlayer.LOGGER.info("Media tools ready: yt-dlp={}, ffmpeg={}",
+                ytDlp != null ? ytDlp : "MISSING",
+                ffmpeg != null ? ffmpeg : "MISSING");
+
+        InstallState combinedState = InstallState.FOUND;
+        if (ytDlpState == InstallState.UNAVAILABLE || ffmpegState == InstallState.UNAVAILABLE) {
+            combinedState = InstallState.UNAVAILABLE;
+        } else if (ytDlpState == InstallState.REINSTALLED || ffmpegState == InstallState.REINSTALLED) {
+            combinedState = InstallState.REINSTALLED;
+        } else if (ytDlpState == InstallState.INSTALLED || ffmpegState == InstallState.INSTALLED) {
+            combinedState = InstallState.INSTALLED;
+        }
+
+        if (combinedState != InstallState.FOUND) {
+            String translationKey = switch (combinedState) {
+                case UNAVAILABLE -> "gui.liasmediaplayer.toast.unavailable";
+                case REINSTALLED -> "gui.liasmediaplayer.toast.reinstalled";
+                case INSTALLED -> "gui.liasmediaplayer.toast.installed";
+                default -> "gui.liasmediaplayer.toast.installed";
+            };
+            toast(translationKey);
+        }
+
+        // A yt-dlp that was already there is the case the install states above say
+        // nothing about, and it is the one that breaks: YouTube changes its player
+        // every few weeks and an extractor from three months ago simply stops
+        // resolving links. Checking the version costs one process launch at startup.
+        if (ytDlp != null && ytDlpState == InstallState.FOUND) {
+            checkYtDlpFreshness();
+        }
     }
 
     /**

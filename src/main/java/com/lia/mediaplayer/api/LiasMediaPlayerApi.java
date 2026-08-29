@@ -4,6 +4,13 @@
  */
 package com.lia.mediaplayer.api;
 
+import com.lia.mediaplayer.api.image.ImageDecoder;
+import com.lia.mediaplayer.api.policy.MediaInterceptor;
+import com.lia.mediaplayer.api.screen.MediaScreenTab;
+import com.lia.mediaplayer.api.source.MediaMetadataProvider;
+import com.lia.mediaplayer.api.source.MediaResolver;
+import com.lia.mediaplayer.api.window.WindowAction;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -94,5 +101,150 @@ public class LiasMediaPlayerApi {
      */
     public static List<MediaSourceProvider> sourceProviders() {
         return Collections.unmodifiableList(PROVIDERS);
+    }
+
+    // ------------------------------------------------------------------
+    // The other two extension points (since API 2.3.0)
+    //
+    // Same shape as registerSourceProvider, and for the same reason: `api` knows about
+    // no mod loader, so a static registry is the one discovery story that works on both.
+    // May be called before the mod has finished initializing.
+    // ------------------------------------------------------------------
+
+    private static final List<MediaResolver> RESOLVERS = new CopyOnWriteArrayList<>();
+    private static final List<MediaMetadataProvider> METADATA_PROVIDERS = new CopyOnWriteArrayList<>();
+
+    /**
+     * Registers a way of turning an addon's own links into something {@code ffmpeg} can
+     * open — see {@link MediaResolver}.
+     *
+     * @since API 2.3.0
+     */
+    public static void registerResolver(MediaResolver resolver) {
+        if (resolver != null) {
+            RESOLVERS.add(resolver);
+        }
+    }
+
+    /**
+     * Registers a supplier of titles (and durations, and thumbnails) for an addon's own
+     * links — see {@link MediaMetadataProvider}.
+     *
+     * @since API 2.3.0
+     */
+    public static void registerMetadataProvider(MediaMetadataProvider provider) {
+        if (provider != null) {
+            METADATA_PROVIDERS.add(provider);
+        }
+    }
+
+    /** Every registered resolver, in registration order (unmodifiable). */
+    public static List<MediaResolver> resolvers() {
+        return Collections.unmodifiableList(RESOLVERS);
+    }
+
+    /** Every registered metadata provider, in registration order (unmodifiable). */
+    public static List<MediaMetadataProvider> metadataProviders() {
+        return Collections.unmodifiableList(METADATA_PROVIDERS);
+    }
+
+    // ------------------------------------------------------------------
+    // The 3.2 and 3.4 extension points
+    //
+    // Same static-registry shape as everything above, and for the same reason: `api`
+    // knows about no mod loader, and every one of these has to be registrable from an
+    // addon's entry point, which runs before this mod has finished initializing.
+    // ------------------------------------------------------------------
+
+    private static final List<MediaInterceptor> INTERCEPTORS = new CopyOnWriteArrayList<>();
+    private static final List<WindowAction> WINDOW_ACTIONS = new CopyOnWriteArrayList<>();
+    private static final List<ImageDecoder> IMAGE_DECODERS = new CopyOnWriteArrayList<>();
+    private static final List<MediaScreenTab> SCREEN_TABS = new CopyOnWriteArrayList<>();
+
+    /**
+     * Registers the right to veto or rewrite what gets played, and what a chat link
+     * becomes — see {@link MediaInterceptor}. Interceptors are asked in registration
+     * order and the first veto wins.
+     *
+     * @since API 3.2.0
+     */
+    public static void registerInterceptor(MediaInterceptor interceptor) {
+        if (interceptor != null) {
+            INTERCEPTORS.add(interceptor);
+        }
+    }
+
+    /**
+     * Removes an interceptor previously registered. Unlike the other registries this one
+     * has a way out, because an interceptor is a <em>policy</em> — an addon that turns
+     * its own moderation off must be able to stop being asked.
+     *
+     * @since API 3.2.0
+     */
+    public static void unregisterInterceptor(MediaInterceptor interceptor) {
+        INTERCEPTORS.remove(interceptor);
+    }
+
+    /** Every registered interceptor, in registration order (unmodifiable). */
+    public static List<MediaInterceptor> interceptors() {
+        return Collections.unmodifiableList(INTERCEPTORS);
+    }
+
+    /**
+     * Registers a button of your own in every media window's corner row — see
+     * {@link WindowAction}. Registering the same {@link WindowAction#id()} twice replaces
+     * the first, so a re-registration on reload does not double the button.
+     *
+     * @since API 3.2.0
+     */
+    public static void registerWindowAction(WindowAction action) {
+        if (action == null) {
+            return;
+        }
+        WINDOW_ACTIONS.removeIf(existing -> existing.id().equals(action.id()));
+        WINDOW_ACTIONS.add(action);
+    }
+
+    /** Every registered window action, in registration order (unmodifiable). */
+    public static List<WindowAction> windowActions() {
+        return Collections.unmodifiableList(WINDOW_ACTIONS);
+    }
+
+    /**
+     * Registers a decoder for a picture format the mod does not know — see
+     * {@link ImageDecoder}. Decoders are asked before the built-in ones, in registration
+     * order.
+     *
+     * @since API 3.4.0
+     */
+    public static void registerImageDecoder(ImageDecoder decoder) {
+        if (decoder != null) {
+            IMAGE_DECODERS.add(decoder);
+        }
+    }
+
+    /** Every registered image decoder, in registration order (unmodifiable). */
+    public static List<ImageDecoder> imageDecoders() {
+        return Collections.unmodifiableList(IMAGE_DECODERS);
+    }
+
+    /**
+     * Registers a way into a screen of your own from the mod's library screens — see
+     * {@link MediaScreenTab}. Registering the same {@link MediaScreenTab#id()} twice
+     * replaces the first.
+     *
+     * @since API 3.4.0
+     */
+    public static void registerScreenTab(MediaScreenTab tab) {
+        if (tab == null) {
+            return;
+        }
+        SCREEN_TABS.removeIf(existing -> existing.id().equals(tab.id()));
+        SCREEN_TABS.add(tab);
+    }
+
+    /** Every registered screen tab, in registration order (unmodifiable). */
+    public static List<MediaScreenTab> screenTabs() {
+        return Collections.unmodifiableList(SCREEN_TABS);
     }
 }

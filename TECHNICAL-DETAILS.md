@@ -59,13 +59,13 @@ concern:
 | `config`   | **Configuration.** Stores mod options (resolutions, caps) via JSON and persists them to disk. Provides a hub screen for navigating to sub-menus. | `storage`                                                          |
 | `source`   | **What is this link?** URL classification and chat labels. The extension point.                                                                                    | (Minecraft only)                                                   |
 | `image`    | Image/GIF download, decode and texture cache.                                                                                                                      | `source`, `config`, `media`                                        |
-| `media`    | Cross-cutting playback helpers shared by the two engines: the single shared **volume**, the **URL resolver** (incl. yt-dlp), the **title cache**, `MediaCache` (the bounded store behind all three caches), and `MediaPlayback` — the common transport both engines implement. | `source`, `tools`                                                  |
+| `media`    | Cross-cutting playback helpers shared by the two engines: the single shared **volume**, the **mixer** and per-sound **gain** (channel, placement, fade), the **URL resolver** (incl. yt-dlp), the **title cache**, `MediaCache` (the bounded store behind all three caches), `MediaPlayback` — the common transport both engines implement — and `PlayerHandle`, the API handle over a player with no window. | `source`, `tools`, `api`                                           |
 | `video`    | Video playback engine (decode, audio, thumbnails).                                                                                                                 | `source`, `tools`, `image`, `media`, `config`                      |
-| `audio`    | Audio-only playback engine (probe, PCM pump, clock, seek).                                                                                                         | `source`, `tools`, `media`                                         |
+| `audio`    | Audio-only playback engine (probe, PCM pump, clock, seek), plus `HeadlessAudio` — the sounds addons play with no window at all.                                     | `source`, `tools`, `media`, `config`, `api`                        |
 | `tools`    | Locating/downloading and invoking the external `ffmpeg`/`ffprobe`/`yt-dlp` binaries.                                                                               | (root)                                                             |
 | `playlist` | Saved named playlists and their JSON persistence.                                                                                                                  | `source`, `storage`                                                |
 | `history`  | What has been played and what was kept (the favourites), and their JSON persistence.                                                                               | `api`, `source`, `storage`, *(root)*                               |
-| `gui`      | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the shared queue panel, the hover preview, playlists, history and config hub. | `source`, `image`, `video`, `audio`, `media`, `playlist`, `history`, `config`, `storage` |
+| `gui`      | Everything drawn on screen: the window base, the overlay coordinator, the image/video/audio windows, their registries, the shared queue panel, the hover preview, playlists, history and config hub — plus `MediaSyncControl`, the watch-together hooks, which act on windows and so belong here. | `source`, `image`, `video`, `audio`, `media`, `playlist`, `history`, `config`, `storage` |
 | `input`    | The configurable keybinds and the handler that drives the active audio player.                                                                                     | `gui`                                                              |
 | `command`  | Registers client commands (like `/show`) to launch media directly.                                                                                                 | `api`                                                              |
 | `chat`     | Rewriting links into labels, as plain functions on `Component`, and the filters deciding whose links and which hosts get rewritten at all.                          | `source`, `image`, `video`, `audio`, `gui`, `config`               |
@@ -169,6 +169,12 @@ the loader's business and the interface an addon implements became the same on b
 | `config/EnumOption.java`                                                                    | A `ConfigOption` implementation for enum values, displayed as a button that cycles through the available options.                                                                                                                                                                                                                                                                                                              |
 | `config/BooleanOption.java`                                                                 | A `ConfigOption` implementation for a plain on/off setting, displayed as a button reading `Label: ON` / `Label: OFF`. The two states reuse vanilla's own `options.on` / `options.off` keys, so an addon declaring one translates only its label.                                                                                                                                                                               |
 | `config/StringOption.java`                                                                  | A `ConfigOption` implementation for free text, displayed as a text field whose hint is the option's own label. `entries()` reads the value as a trimmed, lower-cased, comma-separated list — the shape the domain and sender filters want.                                                                                                                                                                                     |
+| `audio/MediaAudio.java`                                                                     | The front door for sound with no window: `play(url, options)` and `mixer()`. `play` answers `null` when the mod is not up, the link is not `http(s)`, or the cap is reached; `mixer()` never does — before the mod is up it answers a no-op mixer, so an addon's initialiser does not have to care which mod loaded first.                                                                                                       |
+| `audio/AudioOptions.java`                                                                   | How a headless sound starts: gain, loop, start point, channel, placement, fade in/out, pause-with-game. Chained from `defaults()`. Its compact constructor **canonicalises** rather than validating — a gain out of range is clamped, not thrown at — because a block-entity tick computing one slightly wrong wants a quiet sound, not an exception out of someone else's renderer.                                             |
+| `audio/AudioPlacement.java`                                                                 | Where a sound comes from: `world(Vec3, radius)`, `entity(Entity, radius)` (read fresh each tick, silent while the entity is gone), `screen()` (2D). A sealed interface, so the set is closed. Its javadoc is where the **2.5D** promise is written down — attenuation and panning, no HRTF, no elevation, no occlusion, no Doppler — and it is meant to be read before an addon designs around it. Unlike `AudioOptions`, the factories throw: a radius of zero is not a quieter sound, it is a sound that can never be heard. |
+| `audio/AudioChannel.java`                                                                   | `MEDIA` / `VOICE` / `AMBIENT` / `UI` / `ADDON` — one factor of the gain chain and nothing else, so two addons that have never heard of each other can agree on what to duck. Not Minecraft's `SoundSource` categories.                                                                                                                                                                                                          |
+| `audio/AudioControls.java`                                                                  | One sound's own gain, channel, placement and fade, plus the read-backs (`effectiveGain`, `pan`). Reached through `MediaHandle.audio()` — an `Optional`, because a pinned image makes no noise. Implemented by `media.AudioGain`.                                                                                                                                                                                                |
+| `audio/MediaMixer.java` · `audio/DeadMixer.java`                                            | The master level and the five channel gains, and the do-nothing instance handed out before the mod is up. Thread-safe, unlike most of the API. Its javadoc is where "which knob to turn" is written down: master is the *user's*, a channel is how you make room for your own sound.                                                                                                                                            |
 | **`config/` (internal)**                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ConfigStore.java`                                                                          | Loads/saves mod options through a `storage/JsonFileStore`, acting as the registry for all `ConfigOption`s. Provides methods to retrieve options by group. An unparseable file leaves every option on its default rather than failing the launch. The built-in options are declared through `slider`/`choice`/`text`/`toggle`, which derive an option's id, group, label key and description key from one name; `toJson`/`applyJson` are the seam `ConfigStoreTest` drives.                                                                                                                                                                                                                               |
 | **`source/`**                                                                               |                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -188,6 +194,12 @@ the loader's business and the interface an addon implements became the same on b
 | `YouTubePlaylistResolver.java`                                                              | Expands a YouTube playlist page into its watch links via `yt-dlp --flat-playlist` (one index request, no per-video work), with the same strict timeout/stderr-drain handling as `MediaUrlResolver`. `loadAsync` runs it on the IO pool and calls back on the main thread. |
 | `PlaybackError.java`                                                                        | Classifies the raw diagnostic a failed playback leaves behind (yt-dlp's stderr, ffmpeg's, or one of the mod's own `IOException` messages) into one of fifteen causes — outdated extractor, private/age-restricted/geo-blocked video, expired stream URL, timeout, unsupported format, … — each with a translated line and a piece of advice. Pure and Minecraft-free apart from the two `Component` helpers, so the pattern table is unit-tested. Shared by both windows, which is why it sits in `media`. |
 | `MediaTitleCache.java`                                                                      | Resolves and caches a human-readable title per URL (YouTube oEmbed, or the file name) for the queue/playlist panels. Shared by both engines. One instance, owned by `MediaPlayerContext`.                                                                                                                                                                                                                                                                                  |
+| `AudioMixer.java`                                                                           | The five `AudioChannel` gains that sit between `Volume` and one sound, and the factory for `AudioGain`. Implements the public `MediaMixer`. Deliberately keeps **no registry** of the gains it makes: each is ticked by whatever owns it, so nothing has to be unregistered and nothing can leak. Gains are published as a whole replacement array, so an audio thread never reads a torn set. Not persisted — every channel is back at unity on the next start. |
+| `AudioGain.java`                                                                            | One sound's own share of the chain — the implementation of the public `AudioControls`. Holds the per-sound gain, the channel, the placement and the fade, and splits the work by thread: `clientTick()` does the fade step, the camera read, the distance and the pan once a tick and publishes two `volatile float`s; `apply(line, volume)` runs on the audio pump and does nothing but read those and write the line. No lock, no allocation, and no `Vec3` on the audio thread. Outlives the player it is attached to, so a window's queue advancing keeps the addon's placement. |
+| `PositionalAudio.java`                                                                      | The two sums behind 2.5D audio: a linear attenuation to silence at the radius, and a pan from the horizontal angle between the camera's facing and the source (collapsing to centre inside 1.5 blocks, because standing on a source and hearing it hard left is both meaningless and unpleasant). Pure functions over plain numbers, kept free of `Vec3` and the camera precisely so `PositionalAudioTest` can pin them. |
+| `AudioListener.java`                                                                        | The mod's single point of contact with the game **camera** — position and yaw — and one of the guarded seams: `Camera.getPosition`/`getYRot` became `position`/`yRot` at 1.21.11 and `GameRenderer.getMainCamera` became `mainCamera` at 26.2. The camera rather than the player entity, because that is what the game's own sound engine listens from. |
+| `PlayerHandle.java`                                                                         | A `MediaHandle` over a player with no window: the counterpart of `gui/WindowHandle`, with `window()` and `queue()` empty. Two things are built on it — an off-screen `surface` entry and a headless track — which is why it lives here rather than in either. Also posts that player's `PlaybackEvent`s, since there is no window stack to notice a state change for it. |
+| `PlaybackWatcher.java`                                                                      | Turns a polled `PlaybackState` into the transitions the API's events are made of (paused, resumed, ended, failed, seeked). Pure — state in, event types out, no Minecraft and no player — and held by whatever owns a player: `gui/QueuedMediaWindow` for a window, `PlayerHandle` for one without. Moved here from `gui` in API 3.1.0, when the second kind of owner appeared. |
 | **`chat/`**                                                                                 |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ChatLinkRewriter.java`                                                                     | The shared chat-rewrite engine: walks a message component-by-component (preserving inherited styles) and replaces each URL claimed by a `LinkRewrite` rule with its label. Both handlers reuse this, so the walk lives in exactly one place.                                                                                                                                                                                  |
 | `ImageChatHandler.java`                                                                     | `rewrite(Component)` / `onDisconnect()`. Supplies the image rule (gold `[picture]`/`[gif]` label; registers the URL with `ImagePreviewCache`) and disposes the image side on disconnect. Takes no event object — `platform.ClientHooks` calls it.                                                                                                                                                                              |
@@ -243,6 +255,7 @@ the loader's business and the interface an addon implements became the same on b
 | `VideoThumbnailCache.java`                                                                  | Builds and caches a small still image for each queued video (the YouTube thumbnail, or the first decoded frame for direct files) so the queue panel can show what each entry is. Bounded by `MediaCache`; one instance, owned by `MediaPlayerContext`.                                                                                                                                                                                                                                              |
 | **`audio/`**                                                                                |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `AudioPlayer.java`                                                                          | The sound-only playback engine — the audio counterpart of `VideoPlayer`. Probes the stream, opens a `SourceDataLine`, and runs a control thread (resolve/probe/launch/seek) plus a per-session **pump thread** that blocking-writes PCM to the line. Reuses `FFmpegCli`, `media.MediaUrlResolver` and `media.Volume`; YouTube links play as sound only (ffmpeg opens the resolved stream with `-vn`).                         |
+| `HeadlessAudio.java`                                                                        | Every sound an addon asked for that has no window, and the budget they share — the audio counterpart of `surface/SurfaceRegistry`, owned by `MediaPlayerContext` and emptied on disconnect. Each entry is an `AudioPlayer`, a `media.AudioGain` and a `media.PlayerHandle`; the once-a-tick pass drives the fade-in, the fade before a track's end, looping, the pause-with-game, and retirement of anything that ended or failed. Capped by `max_headless_audio`, because nothing on screen makes one of these visible and an addon looping over blocks would otherwise start dozens. `MediaHandle.close()` with a `fadeOutMillis` rides the sound down first and disposes when the fade lands. |
 | **`history/`**                                                                              |                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `HistoryEntry.java`                                                                         | One thing that was played: the URL, its `MediaKind`, when it last started, and whether it carries the heart. No title is stored — names come from `MediaTitleCache`, the same bargain `Playlist` makes.                                                                                                                                                                                                                        |
 | `HistoryStore.java`                                                                         | Loads/saves the history to `<gamedir>/liasmediaplayer/history.json` via `storage/JsonFileStore` (lazy load, temp file + atomic move, never throws). Most recent first; re-playing an entry moves it back to the top instead of duplicating it. Ordinary entries are bounded at `MAX_ENTRIES`, favourites are not counted against it and are never evicted — and `clear()` keeps them. The static `record(url, kind)` is what the five playback entry points call. |
@@ -387,6 +400,15 @@ Each rule also asks `MediaFilters.allowsUrl`, so a link whose host fails the con
 host list is simply never claimed and stays plain text. Both filters are **purely
 local**: the message is displayed exactly as it arrived, only without a label the mod
 would play.
+
+After the rule has claimed a URL and the user's own filters have allowed it — in that
+order, so an addon is a further policy over the mod's and never a way round it — the
+registered `api.policy.MediaInterceptor`s are asked (`allowChatLink(url, sender, kind)`,
+then `decorateLabel`). The sender is the reason `rewrite` gained a second parameter and
+`LinkRewrite` a `kind()`: `ClientHooks.onChatReceived` is the only place that knows who
+sent the message, and the rule is the only thing that knows which player a link would
+open. A vetoed link takes the same path a filtered one does — left as ordinary text, not
+removed.
 
 Every label is a `Component.translatable` on a `chat.liasmediaplayer.label.*` key, not a
 literal: these are the most-read strings the mod draws, and they are read by whoever is in
@@ -889,6 +911,86 @@ once:
 The loop button cycles `OFF → ALL → ONE`, and both toggles are drawn in
 `Theme.ICON_ACTIVE` while on, so "active" never reads as "hovered".
 
+### Sound with no window (`audio/HeadlessAudio`)
+
+An addon can ask for a track with no interface at all — a speaker block, an ambience
+loop, a cutscene's soundtrack — through `api.audio.MediaAudio.play`. What it gets is an
+ordinary `AudioPlayer` with no `MediaWindow` above it, wrapped in a `media.PlayerHandle`
+so the API sees the same `MediaHandle` it would for a window (with `window()` and
+`queue()` empty, because it has neither).
+
+`HeadlessAudio` is the registry, and it is the audio counterpart of
+`surface/SurfaceRegistry`: owned by `MediaPlayerContext`, capped by
+`max_headless_audio` (default 4 — each is an ffmpeg process and a `SourceDataLine`, and
+unlike a window nothing on screen makes one visible), and emptied by the same disconnect
+sweep. Its once-a-tick pass is where everything a window would have done for a player
+happens instead: the fade-in once the track is genuinely running (not while ffmpeg is
+still opening the stream), the fade over the last `fadeOutMillis` of a track that is
+about to end, the restart on `loop`, pause-and-resume with the game, the playback events
+`PlayerHandle` derives through `media.PlaybackWatcher`, and retirement of anything that
+ended or failed. `MediaHandle.close()` with a fade asked for rides the sound down first
+and disposes when the fade lands.
+
+### The gain chain
+
+Since API 3.1.0 what reaches a line is a product rather than a single level:
+
+```
+effective = master (media.Volume)  x  channelGain (media.AudioMixer)
+          x  handleGain            x  attenuation (media.PositionalAudio)
+```
+
+`media.Volume` is still the one master and the only persisted part of this; the mixer
+holds five `AudioChannel` gains that reset to unity on every start, and the last two
+factors belong to a single sound. That sound's share is a `media.AudioGain`, and there is
+one per **sound source** — a window, an off-screen surface, a headless track — not one
+per player: a window's queue advancing builds a fresh `AudioPlayer` and hands it the same
+gain, so a placement or a fade an addon set survives the swap. A window's is built lazily
+the first time an addon asks for it, so a window nobody has touched costs neither the
+object nor the per-tick recompute.
+
+The threading is the point of the class. Reading the camera, measuring a distance and
+stepping a fade is client-thread work; writing a line's gain happens every 8 KB of PCM on
+a pump thread. So `AudioGain.clientTick()` does all of the former once a tick and
+publishes two `volatile float`s (the multiplier and the pan), and `AudioGain.apply` reads
+exactly those two and writes the line — no lock, no allocation, and no `Vec3` on the audio
+thread. The cost is resolution: fades are a 20 Hz ramp and a moving sound pans in 50 ms
+steps, which is the same resolution vanilla updates its own sound positions at.
+
+Nothing keeps a registry of live gains. Each is ticked by whatever owns it, because those
+are the objects that already have a working disposal path; a gain whose owner is gone is
+simply garbage, and there is no unregister call to forget.
+
+### Positional audio, and why it is called 2.5D
+
+`AudioPlacement` says where a sound is — a fixed `Vec3`, an entity to follow, or
+`screen()` for "not in the world". `media.AudioGain` resolves it each tick against
+`media.AudioListener` (the **camera**, so third person and spectator behave like the rest
+of the game's sound) and hands the numbers to `media.PositionalAudio`:
+
+- **attenuation** is a linear ramp, full volume at the source to silence at the radius —
+  the same shape vanilla attenuates its own sounds with, so a speaker sits in the same
+  world as the note block beside it;
+- **pan** is the unit offset projected onto the camera's right vector, which is the sine
+  of the horizontal angle between them, collapsed back to centre inside 1.5 blocks
+  (standing on a source and hearing it hard left is meaningless — half a block of
+  movement swings it ear to ear — and unpleasant).
+
+Both are pure functions over plain doubles and are unit-tested; `AudioListener` carries
+the three version guards this needs (`Camera.getPosition`/`getYRot` became
+`position`/`yRot` at 1.21.11, `GameRenderer.getMainCamera` became `mainCamera` at 26.2).
+
+The pan is written with `FloatControl.Type.PAN`, falling back to `BALANCE`; a line that
+offers neither is detected once and the gain stops computing a pan for it, so a placed
+sound on such a device is attenuated but centred and `AudioControls.pan()` says so.
+
+What this is **not**: no HRTF, no elevation, no occlusion, no reverb, no Doppler. A sound
+directly ahead and one directly behind pan identically — stereo cannot express the
+difference. Real 3D means feeding Minecraft's OpenAL engine, which does not accept
+arbitrary streamed PCM without a custom sound instance and stream; that is a separate
+project, and nothing in the API's shape would have to change to take it, because
+`AudioPlacement` describes where a sound is rather than how it is rendered.
+
 ## Playlists (`playlist/`, `gui/PlaylistScreen`)
 
 A `Playlist` is a **name** plus an ordered list of media **URLs** (direct audio files or
@@ -1041,10 +1143,19 @@ still mean something with nothing playing. A small `assets/liasmediaplayer/lang/
 names.
 
 "Play from clipboard" reads `Minecraft.keyboardHandler.getClipboard()` and hands it to
-`MediaWindowOverlay.play(url, audioOnly, newWindow)` — the same method a click on a chat
-link routes through, so `Alt` (sound only) and `Shift` (its own window) mean exactly what
-they mean in chat. Volume and mute act on `media.Volume`, the one shared level, rather
+`MediaWindowOverlay.play(url, audioOnly, newWindow, PlayOrigin.KEYBIND)` — the same method
+a click on a chat link routes through, so `Alt` (sound only) and `Shift` (its own window)
+mean exactly what they mean in chat, and the only thing that differs is the origin an
+interceptor is told. Volume and mute act on `media.Volume`, the one shared level, rather
 than on any particular player.
+
+`ModKeybinds.all()` appends whatever addons handed over through `api.input.MediaKeybinds`,
+so an addon's mapping is registered by both bridges with no loader-side code of its own,
+and `KeybindHandler.pollAddonBindings()` consumes it after the mod's own — outside the
+context check, because an addon's binding may perfectly well mean something with nothing
+playing. That list is read at one fixed moment during startup, which is why the API says
+an addon has to register from its entry point: a mapping handed over later is polled but
+was never given to the game, so it has no key and never fires.
 
 ### Shortcuts over a screen that hosts the windows (`gui/WindowShortcuts`)
 
@@ -1080,7 +1191,16 @@ event's modifier bits, so the shortcuts are `Cmd`-based on macOS like the rest o
 Targets are chosen by capability, not simply by z-order: a transport key goes to the
 front-most window that `hasTransport()`, so a pinned image over a playing video does not
 swallow the space bar, and `Ctrl+F` goes to the front-most window that
-`supportsTheater()`.
+`supportsTheater()`. A window held by `SyncControl.setLocked` still *takes* a transport
+key and does nothing with it: letting a `Space` fall through into the chat field would be
+a worse answer than nothing happening.
+
+Addon shortcuts (`api.input.MediaKeybinds.registerWindowShortcut`) are offered the key
+**only once the table above has declined**, so an addon can never shadow a built-in; each
+matching registration is tried in turn and the first that answers `true` takes the key.
+The API refuses an unmodified letter or digit at registration time rather than documenting
+the rule, because an addon author who gets it wrong finds out from a player who could not
+say "next" in chat.
 
 ## Themes (`gui/Theme`, `gui/ThemeName`)
 
@@ -1091,8 +1211,8 @@ and the next frame is drawn in the new palette, with nothing to invalidate becau
 nothing caches a colour past the draw that used it. The fields are consequently **not
 final**; they are the active palette, not constants.
 
-Four palettes: `DARK` (the mod's own), `CONTRAST` (opaque black, white edges, no state
-told apart by a shade of grey), `MINECRAFT` (the translucent `0xC0101010` a vanilla
+Three built-in palettes: `DARK` (the mod's own), `CONTRAST` (opaque black, white edges, no
+state told apart by a shade of grey), `MINECRAFT` (the translucent `0xC0101010` a vanilla
 screen dims the world with, its grey widget edges and its `§a`/`§e`/`§c` accents). 
 Each is written as **what it changes about `DARK`**, which is re-installed in
 full first — so a role a theme does not mention keeps the dark value deliberately, and
@@ -1100,15 +1220,34 @@ can never be left holding the *previous* theme's. `ThemeTest` walks every role b
 reflection to pin that: each theme leaves every role set, switching away and back
 restores the palette exactly, and no theme is the dark one under another name.
 
-The setting is an `EnumOption<ThemeName>`, read by `Theme.refresh()` once a client tick
-from `MediaWindowOverlay.clientTick`. A poll rather than a notification: the value can
-move from the option's widget, from its reset button or from the config file being
-re-read, and comparing two enum references costs nothing while making all three work
-without anybody remembering to announce anything.
+### Addon palettes (`api/theme`)
 
-`EnumOption` labels its value with `<translationKey>.<constant in lower case>` when the
-language files carry that key and the bare constant name when they do not, so the theme
-names are translated and every other enum option keeps exactly the label it had.
+API 3.2 opened this up, and the "every colour comes from `Theme`" invariant is the whole
+reason it could be: an addon's theme is a `Map<ThemeRole, Integer>` and not a rewrite.
+`api.theme.ThemeRole` mirrors `Theme`'s fields one for one, `MediaTheme` is an id, a name
+and the roles it overrides, and `MediaThemes` is the static registry (static for the same
+reason every other extension point here is — `api` knows about no loader, and a theme has
+to be registrable before the mod is up). `Theme.apply(String id)` installs the dark
+baseline and then writes an addon's roles over it, exactly as the two built-in
+alternatives are written; `Theme.set(ThemeRole, int)` is the one switch that turns a role
+name into a field, written out rather than reflected because these are static fields the
+whole mod reads every frame.
+
+That is what turned the setting from an `EnumOption<ThemeName>` into
+**`config/ThemeOption`**, a `ConfigOption<String>` whose choices are recomputed on every
+click: an enum cannot grow at runtime. The built-in ids are the `ThemeName` constants in
+lower case, which is what makes it a compatible change rather than a migration —
+`deserialize` lower-cases what it reads, so a file written before 3.2 says `DARK` and is
+read as `dark`. An id naming an addon theme that is **not installed** is *kept*, not
+reset: the addon may be back tomorrow, and quietly rewriting somebody's setting because a
+mod was temporarily removed is the kind of thing that is only noticed after it has
+happened three times. `Theme` logs it once and draws the dark palette meanwhile.
+
+`Theme.refresh()` reads the setting once a client tick from
+`MediaWindowOverlay.clientTick`. A poll rather than a notification: the value can move
+from the option's widget, from its reset button or from the config file being re-read, and
+comparing two strings costs nothing while making all three work without anybody
+remembering to announce anything.
 
 ## Media controls without the chat (`gui/MediaControlScreen`)
 
@@ -1193,6 +1332,171 @@ bottom-right (anchor group 1), reserves an 18 px control bar and adds a hide but
 `AudioWindow` is a compact bar anchored bottom-right (anchor group 2) with a 16 px
 control bar and a hide button. Each group cascades independently, so images, videos and
 audio bars fan out without landing on top of one another.
+
+## Policy: saying no (`api/policy`, and the four places that ask)
+
+`PlaybackEvent` reports what happened. API 3.2 added the other half — the questions asked
+*before* something happens — as `api.policy.MediaInterceptor`, with
+`api.policy.MediaInterceptors` reducing every registered one to a single answer. That
+reduction lives in `api` for the same reason `PlaybackEvents.post` does: the registry is
+static (the one discovery story that works on both loaders), so the "first veto wins, a
+rewrite threads through the rest, one that throws abstains" rule belongs beside it rather
+than being written out again at each place that asks.
+
+Four places ask, and between them they cover every way media starts:
+
+- **`ChatLinkRewriter.rewrite`** — `allowChatLink` and `decorateLabel`, per link per
+  message, after the mod's own filters (see *Rewrite incoming chat*).
+- **`MediaWindowOverlay.play(MediaRequest, PlayOrigin)`** — the request path. The whole
+  request is offered and whatever comes back is what plays.
+- **`MediaWindowOverlay.play(String, boolean, boolean, PlayOrigin)`** — the click path.
+  It builds an equivalent request *only when something is registered*, because
+  `MediaRequest.of` throws on a link this path is allowed to be handed and simply not
+  play, and because building one per click for nobody would be work for nothing. A
+  request that comes back **rewritten** is handed to the request path, which is the only
+  one that can honour everything an interceptor may have changed.
+- **`MediaPlayerContext.gate`** — the 2.0 `long`-id methods. These take a URL and give
+  back an id, so only the *URL* of a rewritten request can be honoured; a placement or a
+  chrome an interceptor also set has nowhere to go. That is the price of the 2.0 shape,
+  and it is written down in the API docs rather than half-applied.
+
+`PlayOrigin` is threaded from each call site — `CHAT_CLICK` from a click on a label,
+`KEYBIND` from the clipboard binding, `HISTORY` from the history screen, `PLAYLIST` from
+the playlist screen and `playPlaylist`, `API` from everything an addon calls. It is the
+distinction the whole thing exists for: an addon almost always wants to gate what other
+people put in front of the player, not its own calls.
+
+Routing the playlist screen's play button through the request path had one visible
+consequence worth recording: `PlayerWindowManager.play` now shuffles the URL order
+*before* opening the first window when `request.isShuffle()`, the way `playAll` always
+did. Turning the flag on afterwards reorders what is *queued* and leaves the first track
+as whatever happened to be written first, so "shuffle this playlist" would have played the
+same opening track every time.
+
+## Addon buttons on a window (`gui/WindowActions`, `api/window/WindowAction`)
+
+`WindowButtons` already owned the corner row's positions and hit tests, which is what made
+this a list to iterate rather than a redesign. An addon's buttons are packed **left of the
+heart**, so every built-in button stays where the user already expects it, and the row's
+`leftEdge()` — where a window title has to stop — moves with them.
+
+`gui/WindowActions` is the addon boundary and nothing else: it caps the list, translates an
+`ActionIcon` name into one of `Glyphs`' drawings, and swallows-and-logs every call into
+somebody else's code. That matters because `appliesTo` is asked from inside a draw, every
+frame. `MediaWindow` resolves the list once per layout and holds it, rather than asking
+again at click time: the two have to agree about what is under the cursor, and an action's
+`appliesTo` may answer differently between them.
+
+**The cap is three, and there is no overflow menu.** The roadmap sketched one; what shipped
+refuses the fourth button instead. The row's width is part of a window's *minimum* width
+(`minContentWidth()` counts the addon buttons), so an unbounded row would push a small
+player's title out entirely — and a popup menu inside a window that is not a screen widget
+is a great deal of machinery for a case no addon has yet.
+
+`ActionIcon` is a closed enum rather than the sketch's `int glyph()`. The mod's icons are
+drawn from primitives at the one size the row uses, in whatever colour the hover state
+calls for; there is no sprite id to hand out, and a name from a fixed list is what keeps an
+addon's button looking like the mod's own in every theme.
+
+## Watch-together (`gui/MediaSyncControl`, `api/sync`)
+
+**The mod ships no protocol and no server side.** It ships the two hooks an addon that owns
+a network channel needs, and `SyncAction` — deliberately flat and primitive, with no
+Minecraft types and no handle — as the thing that goes on the wire.
+
+Broadcasting is *derived*, not emitted at each transport call site, for the same reason the
+playback events are: pause, resume and seek are reachable from the control bar, the
+keyboard, a key binding and the API, and one derivation covers all four.
+`MediaWindow.postPlaybackEvent` is where both happen. The three transitions an event cannot
+express — a queue advancing forward or back, and something being added to it — are
+broadcast by `QueuedMediaWindow` where they happen, because `NEXT` and a plain `STARTED`
+look identical from outside.
+
+`MediaSync.whileApplying` is what breaks the echo: everything `SyncControl.apply` does runs
+with broadcasting suppressed, so a remote pause does not pause locally, get broadcast, get
+applied by the sender and ping-pong forever. It is a plain field rather than a
+`ThreadLocal` because everything that applies an action and everything that derives one
+runs on the client thread.
+
+**`driftCorrect` is the piece worth having in the mod.** `video/PlaybackClock.driftCorrect`
+slides the offset the audio line's position is measured from, bounded twice over — 50 ms
+per call so a correction is gradual, and 2 s in total past which it answers `SEEK`. The
+frames' presentation times shift with it and the picture slides into place over a few
+ticks with nothing torn down; repeated seeks from outside cannot do that, because each one
+restarts the pipeline and a party correcting twice a second never plays anything at all.
+It is pure arithmetic over the clock's own fields, so `PlaybackClockTest` drives it with no
+audio line at all. `AudioPlayer.driftCorrect` is the honest version of the same contract: a
+track's line *is* its position and cannot be skewed without resampling, so inside the
+tolerance nothing happens and outside it the track seeks.
+
+**`setLocked` governs hands, not the player.** The flag lives on `MediaWindow` and is
+checked in the three *input* paths — `routeClick` (which still allows closing, hiding,
+copying, moving and resizing, and declines only `onControlClick`), `WindowShortcuts.handle`,
+and `PlayerWindowManager.unlockedFrontMost` for the key bindings. It is deliberately **not**
+checked inside the transport methods, because `WindowHandle` and `SyncControl.apply` go
+through those: an addon that locked a window still has to be able to drive it. The window
+says why through `Tooltips.request`, asked first in the frame so a hovered button's own
+tooltip still wins.
+
+## Diagnostics (`api/diag`, `gui/PlaybackFailures`)
+
+`MediaPlayerStats` is a snapshot assembled by `MediaPlayerContext.stats()` from counters
+that all already existed — the three window lists, `SurfaceRegistry.size()` and
+`decodingVideoCount()`, the three caches, `MediaBinaries.isReady()`. `MediaCache` gained
+`estimatedBytes()`, summed on demand rather than kept as a running total: it is asked for
+diagnostics, not per frame, and a running total would have to be maintained correctly at
+four sites for a number nothing depends on.
+
+`MediaPlayerLog` is the failure sink, and what it carries is `media/PlaybackError`'s
+*classification* — the readable line, the hint and a stable cause id — not raw stderr. That
+is the whole point: a pack maintainer surfacing "ffmpeg failed on this link" should get the
+same words the mod's own error panel would have used. `gui/PlaybackFailures` is the one
+place the conversion happens, called from `MediaWindow.postPlaybackEvent` on the `FAILED`
+transition, so it fires once per failure rather than once per tick a player spends failed.
+The 32-entry backlog is cleared on disconnect with the caches, because the screen that
+wants to show a failure is very often opened *after* it happened.
+
+## Addon image decoders and readable pixels
+
+`ImagePreviewCache.decode` offers the downloaded bytes to every registered
+`api.image.ImageDecoder` before the built-in paths, so an addon supplying WebP or APNG
+covers every picture the mod loads — a chat preview, a pinned image, an image surface.
+A decoder that claims a picture and then throws does **not** fall through to the built-ins:
+it said the picture was its, and quietly producing a different one would hide the bug. One
+that answers `null` does fall through. `DecodedImage` validates its own shape in the
+canonical constructor, because those arrays become the length of a native write into a
+texture's pixel block — a frame that is not `width * height` long is an out-of-bounds
+write, not a wrong picture. `GifDecoder.toNativeImage` gained an `int[]` overload so both
+paths share one conversion and one version guard.
+
+Reading pixels back (`MediaSurface.pixels()`) is **opt-in per surface**. Retaining the
+first frame's ARGB for every chat preview would roughly double what the picture cache
+costs to answer a question almost nobody asks, so `ImagePreviewCache.getOrLoad(url,
+keepPixels)` takes the copy only when something asked, accounts it in
+`estimatedSizeBytes`, and drops-and-reloads an entry that was already loaded without it —
+the copy can only be taken while the frames are still decoded, and that is a re-download
+that happens at most once per URL per session. `keepPixels` is part of the
+surface-sharing key, like a video's options are. What comes out is a fresh copy each call:
+the buffer the texture was uploaded from is native memory the texture manager owns, and
+lending it out would make every addon a potential use-after-free.
+
+## m3u, and a way into an addon's screen
+
+`playlist/M3u` is pure — no file, no store, one `Component` for a title — so its rules are
+unit-tested rather than argued about. Import passes every line through `Urls.isHttp`, and
+then `IMediaPlayerAPI.importM3u` passes them through `Playlist.add` as well, which applies
+the same gate a second time: an m3u file is a list of *paths*, and that is exactly the
+shape that would otherwise hand ffmpeg a `file:` URL. `#EXTINF` titles are read and
+discarded — the mod resolves its own, and a stored one goes stale the first time a video is
+renamed. Export writes whatever `MediaTitleCache.peek` already holds and probes nothing,
+and flattens newlines out of a title so a name from page metadata cannot add a line to the
+file.
+
+`gui/ScreenTabs` adds an addon's button to the playlist and history screens' footer row.
+**Buttons, not a tab strip:** those two screens are not a tabbed pair, and turning them
+into one to host this would be a redesign of the mod's own UI for a feature that is asking
+for a way *in*. An addon gets what a tab would have given it — a labelled way from the
+library to its own screen, and the screen it came from to go back to.
 
 ## Building & installing
 
@@ -1304,11 +1608,17 @@ for what the mod does in-game.
   for YouTube), expose a small `static` predicate on it.
   External mods add sources through the API: `MediaPlayerAPI.registerSource()` or a
   `MediaSourceProvider`. See `API-DOCUMENTATION.md` for the developer guide.
-- **Shared volume.** There is one level for everything in `media.Volume`. Both
-  `VideoPlayer` and `AudioPlayer` read/write it and apply it via `Volume.apply`; don't
-  reintroduce a per-engine volume field.
+- **Shared volume, and the chain around it.** There is still one level for everything in
+  `media.Volume`; both engines read/write it and don't reintroduce a per-engine volume
+  field. What sits around it since API 3.1.0 is a multiplication, not a second volume:
+  `effective = master x channelGain x handleGain x attenuation`. The middle two and the
+  last live on `media.AudioGain`, one per *sound source* (a window, a surface, a headless
+  track), handed to whichever player is currently playing for it. Add a factor there, not
+  a second level here — and keep the split: everything expensive is computed in
+  `clientTick()` on the client thread and published as a `volatile float` the pump reads.
 - **Audio vs. video engines.** They are siblings under the shared `media` layer
-  (`MediaUrlResolver`, `MediaTitleCache`, `Volume`) and must not depend on each other.
+  (`MediaUrlResolver`, `MediaTitleCache`, `Volume`, `AudioMixer`/`AudioGain`,
+  `PlayerHandle`) and must not depend on each other.
   Put anything they both need in `media`, not in one engine. The audio engine is the
   simpler one (no frame queue / texture); its seek/pause model mirrors the video player's.
 - **Shared queue.** `gui/PlayQueue` is the one queue model for both player windows, and

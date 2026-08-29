@@ -1,10 +1,12 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.image.ImagePreviewCache;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Rewrites incoming chat so image and Tenor links become a gold, clickable
@@ -26,6 +28,11 @@ public final class ImageChatHandler {
         public boolean matches(String url) {
             MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isImage(url) && MediaFilters.allowsUrl(url);
+        }
+
+        @Override
+        public MediaKind kind() {
+            return MediaKind.IMAGE;
         }
 
         @Override
@@ -58,7 +65,15 @@ public final class ImageChatHandler {
      * loader's chat event calls this and puts the result back.
      */
     public static Component rewrite(Component message) {
-        return ChatLinkRewriter.rewrite(message, IMAGE_LINKS);
+        return rewrite(message, null);
+    }
+
+    /**
+     * The same, told who sent the message — which is what a registered
+     * {@code MediaInterceptor} is asked about each link with.
+     */
+    public static Component rewrite(Component message, @Nullable String sender) {
+        return ChatLinkRewriter.rewrite(message, IMAGE_LINKS, sender);
     }
 
     /** Drops every pinned image and the preview cache when leaving a world. */

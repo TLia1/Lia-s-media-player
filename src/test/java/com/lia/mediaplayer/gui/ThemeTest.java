@@ -1,5 +1,10 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.theme.MediaTheme;
+import com.lia.mediaplayer.api.theme.MediaThemes;
+import com.lia.mediaplayer.api.theme.ThemeRole;
+
+import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -113,8 +118,35 @@ class ThemeTest {
     @Test
     void applyingAThemeRecordsIt() {
         Theme.apply(ThemeName.CONTRAST);
-        assertEquals(ThemeName.CONTRAST, Theme.active());
+        assertEquals("contrast", Theme.active());
         Theme.apply(ThemeName.DARK);
-        assertEquals(ThemeName.DARK, Theme.active());
+        assertEquals("dark", Theme.active());
+    }
+
+    @Test
+    void anUnknownThemeIdFallsBackToTheDarkPalette() {
+        Theme.apply(ThemeName.DARK);
+        Map<String, Integer> dark = snapshot();
+        Theme.apply("someaddon:gone");
+        assertEquals(dark, snapshot());
+        Theme.apply(ThemeName.DARK);
+    }
+
+    @Test
+    void aRegisteredThemeOverwritesOnlyTheRolesItNames() {
+        Theme.apply(ThemeName.DARK);
+        Map<String, Integer> dark = snapshot();
+        MediaThemes.register(MediaTheme.builder("themetest:accent", Component.literal("Accent"))
+                .set(ThemeRole.FILL, 0xFF123456)
+                .build());
+        Theme.apply("themetest:accent");
+        Map<String, Integer> themed = snapshot();
+        assertEquals(0xFF123456, themed.get("FILL"));
+        dark.forEach((role, colour) -> {
+            if (!role.equals("FILL")) {
+                assertEquals(colour, themed.get(role), role + " should have kept the dark value");
+            }
+        });
+        Theme.apply(ThemeName.DARK);
     }
 }

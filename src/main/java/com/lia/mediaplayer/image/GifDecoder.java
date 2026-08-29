@@ -253,7 +253,15 @@ public final class GifDecoder {
     public static NativeImage toNativeImage(BufferedImage source) {
         int width = source.getWidth();
         int height = source.getHeight();
-        int[] argb = source.getRGB(0, 0, width, height, null, 0, width);
+        return toNativeImage(source.getRGB(0, 0, width, height, null, 0, width), width, height);
+    }
+
+    /**
+     * The same, from a packed {@code 0xAARRGGBB} array that did not come from a
+     * {@link BufferedImage} — which is the shape an addon's {@code ImageDecoder} hands
+     * over. The conversion is identical; only the source of the pixels differs.
+     */
+    public static NativeImage toNativeImage(int[] argb, int width, int height) {
         NativeImage image = new NativeImage(NativeImage.Format.RGBA, width, height, false);
         if (TextureBridge.writeArgb(image, argb)) {
             return image;

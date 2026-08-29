@@ -40,7 +40,7 @@ other players see, and it is **not required by anyone else** on the server.
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions) for the full list
 - **Side:** client-only (`Dist.CLIENT` / `"environment": "client"`)
 - **API mod id:** `liasmediaplayerapi` — ships in the same JAR (a second mod entry on NeoForge,
-  a `provides` id on Fabric), currently API <!-- api_version -->`2.1.0`<!-- /api_version -->. The
+  a `provides` id on Fabric), currently API <!-- api_version -->`3.1.0`<!-- /api_version -->. The
   API is licensed under the **MIT License**; other mods can freely depend on it to register
   custom media sources, control playback, and receive events. The same addon code works on both
   loaders.

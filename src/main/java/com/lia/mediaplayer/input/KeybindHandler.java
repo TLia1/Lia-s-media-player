@@ -1,6 +1,9 @@
 package com.lia.mediaplayer.input;
 
+import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.input.MediaKeybinds;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
 import com.lia.mediaplayer.gui.ConfigScreen;
 import com.lia.mediaplayer.gui.Keys;
 import com.lia.mediaplayer.gui.MediaControlScreen;
@@ -98,6 +101,31 @@ public final class KeybindHandler {
         while (ModKeybinds.PLAY_CLIPBOARD.consumeClick()) {
             playClipboard();
         }
+
+        pollAddonBindings();
+    }
+
+    /**
+     * The same poll for the bindings addons handed over — see
+     * {@code api.input.MediaKeybinds}.
+     *
+     * <p>After the mod's own, and outside the context check above, because an addon's
+     * binding is its own business: it may perfectly well want to do something with
+     * nothing playing. A consumer that throws is logged and the binding stays
+     * registered — one broken addon must not stop the others, nor the mod's own keys,
+     * which are polled before this.</p>
+     */
+    private static void pollAddonBindings() {
+        for (MediaKeybinds.Binding binding : MediaKeybinds.bindings()) {
+            while (binding.mapping().consumeClick()) {
+                try {
+                    binding.onPress().accept(Minecraft.getInstance());
+                } catch (RuntimeException e) {
+                    LiasMediaPlayer.LOGGER.error("An addon key binding ({}) threw",
+                            binding.mapping().getName(), e);
+                }
+            }
+        }
     }
 
     /**
@@ -123,6 +151,6 @@ public final class KeybindHandler {
         if (url.isEmpty()) {
             return;
         }
-        MediaWindowOverlay.play(url, Keys.altDown(), Keys.shiftDown());
+        MediaWindowOverlay.play(url, Keys.altDown(), Keys.shiftDown(), PlayOrigin.KEYBIND);
     }
 }

@@ -2,6 +2,7 @@ package com.lia.mediaplayer.video;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.tools.FFmpegCli;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +20,11 @@ public class AudioOutput {
 
     @Nullable
     private volatile SourceDataLine audioLine;
-    private volatile float lastAppliedGain = -1f;
+    /**
+     * This video's own share of the mix — the window's or the surface's, handed down by
+     * {@code VideoPlayer.setAudioGain}. {@link AudioGain#detached()} until then.
+     */
+    private volatile AudioGain audioGain = AudioGain.detached();
     private int audioSampleRate;
     private int audioChannels;
     private final String url;
@@ -57,6 +62,7 @@ public class AudioOutput {
             SourceDataLine line = (SourceDataLine) AudioSystem.getLine(lineInfo);
             line.open(format);
             line.start();
+            audioGain.onLineOpened();
             applyGain(line);
             this.audioLine = line;
             this.audioSampleRate = sampleRate;
@@ -76,9 +82,22 @@ public class AudioOutput {
         }
     }
 
+    /** The gain this output multiplies in — see {@link AudioGain}. */
+    public AudioGain gain() {
+        return audioGain;
+    }
+
+    /** Hands this output the gain to apply. Safe to call while the line is open. */
+    public void setGain(AudioGain gain) {
+        if (gain != null) {
+            audioGain = gain;
+            gain.onLineOpened(); // a different gain has never written to this line
+        }
+    }
+
     private void applyGain(SourceDataLine line) {
         MediaPlayerContext ctx = MediaPlayerContext.get();
-        lastAppliedGain = ctx.getVolumeManager().apply(line, lastAppliedGain);
+        audioGain.apply(line, ctx.getVolumeManager());
     }
 
     public void close() {

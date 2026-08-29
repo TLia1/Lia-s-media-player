@@ -1,8 +1,15 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.theme.MediaTheme;
+import com.lia.mediaplayer.api.theme.MediaThemes;
+import com.lia.mediaplayer.api.theme.ThemeRole;
 
 import net.minecraft.util.Mth;
+
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * The mod's whole palette, in one place — the colour equivalent of {@link Glyphs}.
@@ -147,34 +154,110 @@ final class Theme {
     // The active theme
     // ------------------------------------------------------------------
 
-    /** Which palette is installed. Never null: the dark one is installed on load. */
-    private static ThemeName active;
+    /**
+     * Which palette is installed, by id. Never null: the dark one is installed on load.
+     *
+     * <p>A string rather than a {@link ThemeName} since API 3.2, because an addon can
+     * register one ({@code api.theme.MediaThemes}) and an enum cannot grow at runtime.
+     * The mod's own three are the enum constants in lower case.</p>
+     */
+    private static String active;
 
     static {
-        apply(ThemeName.DARK);
+        apply(ThemeName.DARK.name().toLowerCase(Locale.ROOT));
     }
 
-    /** The theme currently installed. */
-    static ThemeName active() {
+    /** The id of the theme currently installed. */
+    static String active() {
         return active;
     }
 
+    /** Installs one of the mod's own three palettes. */
+    static void apply(ThemeName name) {
+        apply(name.name().toLowerCase(Locale.ROOT));
+    }
+
     /**
-     * Installs {@code name}'s palette, replacing every role.
+     * Installs the palette {@code id} names, replacing every role.
      *
      * <p>The dark palette goes down first whatever is asked for, so a theme only has to
-     * write the roles it actually changes — see the class note.</p>
+     * write the roles it actually changes — see the class note. That is what makes an
+     * addon's theme a {@code Map} of the roles it cares about rather than all
+     * thirty-five, and what lets one written a year ago colour a UI that has grown
+     * since.</p>
+     *
+     * <p>An id naming nothing installed leaves the dark baseline in place, which is what
+     * a config file that still names a removed addon's theme gets. The setting itself is
+     * not rewritten — see {@code config.ThemeOption}.</p>
      */
-    static void apply(ThemeName name) {
+    static void apply(String id) {
         installDark();
-        switch (name) {
-            case DARK -> {
-                // the baseline itself
+        String wanted = id == null ? "" : id.strip().toLowerCase(Locale.ROOT);
+        if (wanted.equals("contrast")) {
+            installContrast();
+        } else if (wanted.equals("minecraft")) {
+            installMinecraft();
+        } else if (!wanted.equals("dark")) {
+            MediaTheme theme = MediaThemes.byId(wanted);
+            if (theme == null) {
+                LiasMediaPlayer.LOGGER.warn(
+                        "No media player theme is registered as \"{}\"; using the dark palette", wanted);
+            } else {
+                installCustom(theme);
             }
-            case CONTRAST -> installContrast();
-            case MINECRAFT -> installMinecraft();
         }
-        active = name;
+        active = wanted;
+    }
+
+    /** Writes an addon's palette over the dark baseline. */
+    private static void installCustom(MediaTheme theme) {
+        theme.colors().forEach(Theme::set);
+    }
+
+    /**
+     * One role, by name. The switch is written out rather than reached by reflection
+     * because these are static fields the whole mod reads every frame: a map lookup per
+     * pixel is the alternative, and a name typo caught by the compiler is worth more
+     * than the thirty-five lines.
+     */
+    private static void set(ThemeRole role, int argb) {
+        switch (role) {
+            case WINDOW_BG -> WINDOW_BG = argb;
+            case TITLE_BAR_BG -> TITLE_BAR_BG = argb;
+            case CONTROL_BAR_BG -> CONTROL_BAR_BG = argb;
+            case CORNER_BUTTON_BG -> CORNER_BUTTON_BG = argb;
+            case PLACEHOLDER -> PLACEHOLDER = argb;
+            case PANEL_BG -> PANEL_BG = argb;
+            case PANEL_HEADER_BG -> PANEL_HEADER_BG = argb;
+            case LIST_BG -> LIST_BG = argb;
+            case POPUP_BG -> POPUP_BG = argb;
+            case PREVIEW_BG -> PREVIEW_BG = argb;
+            case CHIP_BG -> CHIP_BG = argb;
+            case CHIP_HOVER_BG -> CHIP_HOVER_BG = argb;
+            case BANNER_BG -> BANNER_BG = argb;
+            case BORDER -> BORDER = argb;
+            case BORDER_FOCUSED -> BORDER_FOCUSED = argb;
+            case BORDER_SUBTLE -> BORDER_SUBTLE = argb;
+            case ROW_BG -> ROW_BG = argb;
+            case ROW_HOVER_BG -> ROW_HOVER_BG = argb;
+            case ROW_SELECTED_BG -> ROW_SELECTED_BG = argb;
+            case TRACK -> TRACK = argb;
+            case FILL -> FILL = argb;
+            case KNOB -> KNOB = argb;
+            case SCROLL_TRACK -> SCROLL_TRACK = argb;
+            case SCROLL_THUMB -> SCROLL_THUMB = argb;
+            case TEXT -> TEXT = argb;
+            case TEXT_SUBTLE -> TEXT_SUBTLE = argb;
+            case TEXT_DIM -> TEXT_DIM = argb;
+            case ICON -> ICON = argb;
+            case ICON_HOVER -> ICON_HOVER = argb;
+            case ICON_ACTIVE -> ICON_ACTIVE = argb;
+            case ICON_INACTIVE -> ICON_INACTIVE = argb;
+            case ICON_DISABLED -> ICON_DISABLED = argb;
+            case PRESS_FLASH -> PRESS_FLASH = argb;
+            case DANGER -> DANGER = argb;
+            case MUTED -> MUTED = argb;
+        }
     }
 
     /**
@@ -183,16 +266,16 @@ final class Theme {
      * <p>Polled once a client tick rather than pushed from the settings screen: the
      * value can change from the option's widget, from its reset button, or from the
      * config file being re-read, and a poll covers all three without every one of them
-     * having to remember to notify anybody. Comparing two enum references costs
-     * nothing, and installing only happens on the tick the value actually moves.</p>
+     * having to remember to notify anybody. Comparing two strings costs nothing, and
+     * installing only happens on the tick the value actually moves.</p>
      */
     static void refresh() {
         MediaPlayerContext context = MediaPlayerContext.getOrNull();
         if (context == null) {
             return;
         }
-        ThemeName wanted = context.getConfigStore().theme();
-        if (wanted != active) {
+        String wanted = context.getConfigStore().themeId();
+        if (!Objects.equals(wanted, active)) {
             apply(wanted);
         }
     }

@@ -1,10 +1,24 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaQueue;
+import com.lia.mediaplayer.api.MediaRequest;
+import com.lia.mediaplayer.api.PlaybackState;
+import com.lia.mediaplayer.api.RepeatMode;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
+import com.lia.mediaplayer.api.event.PlaybackEvents;
+import com.lia.mediaplayer.api.window.WindowAction;
+import com.lia.mediaplayer.api.window.WindowChromeOptions;
+import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Base class for the on-screen media windows (a {@link VideoWindow} or an
@@ -143,6 +157,32 @@ abstract class MediaWindow {
     protected int contentX, contentY, contentW, contentH;
     /** The corner button row; see {@link WindowButtons}. */
     private WindowButtons buttons = WindowButtons.layout(0, 0, false);
+    /**
+     * The addon buttons the row was laid out for, resolved once per layout — see
+     * {@code api.window.WindowAction}. Held rather than re-asked at draw and at click,
+     * because those two have to agree about what is under the cursor, and an action's
+     * {@code appliesTo} may answer differently between them.
+     */
+    private List<WindowAction> windowActions = List.of();
+
+    /**
+     * Whether the local user has been held off this window's transport — see
+     * {@code api.sync.SyncControl.setLocked}.
+     *
+     * <p>It governs <em>hands</em>, not the player: the control bar, the seek bar and
+     * the keyboard shortcuts decline, while {@code SyncControl.apply} and an addon
+     * holding a {@code MediaHandle} still drive it. That is what "the host controls this"
+     * actually means, and it is why the check is here and in the two input paths rather
+     * than inside the transport methods, which the API goes through too.</p>
+     *
+     * <p>Closing and hiding stay allowed whatever this says. A viewer who cannot get out
+     * of a video files that as a crash.</p>
+     */
+    private boolean locked;
+
+    /** What to say while {@link #locked}; {@code null} for the generic message. */
+    @Nullable
+    private Component lockReason;
     private int gripX, gripY;
     /**
      * {@link #TITLE_BAR} or {@code 0}, resolved once per layout so every derived
@@ -195,6 +235,12 @@ abstract class MediaWindow {
     protected abstract String mediaUrl();
 
     /**
+     * What this window is showing, for the history entry every play records, for the
+     * API's handles and for the playback events.
+     */
+    protected abstract MediaKind mediaKind();
+
+    /**
      * Removes this window from whatever registry owns it and releases its resources.
      * Called when the close button is clicked. Each subclass forwards to its own
      * manager, so {@link MediaWindowOverlay} never needs to know the concrete window
@@ -234,7 +280,18 @@ abstract class MediaWindow {
      * the box — and should keep {@code super}'s figure as their own floor.
      */
     protected int minContentWidth() {
-        return Math.max(MIN_CONTENT, WindowButtons.width(hasHideButton()));
+        return Math.max(MIN_CONTENT, WindowButtons.width(showsHideButton(), chrome.closeButton(),
+                windowActions.size()));
+    }
+
+    /** {@link #controlBarHeight()}, or nothing at all when the chrome has no controls. */
+    private int effectiveControlBarHeight() {
+        return chrome.controls() ? controlBarHeight() : 0;
+    }
+
+    /** Whether this window both wants a hide button and is allowed one. */
+    protected final boolean showsHideButton() {
+        return hasHideButton() && chrome.hideButton();
     }
 
     /**
@@ -282,6 +339,9 @@ abstract class MediaWindow {
      * panels — so a YouTube window is named by its video, and a direct link by its file.
      */
     protected String windowTitle() {
+        if (titleOverride != null) {
+            return titleOverride.getString();
+        }
         return MediaPlayerContext.get().getTitleCache().getOrLoad(mediaUrl());
     }
 
@@ -381,7 +441,42 @@ abstract class MediaWindow {
         return false;
     }
 
+    /** Whether the user's own transport is being held off — see {@link #locked}. */
+    final boolean isLocked() {
+        return locked;
+    }
+
+    /** Called by {@code MediaSyncControl}; nothing else has any business locking a window. */
+    final void setLocked(boolean value, @Nullable Component reason) {
+        this.locked = value;
+        this.lockReason = value ? reason : null;
+    }
+
+    /** What the window says while it is locked. */
+    private Component lockMessage() {
+        return lockReason != null
+                ? lockReason
+                : Component.translatable("gui.liasmediaplayer.locked");
+    }
+
     boolean togglePlayPause() {
+        return false;
+    }
+
+    /** Resumes, if paused. Part of the transport contract for the API's handles. */
+    boolean play() {
+        return false;
+    }
+
+    boolean pause() {
+        return false;
+    }
+
+    boolean seekTo(long micros) {
+        return false;
+    }
+
+    boolean seekToFraction(double fraction) {
         return false;
     }
 
@@ -389,6 +484,15 @@ abstract class MediaWindow {
      * Seeks {@code deltaMicros} from the current position, clamped into the track.
      */
     boolean seekBy(long deltaMicros) {
+        return false;
+    }
+
+    /**
+     * Converges on {@code targetMicros} rather than jumping to it — the window half of
+     * {@code api.sync.SyncControl.driftCorrect}. A window with no player answers
+     * {@code false}, like the rest of the transport contract.
+     */
+    boolean driftCorrect(long targetMicros, long toleranceMicros) {
         return false;
     }
 
@@ -418,6 +522,208 @@ abstract class MediaWindow {
 
     boolean toggleShuffle() {
         return false;
+    }
+
+    /**
+     * Total length of what is playing, or {@code -1} for a window with no clock behind
+     * it. The companion of {@link #positionMicros()}, and asked for the same reason.
+     */
+    long durationMicros() {
+        return -1;
+    }
+
+    /**
+     * Where playback stands, in the API's terms. A pinned image has no player, and is
+     * simply {@link PlaybackState#PLAYING} for as long as it is on screen.
+     */
+    PlaybackState playbackState() {
+        return PlaybackState.PLAYING;
+    }
+
+    /**
+     * This window's queue as the API sees it, or {@code null} for a window that has
+     * none. Only the player windows do; a pinned image is one picture.
+     */
+    @Nullable
+    MediaQueue queueHandle() {
+        return null;
+    }
+
+    /**
+     * This window's own share of the mix, or {@code null} for a window that makes no
+     * sound. Only the player windows do; a pinned image is one picture.
+     *
+     * <p>Held by the window rather than by the player because it has to outlive one: a
+     * queue advancing swaps the player out, and a gain, a channel or a placement an addon
+     * set must survive that.</p>
+     */
+    @Nullable
+    AudioGain audioControls() {
+        return null;
+    }
+
+    // ------------------------------------------------------------------
+    // The API's view of this window
+    //
+    // A window is what a MediaHandle points at, so the handle is created here rather
+    // than by whoever asks for one: the events posted below carry it, and two callers
+    // asking twice must get the same object back or a listener added to one of them
+    // would never fire.
+    // ------------------------------------------------------------------
+
+    /** Set to false exactly once, by {@link #markDisposed()}. */
+    private boolean alive = true;
+
+    // ------------------------------------------------------------------
+    // What a MediaRequest asked for
+    //
+    // All four default to what the mod's own windows do, so a window nobody made a
+    // request for behaves exactly as it always has.
+    // ------------------------------------------------------------------
+
+    /** Which parts of the furniture this window has — see {@link WindowChromeOptions}. */
+    private WindowChromeOptions chrome = WindowChromeOptions.full();
+
+    /** Whether this window retires itself once its queue has run out. */
+    private boolean closeWhenEnded = true;
+
+    /**
+     * Whether this window's geometry is written back to {@code windows.json}.
+     *
+     * <p>Off for a window the API opened, and that default is the important half of the
+     * feature rather than a detail: the store is keyed by window <em>kind</em>, so an
+     * addon parking a player in a corner would otherwise overwrite where the user likes
+     * their own video window to open — every session, invisibly.</p>
+     */
+    private boolean persistGeometry = true;
+
+    /** A title the caller supplied, in place of the one the mod resolves. */
+    private Component titleOverride;
+
+    /**
+     * Applies everything in {@code request} that is the window's business. Called by the
+     * manager between building the window and its first layout, so nothing here is ever
+     * seen changing.
+     */
+    final void applyRequest(MediaRequest request) {
+        chrome = request.chrome();
+        closeWhenEnded = request.isCloseWhenEnded();
+        persistGeometry = request.isPersistGeometry();
+        titleOverride = request.title();
+        placement.request(request.placement(), request.sizing());
+    }
+
+    final WindowChromeOptions chrome() {
+        return chrome;
+    }
+
+    final void setChrome(WindowChromeOptions value) {
+        chrome = value == null ? WindowChromeOptions.full() : value;
+    }
+
+    /**
+     * Whether this window retires itself once there is nothing left to play — see
+     * {@code MediaRequest.closeWhenEnded}.
+     */
+    final boolean closesWhenEnded() {
+        return closeWhenEnded;
+    }
+
+    final boolean persistsGeometry() {
+        return persistGeometry;
+    }
+
+    final void setPersistGeometry(boolean value) {
+        persistGeometry = value;
+    }
+
+    /** The window's geometry, for {@code MediaWindowHandle}. */
+    final WindowPlacement placement() {
+        return placement;
+    }
+
+    /** Whether the control bar is drawn and laid out at all. */
+    protected final boolean controlsEnabled() {
+        return chrome.controls();
+    }
+
+    private WindowHandle handle;
+
+    /**
+     * This window as the public API sees it. Created on first use — most windows are
+     * opened from chat and nobody ever asks — and then kept, because it carries the
+     * per-handle listeners.
+     */
+    final WindowHandle handle() {
+        if (handle == null) {
+            handle = new WindowHandle(this);
+        }
+        return handle;
+    }
+
+    /**
+     * Whether this window still exists. False once its manager has let go of it —
+     * closed, evicted past the window cap, or dropped on disconnect.
+     */
+    final boolean isAlive() {
+        return alive;
+    }
+
+    /**
+     * Announces that this window has gone for good, and posts {@link PlaybackEvent.Type#STOPPED}.
+     *
+     * <p>Called by the managers, from all three ways a window can go away, rather than
+     * from {@link #close()}: two of the three (the eviction past the cap, the sweep on
+     * disconnect) never go through {@code close()} at all, and those are exactly the
+     * cases where an addon holding a handle is otherwise left calling into nothing.</p>
+     */
+    final void markDisposed() {
+        if (!alive) {
+            return;
+        }
+        postPlaybackEvent(PlaybackEvent.Type.STOPPED);
+        alive = false;
+        // Nothing else will ever fire on this handle, and an addon that forgot to
+        // unregister must not keep the window's listeners alive for the session.
+        handle().clearListeners();
+    }
+
+    /**
+     * Builds a {@link PlaybackEvent} describing this window right now and dispatches it
+     * to this handle's own listeners and to the global {@link PlaybackEvents}.
+     */
+    final void postPlaybackEvent(PlaybackEvent.Type type) {
+        WindowHandle target = handle();
+        PlaybackEvent event = new PlaybackEvent(type, playerKind(), mediaUrl(),
+                playbackState(), Math.max(0, positionMicros()), Math.max(0, durationMicros()),
+                target);
+        target.dispatch(event);
+        PlaybackEvents.post(event);
+        // The two things derived from the same transitions, and derived here for the same
+        // reason: pause, resume and seek are reachable from four places and this is the
+        // one they all end up at.
+        MediaSyncControl.broadcast(getId(), event.getUrl(), type, event.getPositionMicros());
+        if (type == PlaybackEvent.Type.FAILED) {
+            PlaybackFailures.report(mediaUrl(), mediaKind(), errorText());
+        }
+    }
+
+    /**
+     * The raw diagnostic behind a {@link PlaybackEvent.Type#FAILED}, or {@code null} for
+     * a window with no player to have failed. Overridden by the player windows, which are
+     * the only ones that can fail.
+     */
+    @Nullable
+    String errorText() {
+        return null;
+    }
+
+    private PlaybackEvent.PlayerKind playerKind() {
+        return switch (mediaKind()) {
+            case VIDEO -> PlaybackEvent.PlayerKind.VIDEO;
+            case AUDIO -> PlaybackEvent.PlayerKind.AUDIO;
+            case IMAGE -> PlaybackEvent.PlayerKind.IMAGE;
+        };
     }
 
     /**
@@ -492,11 +798,11 @@ abstract class MediaWindow {
         restoreStateOnce();
         placement.applyPendingWidth(srcW, sourceSizeKnown());
 
-        titleBarH = hasTitleBar() ? TITLE_BAR : 0;
+        titleBarH = hasTitleBar() && chrome.titleBar() ? TITLE_BAR : 0;
         WindowPlacement.Size size = placement.solve(
                 srcW, srcH, screenWidth, screenHeight,
                 computeAutoScale(srcW, srcH, screenWidth, screenHeight),
-                titleBarH, controlBarHeight(),
+                titleBarH, effectiveControlBarHeight(),
                 minContentWidth(), maxContentWidth(screenWidth),
                 openScale());
         contentW = size.contentW();
@@ -513,6 +819,12 @@ abstract class MediaWindow {
         if (placement.isTheater()) {
             boxX = Math.max(0, (screenWidth - boxW) / 2);
             boxY = Math.max(0, (screenHeight - boxH) / 2);
+        } else if (placement.hasRequestedPosition()) {
+            // Re-resolved every pass rather than pinned once: that is what lets a
+            // relative or anchored placement mean the same thing after the window is
+            // resized or the GUI scale changes.
+            boxX = placement.requestedX(screenWidth, boxW);
+            boxY = placement.requestedY(screenHeight, boxH);
         } else if (placement.isPlaced()) {
             boxX = placement.clampedX(screenWidth, boxW);
             boxY = placement.clampedY(screenHeight, boxH);
@@ -529,9 +841,12 @@ abstract class MediaWindow {
 
         // The corner buttons live at the right end of the title bar. A window without
         // one keeps them where they have always been, over the top-right of the content.
+        windowActions = chrome.controls() ? WindowActions.applicable(handle()) : List.of();
         buttons = titleBarH > 0
-                ? WindowButtons.layout(boxX + boxW - PADDING, boxY + (titleBarH - BUTTON) / 2, hasHideButton())
-                : WindowButtons.layout(contentX + contentW - 1, contentY + 1, hasHideButton());
+                ? WindowButtons.layout(boxX + boxW - PADDING, boxY + (titleBarH - BUTTON) / 2,
+                        showsHideButton(), chrome.closeButton(), windowActions.size())
+                : WindowButtons.layout(contentX + contentW - 1, contentY + 1,
+                        showsHideButton(), chrome.closeButton(), windowActions.size());
 
         gripX = boxX + boxW - GRIP;
         gripY = boxY + boxH - GRIP;
@@ -589,7 +904,7 @@ abstract class MediaWindow {
      * at all, so it would wipe the saved position every time.</p>
      */
     final WindowStateStore.State captureState() {
-        if (!restoredState || gestures.isDragging() || placement.isTheater()) {
+        if (!restoredState || gestures.isDragging() || placement.isTheater() || !persistGeometry) {
             return null;
         }
         return decorateState(new WindowStateStore.State(
@@ -632,14 +947,14 @@ abstract class MediaWindow {
         Font font = Minecraft.getInstance().font;
         double fade = openEase();
         gestures.noteCursor(mouseX, mouseY);
-        boolean controls = (withControls || alwaysShowControls()) && chromeShown();
+        boolean controls = (withControls || alwaysShowControls()) && chromeShown() && chrome.controls();
 
         Panels.fill(g, boxX, boxY, boxX + boxW, boxY + boxH, Theme.withAlpha(Theme.WINDOW_BG, fade));
         if (titleBarH > 0 && chromeShown()) {
             WindowChrome.titleBar(g, font, boxX, boxY, boxW, titleBarH,
                     titleTextRight(), windowTitle(), fade);
         }
-        if (controls && controlBarHeight() > 0) {
+        if (controls && effectiveControlBarHeight() > 0) {
             int barTop = contentY + contentH;
             Panels.fillBottom(g, boxX, barTop, boxX + boxW, boxY + boxH,
                     Theme.withAlpha(Theme.CONTROL_BAR_BG, fade));
@@ -660,11 +975,17 @@ abstract class MediaWindow {
         }
 
         interactive = withControls;
+        if (locked && inRect(mouseX, mouseY, boxX, boxY, boxW, boxH)) {
+            // First, so a hovered button's own tooltip still wins — Tooltips keeps the
+            // last request of the frame. This is the fallback the rest of the window says.
+            Tooltips.request(lockMessage());
+        }
         renderControls(g, font, mouseX, mouseY);
         String url = mediaUrl();
         WindowChrome.cornerButtons(g, mouseX, mouseY, buttons, titleBarH > 0,
-                actions.isFavorite(url), () -> actions.copyTooltip(url, positionMicros()));
-        if (!placement.isTheater()) {
+                actions.isFavorite(url), () -> actions.copyTooltip(url, positionMicros()),
+                windowActions);
+        if (!placement.isTheater() && chrome.resizable()) {
             // Nothing to resize while the screen is the size.
             WindowChrome.grip(g, gripX, gripY,
                     inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP) || gestures.isResizing());
@@ -741,6 +1062,11 @@ abstract class MediaWindow {
                 actions.toggleFavorite(mediaUrl());
                 return ClickResult.HANDLED;
             }
+            int actionIndex = buttons.actionAt(mouseX, mouseY);
+            if (actionIndex >= 0 && actionIndex < windowActions.size()) {
+                WindowActions.click(windowActions.get(actionIndex), handle());
+                return ClickResult.HANDLED;
+            }
             if (buttons.overHide(mouseX, mouseY)) {
                 visible = false;
                 // Same outline a close leaves: from the screen's point of view the window
@@ -748,13 +1074,19 @@ abstract class MediaWindow {
                 MediaWindowOverlay.noteClosed(boxX, boxY, boxW, boxH);
                 return ClickResult.HANDLED;
             }
-            if (!placement.isTheater() && inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
+            if (!placement.isTheater() && chrome.resizable()
+                    && inRect(mouseX, mouseY, gripX, gripY, GRIP, GRIP)) {
                 beginResize();
                 return ClickResult.HANDLED;
             }
-            ClickResult sub = onControlClick(mouseX, mouseY);
-            if (sub != ClickResult.NONE) {
-                return sub;
+            // Everything above this line is still allowed while locked — closing, hiding,
+            // copying the link, moving and resizing the window. Only the transport below
+            // is held off.
+            if (!locked) {
+                ClickResult sub = onControlClick(mouseX, mouseY);
+                if (sub != ClickResult.NONE) {
+                    return sub;
+                }
             }
         }
         // A second click on the picture enlarges it to fill the screen, and a third
@@ -821,7 +1153,7 @@ abstract class MediaWindow {
     // ------------------------------------------------------------------
 
     private void beginMove(double mouseX, double mouseY) {
-        if (placement.isTheater()) {
+        if (placement.isTheater() || !chrome.movable()) {
             return; // the window is the screen; there is nowhere to move it to
         }
         placement.pin(boxX, boxY);
@@ -838,7 +1170,7 @@ abstract class MediaWindow {
      * Wheel zoom around the current size ({@code steps} = wheel notches).
      */
     protected final void zoom(double steps) {
-        if (placement.isTheater()) {
+        if (placement.isTheater() || !chrome.resizable()) {
             return; // the size is the screen's; a zoom here would only be felt on the way out
         }
         placement.pin(boxX, boxY);

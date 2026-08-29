@@ -3,6 +3,8 @@ package com.lia.mediaplayer.video;
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.config.ConfigStore;
+import com.lia.mediaplayer.api.PlaybackState;
+import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.media.MediaPlayback;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.tools.FFmpegCli;
@@ -127,6 +129,26 @@ public final class VideoPlayer implements MediaPlayback {
      */
     private volatile int seekBarrierGen;
 
+    /**
+     * A caller-supplied ceiling on the decoded picture, or {@code 0} for none — see
+     * {@link #setResolutionCap}.
+     */
+    private int maxWidth;
+    private int maxHeight;
+
+    /**
+     * Caps the decoded picture below the user's video-quality setting.
+     *
+     * <p>For an off-screen surface drawn small: a television the size of a block has no
+     * use for a 480p decode, and the memory a frame buffer costs is width x height x 4
+     * bytes per queued frame. Must be called before {@link #start()}; the size is chosen
+     * once, when the stream is probed.</p>
+     */
+    public void setResolutionCap(int width, int height) {
+        this.maxWidth = Math.max(0, width);
+        this.maxHeight = Math.max(0, height);
+    }
+
     public VideoPlayer(String url) {
         this.url = url;
         this.frameQueueCapacity = ConfigStore.FRAME_QUEUE_CAPACITY.getValue();
@@ -148,6 +170,22 @@ public final class VideoPlayer implements MediaPlayback {
 
     public State state() {
         return state;
+    }
+
+    /**
+     * The engine's own {@link State}, in the vocabulary everything outside the engines
+     * speaks. The two enums have the same five names today; this method is what keeps
+     * that a coincidence rather than a contract.
+     */
+    @Override
+    public PlaybackState playbackState() {
+        return switch (state) {
+            case LOADING -> PlaybackState.LOADING;
+            case PLAYING -> PlaybackState.PLAYING;
+            case PAUSED -> PlaybackState.PAUSED;
+            case ENDED -> PlaybackState.ENDED;
+            case FAILED -> PlaybackState.FAILED;
+        };
     }
 
     @Nullable
@@ -187,6 +225,16 @@ public final class VideoPlayer implements MediaPlayback {
     public void toggleMute() {
         getContext().getVolumeManager().toggleMute();
         audioOutput.applyGain();
+    }
+
+    @Override
+    public AudioGain audioGain() {
+        return audioOutput.gain();
+    }
+
+    @Override
+    public void setAudioGain(AudioGain gain) {
+        audioOutput.setGain(gain);
     }
 
     public int videoWidth() {
@@ -370,6 +418,30 @@ public final class VideoPlayer implements MediaPlayback {
         return clock.currentPositionMicros(hasAudio, audioOutput.getLine(), state == State.PLAYING);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Handed to {@link PlaybackClock#driftCorrect}, which is where a small correction
+     * belongs: sliding the offset the frames' presentation times are compared against
+     * moves the picture into place over a few ticks without restarting the pipeline. Only
+     * a correction too large for that becomes a seek. A seek that is already in flight is
+     * left alone — correcting towards a position while another one is landing would fight
+     * with it.</p>
+     */
+    @Override
+    public boolean driftCorrect(long targetMicros, long toleranceMicros) {
+        if (isSeeking()) {
+            return false;
+        }
+        PlaybackClock.Drift drift = clock.driftCorrect(targetMicros, toleranceMicros,
+                hasAudio, audioOutput.getLine(), state == State.PLAYING);
+        if (drift == PlaybackClock.Drift.SEEK) {
+            seekTo(targetMicros);
+            return true;
+        }
+        return drift == PlaybackClock.Drift.NUDGED;
+    }
+
     public double progress() {
         long duration = durationMicros;
         if (duration <= 0) {
@@ -474,9 +546,17 @@ public final class VideoPlayer implements MediaPlayback {
             if (!info.hasVideo()) {
                 throw new IllegalStateException("Stream has no video track");
             }
-            int[] target = FFmpegCli.fitWithin(info.width(), info.height(),
-                    getContext().getConfigStore().videoMaxWidth(),
-                    getContext().getConfigStore().videoMaxHeight());
+            // The user's video-quality setting is a budget on their machine, so a
+            // caller-supplied cap may only lower it, never raise it.
+            int capW = getContext().getConfigStore().videoMaxWidth();
+            int capH = getContext().getConfigStore().videoMaxHeight();
+            if (maxWidth > 0) {
+                capW = Math.min(capW, maxWidth);
+            }
+            if (maxHeight > 0) {
+                capH = Math.min(capH, maxHeight);
+            }
+            int[] target = FFmpegCli.fitWithin(info.width(), info.height(), capW, capH);
             videoWidth = target[0];
             videoHeight = target[1];
             durationMicros = Math.max(0, info.durationMicros());

@@ -2,6 +2,7 @@ package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.tools.MediaBinaries;
 import com.lia.mediaplayer.video.VideoPlayer;
 
@@ -64,7 +65,7 @@ final class VideoWindow extends QueuedMediaWindow<VideoPlayer> {
     }
 
     @Override
-    protected MediaKind playbackKind() {
+    protected MediaKind mediaKind() {
         return MediaKind.VIDEO;
     }
 
@@ -186,6 +187,11 @@ final class VideoWindow extends QueuedMediaWindow<VideoPlayer> {
      */
     @Override
     protected int minContentWidth() {
+        if (!controlsEnabled()) {
+            // No control bar, so none of the arithmetic below applies: what is left is
+            // the corner buttons' own floor.
+            return super.minContentWidth();
+        }
         Font font = Minecraft.getInstance().font;
         int buttons = 4;                       // play/pause, the two skips and loop are always shown
         if (queue.hasNext()) {
@@ -288,13 +294,16 @@ final class VideoWindow extends QueuedMediaWindow<VideoPlayer> {
             nextBtnY = playBtnY;
             cursor = nextBtnX + BUTTON + 4;
         }
-        showQueueBtn = !queue.isEmpty();
+        showQueueBtn = !queue.isEmpty() && queuePanelAllowed();
         if (showQueueBtn) {
             queueBtnX = cursor;
             queueBtnY = playBtnY;
             cursor = queueBtnX + BUTTON + 4;
         } else {
             panel.closeIfEmpty(); // nothing left to show
+            if (!queuePanelAllowed()) {
+                panel.setOpen(false); // a chrome that forbids the panel forbids it open
+            }
         }
 
         // Loop applies to a lone video too; shuffle only means something with a queue.

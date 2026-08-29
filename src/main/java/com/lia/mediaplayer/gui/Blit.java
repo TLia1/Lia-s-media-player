@@ -21,8 +21,13 @@ import net.minecraft.resources.ResourceLocation;
  * {@code RenderPipeline}. Every call site in the mod draws the same thing — a
  * whole texture, scaled into a rectangle — so they all go through this one
  * method and only this file needs a version guard.
+ *
+ * <p>Public, unlike the other seams in this package, because the API hands it out: an
+ * addon drawing a {@code MediaSurface} needs this exact call and has no business carrying
+ * a copy of the three-way guard. It is reached through {@code MediaGraphics}, never
+ * imported by an addon directly.</p>
  */
-final class Blit {
+public final class Blit {
     private Blit() {
     }
 
@@ -31,7 +36,7 @@ final class Blit {
      * {@code textureWidth} x {@code textureHeight}) scaled into the rectangle at
      * {@code (x, y)} of size {@code width} x {@code height}.
      */
-    static void textured(GuiGraphics g, ResourceLocation texture,
+    public static void textured(GuiGraphics g, ResourceLocation texture,
                          int x, int y, int width, int height,
                          int textureWidth, int textureHeight) {
         //? if <1.21.2 {

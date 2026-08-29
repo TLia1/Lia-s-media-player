@@ -1,9 +1,13 @@
 package com.lia.mediaplayer.chat;
 
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.policy.MediaInterceptors;
+
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -46,6 +50,16 @@ public final class ChatLinkRewriter {
         boolean matches(String url);
 
         /**
+         * Which of the three players a link this rule claims would open. It is not used
+         * to decide anything here — the rule has already decided — but it is what an
+         * addon's {@code MediaInterceptor} is told about a link before it becomes
+         * clickable, and the rule is the only thing that knows it.
+         */
+        default MediaKind kind() {
+            return MediaKind.VIDEO;
+        }
+
+        /**
          * The clickable label to show in place of {@code url}.
          */
         Component label(String url);
@@ -71,6 +85,22 @@ public final class ChatLinkRewriter {
      * its original formatting.
      */
     public static Component rewrite(Component message, LinkRewrite rule) {
+        return rewrite(message, rule, null);
+    }
+
+    /**
+     * The same, told who sent the message, so registered {@code MediaInterceptor}s can be
+     * asked about each link before it becomes clickable and can say something of their
+     * own in the label.
+     *
+     * <p>The interceptors are asked <em>after</em> the rule has claimed the URL and after
+     * the user's own link filters have allowed it: an addon is a further policy over the
+     * mod's, never a way around it.</p>
+     *
+     * @param sender the player who sent the message, or {@code null} for a system message
+     *               and for a loader that could not say
+     */
+    public static Component rewrite(Component message, LinkRewrite rule, @Nullable String sender) {
         MutableComponent rebuilt = Component.empty();
         boolean[] changed = {false};
 
@@ -90,10 +120,16 @@ public final class ChatLinkRewriter {
                 if (!rule.matches(url)) {
                     continue;
                 }
+                if (!MediaInterceptors.allowChatLink(url, sender, rule.kind())) {
+                    // Left as ordinary text, not removed: a vetoed link still says what
+                    // it says. See MediaInterceptor's note on what this is not.
+                    continue;
+                }
                 if (matcher.start() > last) {
                     rebuilt.append(Component.literal(text.substring(last, matcher.start())).setStyle(style));
                 }
-                rebuilt.append(rule.label(url).copy().setStyle(rule.style(style, url)));
+                Component label = MediaInterceptors.decorateLabel(url, rule.kind(), rule.label(url));
+                rebuilt.append(label.copy().setStyle(rule.style(style, url)));
                 rule.onMatch(url);
                 last = matchEnd;
                 changed[0] = true;

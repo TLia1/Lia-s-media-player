@@ -1,6 +1,9 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaHandle;
+import com.lia.mediaplayer.api.MediaRequest;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
 import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.history.HistoryStore;
 import com.lia.mediaplayer.image.ImagePreviewCache;
@@ -37,13 +40,34 @@ public class ImageWindowManager {
     public ImageWindow show(String url) {
         HistoryStore.record(url, MediaKind.IMAGE);
         ImageWindow window = windows.get(url);
-        if (window == null) {
+        boolean fresh = window == null;
+        if (fresh) {
             evictIfFull();
             window = new ImageWindow(url);
             windows.put(url, window);
         }
         window.setVisible(true);
+        if (fresh) {
+            // Only a new pin is a "started": showing one that is already up brings it
+            // forward, which is not something to tell a listener twice about.
+            window.postPlaybackEvent(PlaybackEvent.Type.STARTED);
+        }
         return window;
+    }
+
+    /**
+     * Pins the image a {@link MediaRequest} names, applying its window options.
+     *
+     * <p>The registry is keyed by URL, so asking for a picture that is already pinned
+     * brings that window forward rather than opening a second one — and re-applies the
+     * request to it, since the caller has just said what it wants the window to look
+     * like.</p>
+     */
+    public MediaHandle play(MediaRequest request) {
+        ImageWindow window = show(request.url());
+        window.applyRequest(request);
+        window.bringToFront();
+        return window.handle();
     }
 
     @Nullable
@@ -63,10 +87,15 @@ public class ImageWindowManager {
     }
 
     public void close(ImageWindow window) {
-        windows.values().remove(window);
+        if (windows.values().remove(window)) {
+            window.markDisposed();
+        }
     }
 
     public void disposeAll() {
+        for (ImageWindow window : windows.values()) {
+            window.markDisposed();
+        }
         windows.clear();
     }
 
@@ -83,7 +112,7 @@ public class ImageWindowManager {
             if (!it.hasNext()) {
                 return;
             }
-            it.next();
+            it.next().getValue().markDisposed();
             it.remove();
         }
     }

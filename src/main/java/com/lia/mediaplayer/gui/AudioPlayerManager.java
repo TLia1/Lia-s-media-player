@@ -32,7 +32,8 @@ public class AudioPlayerManager extends PlayerWindowManager<AudioWindow> {
      */
     public void previousFrontMost() {
         AudioWindow window = frontMost();
-        if (window != null) {
+        // The key-binding path, so the sync lock applies — see PlayerWindowManager.
+        if (window != null && !window.isLocked()) {
             window.previous();
         }
     }

@@ -1,11 +1,19 @@
 package com.lia.mediaplayer.gui;
 
-import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaQueue;
+import com.lia.mediaplayer.api.PlaybackState;
+import com.lia.mediaplayer.api.RepeatMode;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
+import com.lia.mediaplayer.api.sync.SyncAction;
 import com.lia.mediaplayer.history.HistoryStore;
+import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.media.MediaPlayback;
 import com.lia.mediaplayer.media.PlaybackError;
+import com.lia.mediaplayer.media.PlaybackWatcher;
 
 import net.minecraft.util.Mth;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 
@@ -43,6 +51,37 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
 
     /** URLs waiting to play in this same window, in play order. */
     protected final PlayQueue queue = new PlayQueue();
+
+    /** Turns the player's state into API events once a tick — see {@link PlaybackWatcher}. */
+    private final PlaybackWatcher watcher = new PlaybackWatcher();
+
+    // What a MediaRequest asked of the *first* track, applied once the player is
+    // actually running. Neither can be done at start(): a player spends its first
+    // moments opening the stream, where a seek has nothing to seek in and a pause is
+    // ignored because there is nothing playing to pause yet.
+    private long pendingStartMicros;
+    private boolean pendingPause;
+
+    /** This window's queue as the API sees it — see {@link WindowQueue}. */
+    private WindowQueue queueHandle;
+
+    /**
+     * This window's share of the mix, or {@code null} while nobody has asked for one.
+     *
+     * <p>Built lazily on purpose. A window whose sound no addon has ever touched keeps
+     * whatever gain its player was born with, so the ordinary path costs nothing —
+     * neither an object per window nor a recompute per tick — and behaves exactly as it
+     * did before any of this existed. The moment one is asked for it is handed to the
+     * current player and to every player that replaces it.</p>
+     */
+    private AudioGain audioGain;
+
+    /**
+     * {@link PlayQueue#version()} as of the last tick, so a change to the queue can be
+     * noticed and announced without a notification call at each of the dozen places
+     * that edit one.
+     */
+    private int lastQueueVersion;
 
     /**
      * The list of what plays next, docked beside the window. Shared between the two
@@ -90,9 +129,6 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
     /** A fresh, unstarted player for {@code url} — the one thing only the engine knows. */
     protected abstract P createPlayer(String url);
 
-    /** Which player this window is, for the history entry every play records. */
-    protected abstract MediaKind playbackKind();
-
     /**
      * Pre-fetches whatever the queue panel will want to draw for {@code url} — a title
      * for both, plus a thumbnail for the video player.
@@ -121,6 +157,7 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
     void enqueue(String url) {
         queue.add(url);
         warmCaches(url);
+        MediaSyncControl.broadcast(getId(), url, SyncAction.Type.ENQUEUE, positionMicros());
     }
 
     /**
@@ -158,6 +195,9 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
             return false;
         }
         playUrl(next);
+        // NEXT and PREVIOUS are the two transitions the playback events cannot express —
+        // both look like a STARTED from outside — so they are broadcast where they happen.
+        MediaSyncControl.broadcast(getId(), next, SyncAction.Type.NEXT, 0L);
         return true;
     }
 
@@ -177,6 +217,7 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
             return false;
         }
         playUrl(prev);
+        MediaSyncControl.broadcast(getId(), prev, SyncAction.Type.PREVIOUS, 0L);
         return true;
     }
 
@@ -214,13 +255,20 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
      * the old one's bar happened to be.</p>
      */
     protected final void playUrl(String url) {
-        HistoryStore.record(url, playbackKind());
+        HistoryStore.record(url, mediaKind());
         player.dispose();
         draggingSeek = false;
         draggingVolume = false;
         player = createPlayer(url);
+        if (audioGain != null) {
+            // The mix belongs to the window, not to the track: a placement or a fade an
+            // addon set has to survive the queue advancing under it.
+            player.setAudioGain(audioGain);
+        }
         onPlayerSwapped(player);
         player.start();
+        watcher.reset();
+        postPlaybackEvent(PlaybackEvent.Type.STARTED);
         announceIfHidden(url);
     }
 
@@ -241,6 +289,7 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
      */
     void startPlayback() {
         player.start();
+        postPlaybackEvent(PlaybackEvent.Type.STARTED);
     }
 
     /**
@@ -249,6 +298,81 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
     void disposeAll() {
         queue.clear();
         player.dispose();
+        markDisposed();
+    }
+
+    /**
+     * Derives this tick's playback events from the player's current state and posts
+     * them. Called once a tick by {@link MediaWindowOverlay#clientTick()}, for every
+     * player window, drawn or not — a hidden window still pauses, ends and fails, and an
+     * addon listening for that has no reason to care whether anyone was looking.
+     */
+    final void pollPlaybackEvents() {
+        applyPendingStart();
+        if (audioGain != null) {
+            // Nobody else ticks this one; see AudioMixer's note on why there is no registry.
+            audioGain.clientTick();
+        }
+        for (PlaybackEvent.Type type : watcher.poll(player.playbackState(), player.isSeeking())) {
+            postPlaybackEvent(type);
+        }
+        if (queue.version() != lastQueueVersion) {
+            lastQueueVersion = queue.version();
+            postPlaybackEvent(PlaybackEvent.Type.QUEUE_CHANGED);
+        }
+    }
+
+    @Override
+    final AudioGain audioControls() {
+        if (audioGain == null) {
+            audioGain = MediaPlayerContext.get().getMixer().newGain();
+            player.setAudioGain(audioGain);
+        }
+        return audioGain;
+    }
+
+    @Override
+    final MediaQueue queueHandle() {
+        if (queueHandle == null) {
+            queueHandle = new WindowQueue(this);
+        }
+        return queueHandle;
+    }
+
+    /**
+     * Asks for the requested start position and the requested pause, on the first tick
+     * the player is genuinely playing. Both are one-shot and apply to the track the
+     * window was opened with, not to whatever the queue moves on to.
+     */
+    private void applyPendingStart() {
+        if (pendingStartMicros <= 0 && !pendingPause) {
+            return;
+        }
+        if (player.playbackState() != PlaybackState.PLAYING) {
+            return;
+        }
+        if (pendingStartMicros > 0) {
+            player.seekTo(pendingStartMicros);
+            pendingStartMicros = 0;
+        }
+        if (pendingPause) {
+            pendingPause = false;
+            player.pause();
+        }
+    }
+
+    /**
+     * Where and how the first track should start — see {@code MediaRequest.startAt} and
+     * {@code MediaRequest.autoplay}. Set by the manager before the window is started.
+     */
+    final void requestStart(long startMicros, boolean autoplay) {
+        pendingStartMicros = Math.max(0, startMicros);
+        pendingPause = !autoplay;
+    }
+
+    /** Whether the queue panel is allowed at all — see {@code WindowChromeOptions}. */
+    final boolean queuePanelAllowed() {
+        return chrome().queuePanel();
     }
 
     // ------------------------------------------------------------------
@@ -290,6 +414,40 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
     }
 
     @Override
+    boolean play() {
+        player.resume();
+        return true;
+    }
+
+    @Override
+    boolean pause() {
+        player.pause();
+        return true;
+    }
+
+    @Override
+    boolean seekTo(long micros) {
+        player.seekTo(Math.max(0, micros));
+        return true;
+    }
+
+    @Override
+    boolean seekToFraction(double fraction) {
+        player.seekToFraction(fraction);
+        return true;
+    }
+
+    @Override
+    long durationMicros() {
+        return player.durationMicros();
+    }
+
+    @Override
+    PlaybackState playbackState() {
+        return player.playbackState();
+    }
+
+    @Override
     boolean seekBy(long deltaMicros) {
         long duration = player.durationMicros();
         if (duration <= 0) {
@@ -297,6 +455,17 @@ abstract class QueuedMediaWindow<P extends MediaPlayback> extends MediaWindow {
         }
         player.seekTo(Mth.clamp(player.positionMicros() + deltaMicros, 0, duration));
         return true;
+    }
+
+    @Override
+    @Nullable
+    String errorText() {
+        return player.errorMessage();
+    }
+
+    @Override
+    boolean driftCorrect(long targetMicros, long toleranceMicros) {
+        return player.driftCorrect(targetMicros, toleranceMicros);
     }
 
     @Override

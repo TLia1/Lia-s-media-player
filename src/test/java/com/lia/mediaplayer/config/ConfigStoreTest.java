@@ -3,7 +3,6 @@ package com.lia.mediaplayer.config;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.lia.mediaplayer.api.config.ConfigOption;
-import com.lia.mediaplayer.gui.ThemeName;
 import com.lia.mediaplayer.source.FilterMode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +46,7 @@ class ConfigStoreTest {
     void roundTripsEveryRegisteredOption() {
         ConfigStore.MAX_VIDEO_WINDOWS.setValue(7);
         ConfigStore.MAX_IMAGE_CACHE_MEGABYTES.setValue(512);
-        ConfigStore.THEME.setValue(ThemeName.CONTRAST);
+        ConfigStore.THEME.setValue("contrast");
         ConfigStore.LINK_FILTER_MODE.setValue(FilterMode.BLOCKLIST);
         ConfigStore.BLOCKED_DOMAINS.setValue("example.com, tracker.test");
         ConfigStore.AUTO_UPDATE_TOOLS.setValue(false);
@@ -60,7 +59,7 @@ class ConfigStoreTest {
 
         assertEquals(7, ConfigStore.MAX_VIDEO_WINDOWS.getValue());
         assertEquals(512, ConfigStore.MAX_IMAGE_CACHE_MEGABYTES.getValue());
-        assertEquals(ThemeName.CONTRAST, ConfigStore.THEME.getValue());
+        assertEquals("contrast", ConfigStore.THEME.getValue());
         assertEquals(FilterMode.BLOCKLIST, ConfigStore.LINK_FILTER_MODE.getValue());
         assertEquals("example.com, tracker.test", ConfigStore.BLOCKED_DOMAINS.getValue());
         assertEquals(false, ConfigStore.AUTO_UPDATE_TOOLS.getValue());
@@ -120,9 +119,31 @@ class ConfigStoreTest {
     @Test
     void keepsTheDefaultForAnEnumConstantThatNoLongerExists() {
         JsonObject json = new JsonObject();
-        json.add(ConfigStore.THEME.getId(), new JsonPrimitive("SEPIA"));
+        json.add(ConfigStore.LINK_FILTER_MODE.getId(), new JsonPrimitive("SEPIA"));
         store.applyJson(json);
-        assertEquals(ConfigStore.THEME.getDefaultValue(), ConfigStore.THEME.getValue());
+        assertEquals(ConfigStore.LINK_FILTER_MODE.getDefaultValue(),
+                ConfigStore.LINK_FILTER_MODE.getValue());
+    }
+
+    @Test
+    void keepsAThemeIdItDoesNotRecognise() {
+        // Deliberately unlike the enum options above: a theme id can name an addon's
+        // palette, and an addon can be temporarily uninstalled. Resetting the setting
+        // would quietly throw away the user's choice; gui.Theme draws the dark palette
+        // meanwhile and the id comes back to life with the addon.
+        JsonObject json = new JsonObject();
+        json.add(ConfigStore.THEME.getId(), new JsonPrimitive("someaddon:sunset"));
+        store.applyJson(json);
+        assertEquals("someaddon:sunset", ConfigStore.THEME.getValue());
+    }
+
+    @Test
+    void readsTheThemeAnOlderVersionWroteAsAnEnumName() {
+        JsonObject json = new JsonObject();
+        json.add(ConfigStore.THEME.getId(), new JsonPrimitive("CONTRAST"));
+        store.applyJson(json);
+        assertEquals("contrast", ConfigStore.THEME.getValue(),
+                "the option became string-keyed in 3.2; a file written before that must still read");
     }
 
     @Test

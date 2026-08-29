@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.gui.WindowStateStore.State;
 import org.junit.jupiter.api.Test;
 

@@ -1,10 +1,12 @@
 package com.lia.mediaplayer.chat;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.gui.MediaWindowOverlay;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Rewrites incoming chat so direct audio links become a green, underlined
@@ -27,6 +29,11 @@ public final class AudioChatHandler {
         public boolean matches(String url) {
             MediaPlayerContext ctx = MediaPlayerContext.getOrNull();
             return ctx != null && ctx.getMediaSources().isAudio(url) && MediaFilters.allowsUrl(url);
+        }
+
+        @Override
+        public MediaKind kind() {
+            return MediaKind.AUDIO;
         }
 
         @Override
@@ -53,7 +60,15 @@ public final class AudioChatHandler {
      * loader's chat event calls this and puts the result back.
      */
     public static Component rewrite(Component message) {
-        return ChatLinkRewriter.rewrite(message, AUDIO_LINKS);
+        return rewrite(message, null);
+    }
+
+    /**
+     * The same, told who sent the message — which is what a registered
+     * {@code MediaInterceptor} is asked about each link with.
+     */
+    public static Component rewrite(Component message, @Nullable String sender) {
+        return ChatLinkRewriter.rewrite(message, AUDIO_LINKS, sender);
     }
 
     /** Drops every open audio bar when leaving a world. */

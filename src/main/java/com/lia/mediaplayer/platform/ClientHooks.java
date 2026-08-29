@@ -1,5 +1,9 @@
 package com.lia.mediaplayer.platform;
 
+import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.diag.MediaPlayerLog;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
+import com.lia.mediaplayer.api.event.PlaybackEvents;
 import com.lia.mediaplayer.chat.AudioChatHandler;
 import com.lia.mediaplayer.chat.ImageChatHandler;
 import com.lia.mediaplayer.chat.MediaFilters;
@@ -63,9 +67,9 @@ public final class ClientHooks {
         if (!MediaFilters.allowsSender(sender)) {
             return message;
         }
-        Component result = ImageChatHandler.rewrite(message);
-        result = VideoChatHandler.rewrite(result);
-        return AudioChatHandler.rewrite(result);
+        Component result = ImageChatHandler.rewrite(message, sender);
+        result = VideoChatHandler.rewrite(result, sender);
+        return AudioChatHandler.rewrite(result, sender);
     }
 
     /** Tears down every window, player and cache when leaving a world. */
@@ -77,6 +81,24 @@ public final class ClientHooks {
         // "now playing" banner may still be counting down. Neither should survive into
         // the next world.
         MediaWindowOverlay.clearGhosts();
+        // And the surfaces addons decoded, whoever is still holding one: a texture that
+        // outlives the world it was decoded for is a leak for the rest of the session,
+        // and the ffmpeg process behind it would keep running for a screen that is gone.
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
+        if (context != null) {
+            context.getSurfaceRegistry().disposeAll();
+            // And the sounds addons were playing with no window: nothing on screen can
+            // stop one, so a track played into a world would otherwise keep an ffmpeg
+            // process and an audio line running into the next.
+            context.getHeadlessAudio().disposeAll();
+        }
+        // The failure backlog is per-session state like the caches are: a "why did that
+        // not play?" screen opened in the next world should not be showing the last
+        // world's errors.
+        MediaPlayerLog.clear();
+        // Posted last, so a listener woken by it finds the stack already empty and every
+        // handle it may still be holding already dead.
+        PlaybackEvents.post(PlaybackEvent.lifecycle(PlaybackEvent.Type.WORLD_LEFT));
     }
 
     // ------------------------------------------------------------------
@@ -87,6 +109,14 @@ public final class ClientHooks {
     public static void onClientTick() {
         KeybindHandler.onClientTick();
         MediaWindowOverlay.clientTick();
+        MediaPlayerContext context = MediaPlayerContext.getOrNull();
+        if (context != null) {
+            // Rolls each surface's "wanted" flag over; see SurfaceRegistry.clientTick.
+            context.getSurfaceRegistry().clientTick();
+            // Fades, looping and the game pause for windowless sounds, and the once-a-tick
+            // recompute of their placement — see HeadlessAudio.clientTick.
+            context.getHeadlessAudio().clientTick();
+        }
     }
 
     // ------------------------------------------------------------------

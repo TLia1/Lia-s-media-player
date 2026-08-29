@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.storage.JsonFileStore;
 

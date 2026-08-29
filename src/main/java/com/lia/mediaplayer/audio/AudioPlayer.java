@@ -2,6 +2,8 @@ package com.lia.mediaplayer.audio;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.PlaybackState;
+import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.media.MediaPlayback;
 import com.lia.mediaplayer.media.MediaUrlResolver;
 import com.lia.mediaplayer.media.Volume;
@@ -119,7 +121,11 @@ public final class AudioPlayer implements MediaPlayback {
     private final Object clockLock = new Object();
     @Nullable
     private volatile SourceDataLine audioLine;
-    private volatile float lastAppliedGain = -1f;
+    /**
+     * This track's own share of the mix. Swapped in by whatever owns the player (a window
+     * hands the same one to every track it plays); {@link AudioGain#detached()} until then.
+     */
+    private volatile AudioGain audioGain = AudioGain.detached();
     private long clockOffsetMicros;  // playback time represented by lineBase
     private long lineBaseMicros;     // line position captured at the last (re)baseline
 
@@ -137,6 +143,22 @@ public final class AudioPlayer implements MediaPlayback {
 
     public State state() {
         return state;
+    }
+
+    /**
+     * The engine's own {@link State}, in the vocabulary everything outside the engines
+     * speaks. The two enums have the same five names today; this method is what keeps
+     * that a coincidence rather than a contract.
+     */
+    @Override
+    public PlaybackState playbackState() {
+        return switch (state) {
+            case LOADING -> PlaybackState.LOADING;
+            case PLAYING -> PlaybackState.PLAYING;
+            case PAUSED -> PlaybackState.PAUSED;
+            case ENDED -> PlaybackState.ENDED;
+            case FAILED -> PlaybackState.FAILED;
+        };
     }
 
     @Nullable
@@ -186,10 +208,22 @@ public final class AudioPlayer implements MediaPlayback {
         applyGainIfOpen();
     }
 
+    @Override
+    public AudioGain audioGain() {
+        return audioGain;
+    }
+
+    @Override
+    public void setAudioGain(AudioGain gain) {
+        if (gain != null) {
+            audioGain = gain;
+        }
+    }
+
     private void applyGainIfOpen() {
         SourceDataLine line = audioLine;
         if (line != null) {
-            lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
+            audioGain.apply(line, getContext().getVolumeManager());
         }
     }
 
@@ -300,6 +334,29 @@ public final class AudioPlayer implements MediaPlayback {
      */
     public boolean isSeeking() {
         return pendingSeekMicros >= 0;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>An audio track has no clock to nudge: the line's own position <em>is</em> the
+     * position, and skewing it would mean resampling the sound, which is a great deal
+     * more machinery than a watch party is worth. So this is the honest version — inside
+     * the tolerance nothing happens, outside it the track seeks. Give it a tolerance
+     * wide enough that it is not seeking every tick; a second is not a bad figure for
+     * music.</p>
+     */
+    @Override
+    public boolean driftCorrect(long targetMicros, long toleranceMicros) {
+        if (isSeeking()) {
+            return false;
+        }
+        long tolerance = toleranceMicros > 0 ? toleranceMicros : DEFAULT_DRIFT_TOLERANCE_MICROS;
+        if (Math.abs(targetMicros - positionMicros()) <= tolerance) {
+            return false;
+        }
+        seekTo(targetMicros);
+        return true;
     }
 
     public long positionMicros() {
@@ -521,7 +578,7 @@ public final class AudioPlayer implements MediaPlayback {
                 if (!running || gen != sessionGen) {
                     return;
                 }
-                lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
+                audioGain.apply(line, getContext().getVolumeManager());
                 line.write(buffer, 0, read);
                 if (firstWrite) {
                     firstWrite = false;
@@ -588,7 +645,8 @@ public final class AudioPlayer implements MediaPlayback {
             line.open(format);
             line.start();
             audioLine = line;
-            lastAppliedGain = getContext().getVolumeManager().apply(line, lastAppliedGain);
+            audioGain.onLineOpened();
+            audioGain.apply(line, getContext().getVolumeManager());
             audioSampleRate = sampleRate;
             audioChannels = channels;
             return true;

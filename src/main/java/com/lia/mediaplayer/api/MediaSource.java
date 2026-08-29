@@ -5,7 +5,6 @@
 package com.lia.mediaplayer.api;
 
 import com.lia.mediaplayer.api.event.MediaSourceRegistrationEvent;
-import com.lia.mediaplayer.media.MediaUrlResolver;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -54,7 +53,7 @@ public interface MediaSource {
      * <p>{@code false} by default, which is right for every direct-file source. A
      * source for a site whose links are pages — YouTube, Twitch, SoundCloud,
      * Vimeo — returns {@code true}, and that is the whole of what
-     * {@link MediaUrlResolver} needs to know about it. Before
+     * {@code MediaUrlResolver} needs to know about it. Before
      * this, the resolver named the two page sources it knew about, so a new one meant
      * editing the playback engine as well as adding a source; now it asks the registry.</p>
      *

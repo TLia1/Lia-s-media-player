@@ -1,9 +1,12 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.RepeatMode;
+import com.lia.mediaplayer.api.window.WindowAction;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -53,8 +56,8 @@ final class WindowChrome {
     }
 
     /**
-     * The heart, the copy button, the browser link, the optional hide button and the
-     * close button, each hovered-coloured and each asking for its tooltip.
+     * The heart, the copy button, the browser link, the optional hide button, the close
+     * button and any addon buttons, each hovered-coloured and each asking for its tooltip.
      *
      * @param inTitleBar whether the row sits in a title strip; if not, each button needs
      *                   a backdrop of its own — see {@link #buttonBackdrop}
@@ -63,9 +66,32 @@ final class WindowChrome {
      * @param copyTip    what the copy button says right now — it changes with the
      *                   playback position and just after a copy, so the window supplies
      *                   it, and only when the cursor is actually on the button
+     * @param actions    the addon buttons on the row's left (see
+     *                   {@code api.window.WindowAction}), as
+     *                   {@code WindowActions.applicable} resolved them. Its size and
+     *                   {@code buttons.actionCount()} agree because the same list laid the
+     *                   row out. They are drawn exactly like the built-in ones, in the
+     *                   same size and the same two theme colours, which is the point of
+     *                   naming an icon rather than supplying one.
      */
     static void cornerButtons(GuiGraphics g, int mouseX, int mouseY, WindowButtons buttons,
-                              boolean inTitleBar, boolean favorite, Supplier<Component> copyTip) {
+                              boolean inTitleBar, boolean favorite, Supplier<Component> copyTip,
+                              List<WindowAction> actions) {
+        for (int i = 0; i < buttons.actionCount() && i < actions.size(); i++) {
+            WindowAction action = actions.get(i);
+            int x = buttons.actionX(i);
+            boolean over = MediaWindow.inRect(mouseX, mouseY, x, buttons.y(),
+                    WindowButtons.SIZE, WindowButtons.SIZE);
+            buttonBackdrop(g, x, buttons.y(), inTitleBar);
+            WindowActions.draw(g, WindowActions.icon(action), x, buttons.y(),
+                    over ? Theme.ICON_HOVER : Theme.ICON);
+            if (over) {
+                Component tip = WindowActions.tooltip(action);
+                if (tip != null) {
+                    Tooltips.request(tip);
+                }
+            }
+        }
         // The heart: what turns "this played once" into something the library keeps.
         // It is a window button rather than a history-screen one because the moment you
         // know you want to keep a track is while it is playing.
@@ -98,11 +124,13 @@ final class WindowChrome {
             Tooltips.request(copyTip.get());
         }
 
-        boolean overClose = buttons.overClose(mouseX, mouseY);
-        buttonBackdrop(g, buttons.closeX(), buttons.y(), inTitleBar);
-        Glyphs.close(g, buttons.closeX(), buttons.y(), overClose ? Theme.DANGER : Theme.ICON);
-        if (overClose) {
-            Tooltips.request(Component.translatable("gui.liasmediaplayer.control.close"));
+        if (buttons.hasClose()) {
+            boolean overClose = buttons.overClose(mouseX, mouseY);
+            buttonBackdrop(g, buttons.closeX(), buttons.y(), inTitleBar);
+            Glyphs.close(g, buttons.closeX(), buttons.y(), overClose ? Theme.DANGER : Theme.ICON);
+            if (overClose) {
+                Tooltips.request(Component.translatable("gui.liasmediaplayer.control.close"));
+            }
         }
 
         if (buttons.hasHide()) {

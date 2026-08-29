@@ -1,10 +1,15 @@
 package com.lia.mediaplayer.input;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.api.input.MediaKeybinds;
 import com.lia.mediaplayer.gui.AudioPlayerManager;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 //? if >=1.21.11
 /*import net.minecraft.resources.ResourceLocation;*/
 
@@ -63,16 +68,35 @@ public final class ModKeybinds {
                 InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY);
     }
 
+    /** The mod's own bindings, in the order they should appear in the controls screen. */
+    private static final KeyMapping[] OWN = {
+            PLAY_PAUSE, NEXT, PREVIOUS,
+            VOLUME_UP, VOLUME_DOWN, MUTE,
+            TOGGLE_WINDOWS, CLOSE_ALL,
+            OPEN_CONTROLS, OPEN_PLAYLISTS, OPEN_CONFIG, PLAY_CLIPBOARD};
+
     /**
-     * Every mapping this mod declares, in the order they should appear in the controls
-     * screen. The loader bridges iterate this rather than naming each field, so adding a
-     * binding here is enough for both loaders to pick it up.
+     * Every mapping to register with the game: this mod's, then whatever addons handed
+     * over through {@code api.input.MediaKeybinds}. The loader bridges iterate this
+     * rather than naming each field, so adding a binding here — or registering one from
+     * an addon — is enough for both loaders to pick it up.
+     *
+     * <p>This is read once, at the moment each bridge registers, which is why the API
+     * says an addon has to register from its entry point. A mapping handed over later is
+     * kept and polled by {@link KeybindHandler} but was never given to the game, so it
+     * has no key and never fires; nothing here can fix that from the wrong side of
+     * startup.</p>
      */
     public static KeyMapping[] all() {
-        return new KeyMapping[] {
-                PLAY_PAUSE, NEXT, PREVIOUS,
-                VOLUME_UP, VOLUME_DOWN, MUTE,
-                TOGGLE_WINDOWS, CLOSE_ALL,
-                OPEN_CONTROLS, OPEN_PLAYLISTS, OPEN_CONFIG, PLAY_CLIPBOARD};
+        List<MediaKeybinds.Binding> external = MediaKeybinds.bindings();
+        if (external.isEmpty()) {
+            return OWN.clone();
+        }
+        List<KeyMapping> mappings = new ArrayList<>(OWN.length + external.size());
+        mappings.addAll(Arrays.asList(OWN));
+        for (MediaKeybinds.Binding binding : external) {
+            mappings.add(binding.mapping());
+        }
+        return mappings.toArray(new KeyMapping[0]);
     }
 }

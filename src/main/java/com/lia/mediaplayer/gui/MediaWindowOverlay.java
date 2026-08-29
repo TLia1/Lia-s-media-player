@@ -1,10 +1,16 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaHandle;
 import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaRequest;
+import com.lia.mediaplayer.api.RepeatMode;
+import com.lia.mediaplayer.api.policy.MediaInterceptors;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
 import com.lia.mediaplayer.chat.ChatEvents;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.audio.AudioPlayer;
+import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import com.lia.mediaplayer.video.VideoPlayer;
 import net.minecraft.client.Minecraft;
@@ -171,6 +177,72 @@ public final class MediaWindowOverlay {
             }
         }
         return best;
+    }
+
+    // ------------------------------------------------------------------
+    // The API's view of the stack
+    //
+    // Handles are asked for here rather than of the three managers, because the one
+    // thing an addon's question always involves is the stacking order — "which player
+    // is in front" — and that order is this class's, not any single manager's.
+    // ------------------------------------------------------------------
+
+    /**
+     * Every open window as a {@link MediaHandle}, back to front. A snapshot.
+     */
+    public static List<MediaHandle> handles() {
+        List<MediaWindow> ordered = orderedWindows();
+        List<MediaHandle> out = new ArrayList<>(ordered.size());
+        for (MediaWindow window : ordered) {
+            out.add(window.handle());
+        }
+        return out;
+    }
+
+    /**
+     * The handle for one window id, or {@code null} once that window is gone.
+     */
+    @Nullable
+    public static MediaHandle handleOf(long id) {
+        for (MediaWindow window : orderedWindows()) {
+            if (window.getId() == id) {
+                return window.handle();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The window with this id, or {@code null} once it is gone.
+     *
+     * <p>Package-private, and the only thing in {@code gui} that hands a
+     * {@link MediaWindow} out by id: {@code MediaSyncControl} needs the window itself
+     * rather than its handle, because locking and drift correction are not things a
+     * public handle may do.</p>
+     */
+    @Nullable
+    static MediaWindow windowOf(long id) {
+        for (MediaWindow window : orderedWindows()) {
+            if (window.getId() == id) {
+                return window;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The front-most window of {@code kind} — including a hidden one, which is still the
+     * player the transport methods act on — or {@code null}.
+     */
+    @Nullable
+    public static MediaHandle frontMostHandle(MediaKind kind) {
+        MediaWindow best = null;
+        for (MediaWindow window : orderedWindows()) {
+            if (window.mediaKind() == kind) {
+                best = window; // sorted by z-order, so the last match is the front one
+            }
+        }
+        return best == null ? null : best.handle();
     }
 
     // ------------------------------------------------------------------
@@ -452,7 +524,9 @@ public final class MediaWindowOverlay {
         List<MediaWindow> all = orderedWindows();
         for (int i = all.size() - 1; i >= 0; i--) {
             MediaWindow window = all.get(i);
-            if (!window.isVisible()) {
+            if (!window.isVisible() || !window.chrome().interactive()) {
+                // A decorative display must not eat the click aimed at whatever is
+                // behind it — see WindowChromeOptions.display().
                 continue;
             }
             MediaWindow.ClickResult result = window.mouseClicked(mouseX, mouseY, button);
@@ -488,10 +562,94 @@ public final class MediaWindowOverlay {
      *                  (the shift modifier)
      * @return {@code true} when the URL was something the mod can play
      */
+    /**
+     * Plays a {@link MediaRequest} — the API's single entry point, and the one place
+     * that knows how every option on a request reaches a window.
+     *
+     * <p>{@code null} when the mod cannot play the link at all (no registered
+     * {@code MediaSource} claims it), and also for a YouTube <em>playlist</em> page:
+     * expanding one is a background yt-dlp round-trip, so there is no window to hand back
+     * yet. The player is told in chat, and the expanded queue opens when it returns.</p>
+     */
+    @Nullable
+    public static MediaHandle play(MediaRequest request) {
+        return play(request, PlayOrigin.API);
+    }
+
+    /**
+     * The same, saying who asked — which is the one thing a registered
+     * {@code MediaInterceptor} almost always needs before it can answer. Every way into
+     * the mod's playback passes through here or through
+     * {@link #play(String, boolean, boolean, PlayOrigin)}, which is what makes the veto
+     * complete rather than a filter on one path.
+     *
+     * @since API 3.2.0
+     */
+    @Nullable
+    public static MediaHandle play(MediaRequest request, PlayOrigin origin) {
+        if (request == null) {
+            return null;
+        }
+        MediaRequest allowed = MediaInterceptors.beforePlay(request, origin);
+        return allowed == null ? null : playAllowed(allowed);
+    }
+
+    /** The play itself, once the interceptors have had their say. */
+    @Nullable
+    private static MediaHandle playAllowed(MediaRequest request) {
+        MediaPlayerContext ctx = getContext();
+        if (ctx == null) {
+            return null;
+        }
+        if (YouTubePlaylistSource.isPlaylist(request.url())) {
+            playYouTubePlaylist(request.url(), request.kind() == MediaKind.AUDIO);
+            return null;
+        }
+        MediaKind kind = request.kind() != null ? request.kind() : ctx.getMediaSources().kindOf(request.url());
+        if (kind == null) {
+            return null;
+        }
+        return switch (kind) {
+            case IMAGE -> ctx.getImageManager().play(request);
+            case AUDIO -> ctx.getAudioManager().play(request);
+            case VIDEO -> ctx.getVideoManager().play(request);
+        };
+    }
+
     public static boolean play(String url, boolean audioOnly, boolean newWindow) {
+        return play(url, audioOnly, newWindow, PlayOrigin.CHAT_CLICK);
+    }
+
+    /**
+     * The same, saying who asked. The clipboard binding, the history screen and a chat
+     * click all arrive here and differ only in this argument, which is exactly the
+     * distinction a moderation addon wants to make.
+     *
+     * @since API 3.2.0
+     */
+    public static boolean play(String url, boolean audioOnly, boolean newWindow, PlayOrigin origin) {
         MediaPlayerContext ctx = getContext();
         if (ctx == null || url == null) {
             return false;
+        }
+        // The interceptors speak MediaRequest, so ask them in those terms. Only when
+        // something is actually registered: building a request per click otherwise would
+        // be work for nobody, and MediaRequest.of throws on a link this path is allowed
+        // to be handed and simply not play.
+        if (MediaInterceptors.any() && Urls.isHttp(url)) {
+            MediaRequest asked = MediaRequest.of(url)
+                    .as(audioOnly ? MediaKind.AUDIO : null)
+                    .newWindow(newWindow);
+            MediaRequest allowed = MediaInterceptors.beforePlay(asked, origin);
+            if (allowed == null) {
+                return false;
+            }
+            if (allowed != asked) {
+                // Rewritten: the request path is the only one that can honour everything
+                // an interceptor may have changed, so hand it over rather than pulling
+                // the three fields this one understands back out.
+                return playRewritten(allowed);
+            }
         }
         // A playlist page is not a media item: expand it first (a yt-dlp round-trip
         // on a background thread), then queue everything it contains.
@@ -546,7 +704,7 @@ public final class MediaWindowOverlay {
         List<MediaWindow> ordered = orderedWindows();
         for (int i = ordered.size() - 1; i >= 0; i--) {
             MediaWindow window = ordered.get(i);
-            if (window.isVisible() && window.mouseDragged(mouseX, mouseY)) {
+            if (window.isVisible() && window.chrome().interactive() && window.mouseDragged(mouseX, mouseY)) {
                 return true;
             }
         }
@@ -568,7 +726,7 @@ public final class MediaWindowOverlay {
         List<MediaWindow> ordered = orderedWindows();
         for (int i = ordered.size() - 1; i >= 0; i--) {
             MediaWindow window = ordered.get(i);
-            if (window.isVisible() && window.mouseReleased()) {
+            if (window.isVisible() && window.chrome().interactive() && window.mouseReleased()) {
                 return true;
             }
         }
@@ -587,7 +745,7 @@ public final class MediaWindowOverlay {
         List<MediaWindow> all = orderedWindows();
         for (int i = all.size() - 1; i >= 0; i--) {
             MediaWindow window = all.get(i);
-            if (window.mouseScrolled(mouseX, mouseY, deltaY)) {
+            if (window.chrome().interactive() && window.mouseScrolled(mouseX, mouseY, deltaY)) {
                 return true;
             }
         }
@@ -702,15 +860,21 @@ public final class MediaWindowOverlay {
                     // actually sit on while listening. See VideoPlayer.discardDueFrames.
                     window.player().discardDueFrames();
                 }
-                if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()) {
+                // Before the advance below: an addon must be told the track ended
+                // before it is told the next one started.
+                window.pollPlaybackEvents();
+                if (window.player().state() == VideoPlayer.State.ENDED && !window.advance()
+                        && window.closesWhenEnded()) {
                     window.closeWithFade();
                 }
             }
         }
         if (!ctx.getAudioManager().isEmpty()) {
             for (AudioWindow window : ctx.getAudioManager().getWindows()) {
+                window.pollPlaybackEvents();
                 AudioPlayer ap = window.player();
-                if (ap.state() == AudioPlayer.State.ENDED && !ap.isPaused() && !window.advance()) {
+                if (ap.state() == AudioPlayer.State.ENDED && !ap.isPaused() && !window.advance()
+                        && window.closesWhenEnded()) {
                     window.closeWithFade();
                 }
             }
@@ -720,6 +884,20 @@ public final class MediaWindowOverlay {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * A request an interceptor replaced, played through the request path, reduced back to
+     * the "did the mod take this?" answer the click path hands its caller.
+     */
+    private static boolean playRewritten(MediaRequest request) {
+        if (YouTubePlaylistSource.isPlaylist(request.url())) {
+            // Expanding is asynchronous, so there is no handle — but the link was
+            // certainly taken, which is what the caller asked.
+            playAllowed(request);
+            return true;
+        }
+        return playAllowed(request) != null;
+    }
 
     /**
      * Expands a YouTube playlist link and plays the whole thing in one fresh window —

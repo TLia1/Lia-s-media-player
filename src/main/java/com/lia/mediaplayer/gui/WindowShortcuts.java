@@ -1,8 +1,14 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaHandle;
+import com.lia.mediaplayer.api.input.MediaKeybinds;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.screens.Screen;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * The keyboard half of driving the media windows: what a key press means while a screen
@@ -104,6 +110,45 @@ final class WindowShortcuts {
     }
 
     /**
+     * Offers {@code key} to whatever addons registered a window shortcut for it.
+     *
+     * <p>Every registration is checked, not just the first match, and the first one that
+     * answers {@code true} takes the key — an addon that finds nothing to do says so and
+     * the key goes on to the screen, which is what keeps a shortcut from quietly eating
+     * a keystroke over a text field.</p>
+     */
+    private static boolean handleAddonShortcut(int key) {
+        List<MediaKeybinds.Shortcut> shortcuts = MediaKeybinds.windowShortcuts();
+        if (shortcuts.isEmpty()) {
+            return false;
+        }
+        boolean control = Keys.controlDown();
+        boolean shift = Keys.shiftDown();
+        boolean alt = Keys.altDown();
+        MediaHandle target = frontMostHandle();
+        for (MediaKeybinds.Shortcut shortcut : shortcuts) {
+            if (!shortcut.matches(key, control, shift, alt)) {
+                continue;
+            }
+            try {
+                if (shortcut.action().onPress(target)) {
+                    return true;
+                }
+            } catch (RuntimeException e) {
+                LiasMediaPlayer.LOGGER.error("An addon window shortcut threw on key {}", key, e);
+            }
+        }
+        return false;
+    }
+
+    /** The window an addon shortcut acts on: the same one the mod's own keys pick. */
+    @Nullable
+    private static MediaHandle frontMostHandle() {
+        MediaWindow target = MediaWindowOverlay.frontMost(MediaWindow::hasTransport);
+        return target == null ? null : target.handle();
+    }
+
+    /**
      * Runs whatever {@code key} means on the front-most window that can do it.
      *
      * <p>"Front-most that can do it" rather than plainly "front-most": a pinned image on
@@ -117,7 +162,9 @@ final class WindowShortcuts {
     static boolean handle(Screen screen, int key) {
         Action action = actionFor(key, Keys.controlDown(), Keys.shiftDown(), !ChatInput.isEmpty(screen));
         if (action == Action.NONE) {
-            return false;
+            // Addon shortcuts are tried only once the mod's own table has declined, so
+            // an addon can never shadow a built-in key — see api.input.MediaKeybinds.
+            return handleAddonShortcut(key);
         }
         // Volume is the one shared level (see media.Volume), so these three are answered
         // by the mod as a whole rather than by whichever window happens to be in front.
@@ -143,12 +190,20 @@ final class WindowShortcuts {
             }
         }
         if (action == Action.THEATER) {
+            // Not a transport action: how big the picture is drawn is the viewer's own
+            // business even in a host-controlled session.
             MediaWindow target = MediaWindowOverlay.frontMost(MediaWindow::supportsTheater);
             return target != null && target.toggleTheater();
         }
         MediaWindow target = MediaWindowOverlay.frontMost(MediaWindow::hasTransport);
         if (target == null) {
             return false;
+        }
+        if (target.isLocked()) {
+            // Held off by SyncControl.setLocked. The key is still consumed: it was aimed
+            // at the player, and letting a space fall through into the chat field instead
+            // would be a worse answer than nothing happening.
+            return true;
         }
         return switch (action) {
             case PLAY_PAUSE -> target.togglePlayPause();

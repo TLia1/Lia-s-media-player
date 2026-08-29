@@ -4,9 +4,16 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.event.PlaybackEvent;
+import com.lia.mediaplayer.api.event.PlaybackEvents;
+import com.lia.mediaplayer.api.source.MediaMetadata;
+import com.lia.mediaplayer.api.source.MediaMetadataProvider;
 import com.lia.mediaplayer.source.YouTubeSource;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,15 +70,72 @@ public final class MediaTitleCache {
     public String getOrLoad(String url) {
         Entry entry = cache.computeIfAbsent(url, MediaTitleCache::newEntry);
         if (entry.state == State.IDLE) {
-            // Direct files already have their final title (the file name); only
-            // YouTube links need a network round-trip.
-            if (YouTubeSource.isYouTube(url)) {
+            // An addon that registered a MediaMetadataProvider for its own links is asked
+            // first: without that, a custom source shows a raw URL in every place the mod
+            // would otherwise show a name, because the strategies below are the only ones
+            // this class knows and neither of them applies to somebody else's service.
+            MediaMetadataProvider provider = providerFor(url);
+            if (provider != null) {
+                startProviderLoad(url, entry, provider);
+            } else if (YouTubeSource.isYouTube(url)) {
+                // Direct files already have their final title (the file name); only
+                // YouTube links need a network round-trip.
                 startLoading(url, entry);
             } else {
                 entry.state = State.LOADED;
             }
         }
         return entry.title;
+    }
+
+    /**
+     * The first registered provider that claims {@code url}, or {@code null}.
+     *
+     * <p>{@code handles} is documented as cheap and side-effect free, but it is somebody
+     * else's code running on the render thread, so one that throws is dropped rather than
+     * allowed to take the frame down with it.</p>
+     */
+    @Nullable
+    private static MediaMetadataProvider providerFor(String url) {
+        for (MediaMetadataProvider provider : LiasMediaPlayerApi.metadataProviders()) {
+            try {
+                if (provider.handles(url)) {
+                    return provider;
+                }
+            } catch (RuntimeException e) {
+                LiasMediaPlayer.LOGGER.error("Metadata provider {} threw on handles({})",
+                        provider.getClass().getName(), url, e);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Asks an addon's provider for the title, and publishes whatever comes back on the
+     * main thread — the same shape as the built-in oEmbed load, so a provider that
+     * fails simply leaves the fallback label in place.
+     */
+    private void startProviderLoad(String url, Entry entry, MediaMetadataProvider provider) {
+        entry.state = State.LOADING;
+        CompletableFuture<MediaMetadata> future;
+        try {
+            future = provider.fetch(url);
+        } catch (RuntimeException e) {
+            LiasMediaPlayer.LOGGER.error("Metadata provider {} threw on fetch({})",
+                    provider.getClass().getName(), url, e);
+            entry.state = State.FAILED;
+            return;
+        }
+        if (future == null) {
+            entry.state = State.FAILED;
+            return;
+        }
+        future.whenCompleteAsync((metadata, error) -> {
+            String title = metadata == null || metadata.title() == null
+                    ? null : clamp(metadata.title().getString());
+            long duration = metadata == null ? -1L : metadata.durationMicros();
+            onComplete(url, entry, title, error, duration);
+        }, Minecraft.getInstance());
     }
 
     /**
@@ -88,6 +152,26 @@ public final class MediaTitleCache {
     /**
      * Drops every cached title (e.g. when leaving a server).
      */
+    /**
+     * The title already known for {@code url}, as a component, <b>without</b> starting
+     * anything — the URL itself when nothing has been resolved.
+     *
+     * <p>A peek, deliberately, and that is what makes it the right thing for an m3u
+     * export: writing a playlist out must not be what launches a round-trip per entry.
+     * {@code literal} rather than {@code translatable} because what comes back is either
+     * a title somebody else wrote or the raw link, and neither is text of the mod's to
+     * translate.</p>
+     */
+    public Component peek(String url) {
+        Entry entry = cache.get(url);
+        return Component.literal(entry == null || entry.title == null ? url : entry.title);
+    }
+
+    /** How many titles are held — see {@code api.diag.MediaPlayerStats}. */
+    public int size() {
+        return cache.size();
+    }
+
     public void clear() {
         cache.clear();
     }
@@ -100,7 +184,7 @@ public final class MediaTitleCache {
         entry.state = State.LOADING;
         CompletableFuture
                 .supplyAsync(() -> fetchYouTubeTitle(url), Util.ioPool())
-                .whenCompleteAsync((title, error) -> onComplete(url, entry, title, error),
+                .whenCompleteAsync((title, error) -> onComplete(url, entry, title, error, -1L),
                         Minecraft.getInstance());
     }
 
@@ -149,7 +233,7 @@ public final class MediaTitleCache {
     // Main thread — publish the result
     // ------------------------------------------------------------------
 
-    private void onComplete(String url, Entry entry, String title, Throwable error) {
+    private void onComplete(String url, Entry entry, String title, Throwable error, long durationMicros) {
         // The entry may have been evicted while the load was in flight.
         if (cache.get(url) != entry) {
             return;
@@ -163,6 +247,10 @@ public final class MediaTitleCache {
         }
         entry.title = title;
         entry.state = State.LOADED;
+        // The moment an addon's "now playing" export or rich-presence line has something
+        // real to say. Posted here rather than at each call site because this is the one
+        // place a title stops being a placeholder.
+        PlaybackEvents.post(PlaybackEvent.metadata(url, durationMicros));
     }
 
     // ------------------------------------------------------------------

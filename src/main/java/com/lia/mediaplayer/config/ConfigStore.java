@@ -12,7 +12,6 @@ import com.lia.mediaplayer.api.config.IntSliderOption;
 import com.lia.mediaplayer.api.config.OptionWidth;
 import com.lia.mediaplayer.api.config.StepSliderOption;
 import com.lia.mediaplayer.api.config.StringOption;
-import com.lia.mediaplayer.gui.ThemeName;
 import com.lia.mediaplayer.gui.WindowPosition;
 import com.lia.mediaplayer.source.FilterMode;
 import com.lia.mediaplayer.storage.JsonFileStore;
@@ -39,6 +38,26 @@ public class ConfigStore {
 
     // Built-in options
     public static final StepSliderOption<Integer> VIDEO_RESOLUTION;
+    /**
+     * How many off-screen API surfaces may exist at once — see
+     * {@code surface.SurfaceRegistry}. Posters are cheap and this bounds the lot.
+     */
+    public static final IntSliderOption MAX_API_SURFACES;
+    /**
+     * How many of those may be decoding video at once. Each one is an ffmpeg process
+     * with a frame queue and an audio line behind it, so this cap is much tighter than
+     * the one above, and it is the one that stops a cinema-hall addon from bringing a
+     * machine to its knees.
+     */
+    public static final IntSliderOption MAX_API_VIDEO_SURFACES;
+    /**
+     * How many sounds addons may play with no window at all — see
+     * {@code audio.HeadlessAudio}. Each is an ffmpeg process and an audio line, exactly
+     * like a track in the audio bar, and unlike a window there is nothing on screen to
+     * make one visible; this is what stops an addon looping over speaker blocks from
+     * starting dozens.
+     */
+    public static final IntSliderOption MAX_HEADLESS_AUDIO;
     public static final IntSliderOption MAX_PINNED_IMAGES;
     public static final IntSliderOption MAX_VIDEO_WINDOWS;
     public static final IntSliderOption MAX_AUDIO_WINDOWS;
@@ -48,8 +67,14 @@ public class ConfigStore {
     public static final IntSliderOption MAX_IMAGE_CACHE_MEGABYTES;
     public static final IntSliderOption YT_DLP_TIMEOUT_SECONDS;
     public static final EnumOption<WindowPosition> DEFAULT_WINDOW_POSITION;
-    /** Which palette every window, panel and list draws with — see {@code gui.Theme}. */
-    public static final EnumOption<ThemeName> THEME;
+    /**
+     * Which palette every window, panel and list draws with — see {@code gui.Theme}.
+     *
+     * <p>A {@link ThemeOption} rather than a {@code choice(...)}, because API 3.2 lets an
+     * addon register a palette and an enum cannot grow at runtime. Its value is the
+     * theme's string id; the file an older version wrote still reads.</p>
+     */
+    public static final ThemeOption THEME;
     // The client-side link filters (see chat.MediaFilters). Both
     // host lists are kept, not one list whose meaning depends on the mode: switching
     // the mode to look at the other list should not throw away what was typed into
@@ -133,6 +158,13 @@ public class ConfigStore {
                 RESOLUTION_HEIGHTS,
                 height -> height + "p")
                 .withDescription(descriptionKey("video_resolution"));
+        MAX_API_SURFACES = slider("max_api_surfaces", 16, 1, 64).withWidth(OptionWidth.HALF);
+        MAX_API_VIDEO_SURFACES = slider("max_api_video_surfaces", 3, 1, 12)
+                .withWidth(OptionWidth.HALF)
+                .withWarning(key("max_api_video_surfaces") + ".warning");
+        MAX_HEADLESS_AUDIO = slider("max_headless_audio", 4, 1, 16)
+                .withWidth(OptionWidth.HALF)
+                .withWarning(key("max_headless_audio") + ".warning");
         MAX_PINNED_IMAGES = slider("max_pinned_images", 6, 1, 20);
         MAX_VIDEO_WINDOWS = slider("max_video_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
         MAX_AUDIO_WINDOWS = slider("max_audio_windows", 4, 1, 10).withWidth(OptionWidth.HALF);
@@ -152,7 +184,8 @@ public class ConfigStore {
         // there for anyone who would rather spend it.
         MAX_IMAGE_CACHE_MEGABYTES = slider("max_image_cache_mb", 96, 32, 1024).withWidth(OptionWidth.HALF);
         YT_DLP_TIMEOUT_SECONDS = slider("yt_dlp_timeout", 25, 5, 60);
-        THEME = choice("theme", ThemeName.DARK);
+        THEME = new ThemeOption(id("theme"), GROUP, key("theme"))
+                .withDescription(descriptionKey("theme"));
         DEFAULT_WINDOW_POSITION = choice("default_window_position", WindowPosition.CENTER);
         LINK_FILTER_MODE = choice("link_filter_mode", FilterMode.OFF);
         BLOCKED_DOMAINS = text("blocked_domains");
@@ -170,6 +203,9 @@ public class ConfigStore {
         register(MAX_IMAGE_CACHE_MEGABYTES);
         register(MAX_GIF_FRAMES);
         register(MAX_PINNED_IMAGES);
+        register(MAX_API_SURFACES);
+        register(MAX_API_VIDEO_SURFACES);
+        register(MAX_HEADLESS_AUDIO);
         register(FRAME_QUEUE_CAPACITY);
         register(YT_DLP_TIMEOUT_SECONDS);
         register(THEME);
@@ -341,7 +377,7 @@ public class ConfigStore {
      * (see {@code LiasMediaPlayer.init}), and a tick poll has no business doing file
      * I/O on the off-chance they are not.
      */
-    public ThemeName theme() {
+    public String themeId() {
         return THEME.getValue();
     }
 }

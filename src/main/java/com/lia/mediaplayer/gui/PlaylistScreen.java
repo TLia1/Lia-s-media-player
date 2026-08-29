@@ -1,6 +1,10 @@
 package com.lia.mediaplayer.gui;
 
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.MediaKind;
+import com.lia.mediaplayer.api.MediaRequest;
+import com.lia.mediaplayer.api.RepeatMode;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
@@ -213,6 +217,8 @@ public final class PlaylistScreen extends Screen implements DragTarget {
                 .build());
         addRenderableWidget(Button.builder(Component.translatable("gui.liasmediaplayer.playlists.button.done"), b -> onClose())
                 .bounds(width / 2 - 80, height - 26, 160, 20).build());
+        // Whatever addons registered, to the right of "Done" — see api.screen.MediaScreenTab.
+        ScreenTabs.addTo(this, width / 2 + 84, height - 26, this::addRenderableWidget);
 
         buildSelectionWidgets();
         syncSelection();
@@ -387,9 +393,18 @@ public final class PlaylistScreen extends Screen implements DragTarget {
     }
 
     private void play(boolean shuffle) {
-        if (selected != null && !selected.isEmpty()) {
-            getContext().getAudioManager().playAll(selected.urls(), shuffle,
-                    loopOnPlay ? RepeatMode.ALL : RepeatMode.OFF);
+        if (selected == null || selected.isEmpty()) {
+            return;
+        }
+        // Through the request path, so a registered MediaInterceptor sees a playlist
+        // being started the way it sees a chat click — with PLAYLIST as the origin, which
+        // is exactly the distinction an addon that gates other people's links wants.
+        MediaRequest request = MediaRequest.ofAll(selected.urls())
+                .as(MediaKind.AUDIO)
+                .newWindow(true)
+                .shuffle(shuffle)
+                .repeat(loopOnPlay ? RepeatMode.ALL : RepeatMode.OFF);
+        if (MediaWindowOverlay.play(request, PlayOrigin.PLAYLIST) != null) {
             onClose();
         }
     }

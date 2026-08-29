@@ -1,6 +1,10 @@
 package com.lia.mediaplayer.image;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.image.DecodedImage;
+import com.lia.mediaplayer.api.image.ImageDecoder;
+import com.lia.mediaplayer.api.render.SurfacePixels;
 import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.gui.TextureBridge;
 import com.lia.mediaplayer.media.MediaCache;
@@ -22,6 +26,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -82,7 +88,33 @@ public final class ImagePreviewCache {
      * the texture is ready.
      */
     public Entry getOrLoad(String url) {
+        return getOrLoad(url, false);
+    }
+
+    /**
+     * The same, optionally keeping the first frame's pixels readable — what a
+     * {@code MediaSurface} asked for with {@code keepPixels} needs, and what backs
+     * {@code MediaSurface.pixels()}.
+     *
+     * <p>Retention is opt-in, and per entry rather than global, because it is heap the
+     * cache's VRAM budget does not account for: keeping every chat preview readable would
+     * roughly double what the picture cache costs, to answer a question almost no caller
+     * asks. Only the first frame is kept — an addon sampling a colour means the picture,
+     * not the animation.</p>
+     *
+     * <p>An entry already loaded <em>without</em> the pixels is dropped and loaded again,
+     * because the copy can only be taken while the frames are still decoded. That is a
+     * re-download, so it happens at most once per URL per session and only when something
+     * actually asks.</p>
+     */
+    public Entry getOrLoad(String url, boolean keepPixels) {
         Entry entry = cache.computeIfAbsent(url, u -> new Entry());
+        if (keepPixels && !entry.keepPixels) {
+            entry.keepPixels = true;
+            if (entry.state == State.LOADED && entry.pixels == null) {
+                entry.releaseTexture();
+            }
+        }
         if (entry.state == State.IDLE) {
             startLoading(url, entry);
         }
@@ -94,6 +126,16 @@ public final class ImagePreviewCache {
      */
     public void clear() {
         cache.clear();
+    }
+
+    /** How many pictures are held — see {@code api.diag.MediaPlayerStats}. */
+    public int size() {
+        return cache.size();
+    }
+
+    /** What those pictures are estimated to cost, in bytes. */
+    public long estimatedBytes() {
+        return cache.estimatedBytes();
     }
 
     private void startLoading(String url, Entry entry) {
@@ -158,6 +200,10 @@ public final class ImagePreviewCache {
      * becomes a single frame. Runs on the IO pool.
      */
     private static GifDecoder.Result decode(byte[] data) throws IOException {
+        GifDecoder.Result external = decodeExternally(data);
+        if (external != null) {
+            return external;
+        }
         if (isGif(data)) {
             return GifDecoder.decode(data);
         }
@@ -180,6 +226,62 @@ public final class ImagePreviewCache {
             single = GifDecoder.toNativeImage(toArgb(decoded));
         }
         return new GifDecoder.Result(new NativeImage[]{single}, new int[]{0});
+    }
+
+    /**
+     * Offers the bytes to every registered {@link ImageDecoder}, in order, and turns
+     * whatever claims them into the frame sequence the rest of this class works in.
+     *
+     * <p>Registered decoders are asked <em>before</em> the built-ins, which is what lets
+     * an addon supply WebP or APNG — formats the mod has no reader for — and, if it
+     * really wants to, a better GIF decoder than this one. A decoder that claims a
+     * picture and then throws does not fall through: it said the picture was its, and
+     * quietly producing a different one would hide the bug. It answering {@code null}
+     * does fall through, because that is it saying the bytes were not its after all.</p>
+     *
+     * <p>Runs on the IO pool, like the rest of {@link #decode}. The pixel cap is applied
+     * to what comes back for the same reason it is applied to the built-in path — the URL
+     * came from chat.</p>
+     */
+    @Nullable
+    private static GifDecoder.Result decodeExternally(byte[] data) throws IOException {
+        List<ImageDecoder> decoders = LiasMediaPlayerApi.imageDecoders();
+        if (decoders.isEmpty()) {
+            return null;
+        }
+        byte[] header = Arrays.copyOf(data, Math.min(data.length, ImageDecoder.HEADER_BYTES));
+        for (ImageDecoder decoder : decoders) {
+            boolean claims;
+            try {
+                claims = decoder.supports(header);
+            } catch (RuntimeException e) {
+                LiasMediaPlayer.LOGGER.warn("Image decoder {} threw from supports",
+                        decoder.getClass().getName(), e);
+                continue;
+            }
+            if (!claims) {
+                continue;
+            }
+            DecodedImage decoded = decoder.decode(data);
+            if (decoded == null) {
+                continue;
+            }
+            if ((long) decoded.width() * decoded.height() > MAX_IMAGE_PIXELS) {
+                throw new IOException("Image is implausibly large");
+            }
+            return toResult(decoded);
+        }
+        return null;
+    }
+
+    /** An addon's frames, uploaded into the {@link NativeImage}s the cache holds. */
+    private static GifDecoder.Result toResult(DecodedImage decoded) {
+        NativeImage[] images = new NativeImage[decoded.frameCount()];
+        for (int i = 0; i < images.length; i++) {
+            images[i] = GifDecoder.toNativeImage(
+                    decoded.frames().get(i), decoded.width(), decoded.height());
+        }
+        return new GifDecoder.Result(images, decoded.delaysMs());
     }
 
     /**
@@ -243,13 +345,20 @@ public final class ImagePreviewCache {
                 total += delay;
             }
 
+            if (entry.keepPixels) {
+                // Taken from the first frame before the images are handed to the texture
+                // manager, which is the last moment their pixels are ours to read.
+                entry.pixels = new SurfacePixels(images[0].getWidth(), images[0].getHeight(),
+                        readArgb(images[0]));
+            }
             entry.frames = locations;
             entry.frameDelaysMs = decoded.delaysMs();
             entry.totalDurationMs = total;
             entry.animationStartMs = 0L;
             entry.width = images[0].getWidth();
             entry.height = images[0].getHeight();
-            entry.estimatedSizeBytes = (long) entry.width * entry.height * 4 * images.length;
+            entry.estimatedSizeBytes = (long) entry.width * entry.height * 4 * images.length
+                    + (entry.pixels == null ? 0L : (long) entry.width * entry.height * 4);
             entry.state = State.LOADED;
             LiasMediaPlayer.LOGGER.info("Loaded image preview {}x{} ({} frame(s)) from {}",
                     entry.width, entry.height, images.length, url);
@@ -259,6 +368,33 @@ public final class ImagePreviewCache {
             closeFrames(decoded);
             LiasMediaPlayer.LOGGER.warn("Failed to create preview texture for {}", url, e);
         }
+    }
+
+    /**
+     * A {@link NativeImage}'s pixels as packed {@code 0xAARRGGBB}, copied out.
+     *
+     * <p>Through the public per-pixel reader rather than through the pixel block's
+     * address: this runs once per retained picture, not per frame of a video, so the
+     * bulk path {@code TextureBridge} exists for would buy nothing and the version guard
+     * it carries would have to be written out a second time.</p>
+     */
+    private static int[] readArgb(NativeImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int[] argb = new int[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                //? if <1.21.4 {
+                int abgr = image.getPixelRGBA(x, y);
+                argb[y * width + x] = (abgr & 0xFF00FF00)
+                        | ((abgr & 0x00FF0000) >>> 16)
+                        | ((abgr & 0x000000FF) << 16);
+                //?} else {
+                /*argb[y * width + x] = image.getPixel(x, y);
+                *///?}
+            }
+        }
+        return argb;
     }
 
     private static void closeFrames(@Nullable GifDecoder.Result decoded) {
@@ -281,6 +417,15 @@ public final class ImagePreviewCache {
 
     public static final class Entry {
         public State state = State.IDLE;
+        /** Whether {@link #pixels} should be taken when this loads — see {@link #getOrLoad(String, boolean)}. */
+        boolean keepPixels;
+        /**
+         * The first frame's pixels, kept only when something asked. Immutable from here
+         * on; {@link #pixels()} copies again on the way out, so nobody can edit the copy
+         * the next caller gets.
+         */
+        @Nullable
+        SurfacePixels pixels;
         @Nullable
         ResourceLocation[] frames;
         int @Nullable [] frameDelaysMs;
@@ -317,6 +462,18 @@ public final class ImagePreviewCache {
             return frames[frames.length - 1];
         }
 
+        /**
+         * A fresh copy of the retained pixels, or {@code null} if none were kept or the
+         * picture has not loaded. See {@code api.render.SurfacePixels} for why it is a
+         * copy every time.
+         */
+        @Nullable
+        public SurfacePixels pixels() {
+            SurfacePixels kept = pixels;
+            return kept == null ? null : new SurfacePixels(kept.width(), kept.height(),
+                    kept.argb().clone());
+        }
+
         public void releaseTexture() {
             if (frames != null) {
                 for (ResourceLocation location : frames) {
@@ -327,6 +484,7 @@ public final class ImagePreviewCache {
                 frames = null;
             }
             frameDelaysMs = null;
+            pixels = null;
             totalDurationMs = 0;
             animationStartMs = 0L;
             estimatedSizeBytes = 0L;

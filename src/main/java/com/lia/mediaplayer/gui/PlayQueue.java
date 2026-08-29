@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.gui;
 
+import com.lia.mediaplayer.api.RepeatMode;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -48,6 +49,22 @@ final class PlayQueue {
     private RepeatMode repeat = RepeatMode.OFF;
     private boolean shuffle;
 
+    /**
+     * Bumped by every change to the order or the contents.
+     *
+     * <p>What it buys is the API's {@code QUEUE_CHANGED} event without a notification
+     * call at each of the dozen places that touch a queue — the panel's three buttons,
+     * the window's enqueue and jump, the transport's next and previous, the API's own
+     * edits. The window compares this once a tick, the same sweep the playback events are
+     * derived from, and a tick is a fine resolution for "the list moved".</p>
+     */
+    private int version;
+
+    /** See {@link #version}. */
+    int version() {
+        return version;
+    }
+
     boolean isEmpty() {
         return urls.isEmpty();
     }
@@ -72,6 +89,7 @@ final class PlayQueue {
      */
     void add(String url) {
         urls.add(url);
+        version++;
     }
 
     /**
@@ -79,6 +97,7 @@ final class PlayQueue {
      */
     void addAll(Collection<String> more) {
         urls.addAll(more);
+        version++;
     }
 
     /**
@@ -86,12 +105,14 @@ final class PlayQueue {
      */
     void addFirst(String url) {
         urls.add(0, url);
+        version++;
     }
 
     /**
      * Removes and returns the first queued URL, or throws if empty (guard with {@link #isEmpty()}).
      */
     String removeFirst() {
+        version++;
         return urls.remove(0);
     }
 
@@ -99,7 +120,30 @@ final class PlayQueue {
      * Removes and returns the entry at {@code index}.
      */
     String remove(int index) {
+        version++;
         return urls.remove(index);
+    }
+
+    /**
+     * Inserts a URL at {@code index}, clamped into the list. The general form of
+     * {@link #addFirst}, added for the API's {@code MediaQueue.insert}.
+     */
+    void insert(int index, String url) {
+        urls.add(Math.max(0, Math.min(urls.size(), index)), url);
+        version++;
+    }
+
+    /**
+     * Moves the entry at {@code from} so it sits at {@code to}, both read against the
+     * list as it is now. The general form of {@link #moveUp} / {@link #moveDown}: an
+     * addon reordering a long queue means one move, not fifteen swaps.
+     */
+    void move(int from, int to) {
+        if (from < 0 || from >= urls.size() || to < 0 || to >= urls.size() || from == to) {
+            return;
+        }
+        urls.add(to, urls.remove(from));
+        version++;
     }
 
     /**
@@ -108,6 +152,7 @@ final class PlayQueue {
     void moveUp(int index) {
         if (index > 0 && index < urls.size()) {
             urls.add(index - 1, urls.remove(index));
+            version++;
         }
     }
 
@@ -117,12 +162,14 @@ final class PlayQueue {
     void moveDown(int index) {
         if (index >= 0 && index < urls.size() - 1) {
             urls.add(index + 1, urls.remove(index));
+            version++;
         }
     }
 
     void clear() {
         urls.clear();
         history.clear();
+        version++;
     }
 
     // ------------------------------------------------------------------
@@ -157,6 +204,7 @@ final class PlayQueue {
         shuffle = value;
         if (shuffle) {
             Collections.shuffle(urls);
+            version++;
         }
     }
 
@@ -194,16 +242,17 @@ final class PlayQueue {
             if (repeat != RepeatMode.ALL) {
                 return null;
             }
+            version++;
             // The finished track closes the round before the round is recycled, so it
             // takes its place in the next one exactly once.
             pushHistory(current);
             if (!startNextRound(current)) {
                 return null;
             }
-            return urls.remove(0);
+            return removeFirst();
         }
         pushHistory(current);
-        return urls.remove(0);
+        return removeFirst();
     }
 
     /**

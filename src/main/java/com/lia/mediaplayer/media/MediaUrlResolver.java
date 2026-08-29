@@ -2,7 +2,9 @@ package com.lia.mediaplayer.media;
 
 import com.lia.mediaplayer.LiasMediaPlayer;
 import com.lia.mediaplayer.MediaPlayerContext;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.api.MediaSource;
+import com.lia.mediaplayer.api.source.MediaResolver;
 import com.lia.mediaplayer.config.ConfigStore;
 import com.lia.mediaplayer.source.TwitchSource;
 import com.lia.mediaplayer.source.Urls;
@@ -19,6 +21,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Turns a link seen in chat into a URL that {@link FFmpegCli}
@@ -81,11 +85,60 @@ public final class MediaUrlResolver {
         if (!Urls.isHttp(url)) {
             throw new IOException("Refusing to play a non-http(s) link: " + url);
         }
+        // Addons first. Until MediaResolver existed there were exactly two answers to
+        // "how do I open this?" — hand it to ffmpeg, or shell out to yt-dlp — so an addon
+        // with a service of its own could register a MediaSource and still not play a
+        // single thing unless yt-dlp happened to support it.
+        String byAddon = resolveWithAddons(url);
+        if (byAddon != null) {
+            return byAddon;
+        }
         if (requiresExtractor(url)) {
             return resolveYtDlp(url);
         }
         // Direct files and HLS/DASH manifests are opened by ffmpeg as-is.
         return url;
+    }
+
+    /**
+     * Asks each registered {@link MediaResolver}, in registration order, and takes the
+     * first usable answer.
+     *
+     * <p>What comes back is checked with the same {@link Urls#isHttp} gate the incoming
+     * link passed, and an answer that fails it is discarded rather than played: the
+     * string is about to become an argument to a downloaded binary, and "an addon said
+     * so" is not a reason to relax that. A resolver that throws an {@link IOException}
+     * stops the resolution — its own contract says so, and a signing service that is down
+     * is a failure to report, not a link to hand to ffmpeg unsigned. A resolver that
+     * throws anything else has a bug, and a bug in one addon must not stop the others.</p>
+     */
+    @Nullable
+    private static String resolveWithAddons(String url) throws IOException {
+        for (MediaResolver resolver : LiasMediaPlayerApi.resolvers()) {
+            String resolved;
+            try {
+                if (!resolver.handles(url)) {
+                    continue;
+                }
+                resolved = resolver.resolve(url);
+            } catch (IOException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                LiasMediaPlayer.LOGGER.error("Media resolver {} threw on {}",
+                        resolver.getClass().getName(), url, e);
+                continue;
+            }
+            if (resolved == null) {
+                continue;
+            }
+            if (!Urls.isHttp(resolved)) {
+                LiasMediaPlayer.LOGGER.warn("Media resolver {} returned a non-http(s) URL for {}; ignoring it",
+                        resolver.getClass().getName(), url);
+                continue;
+            }
+            return resolved;
+        }
+        return null;
     }
 
     /**
