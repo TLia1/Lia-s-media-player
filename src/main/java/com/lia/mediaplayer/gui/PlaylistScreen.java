@@ -5,6 +5,7 @@ import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.api.MediaRequest;
 import com.lia.mediaplayer.api.RepeatMode;
 import com.lia.mediaplayer.api.policy.PlayOrigin;
+import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.media.YouTubePlaylistResolver;
 import com.lia.mediaplayer.playlist.Playlist;
 import com.lia.mediaplayer.playlist.PlaylistStore;
@@ -90,6 +91,22 @@ public final class PlaylistScreen extends Screen implements DragTarget {
     private int pendingImports;
     /** The search text, kept here so the box is never rebuilt to apply it. */
     private String query = "";
+    /**
+     * The last result of {@link #shownEntries()} and what it was computed from.
+     *
+     * <p>Filtering reads a name per entry, and the list is filtered on every frame it is
+     * drawn — so for a playlist of any size this has to be a lookup, not a fresh pass
+     * over the whole thing sixty times a second. It is redone when the playlist, the
+     * search text or the set of resolved titles changes, which is every way the answer
+     * can move.</p>
+     */
+    @Nullable
+    private List<Integer> shownCache;
+    @Nullable
+    private Playlist shownFor;
+    private String shownQuery = "";
+    private int shownSize;
+    private int shownGeneration;
 
     // The drag in progress: which entry was picked up, whether the cursor has moved far
     // enough for it to count, and where it is now.
@@ -308,6 +325,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
         }
         cancelDrag();
         clampScroll();
+        warmTitles();
     }
 
     private void createPlaylist() {
@@ -369,7 +387,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
             }
             for (String entry : result.urls()) {
                 target.add(entry);
-                MediaPlayerContext.get().getTitleCache().getOrLoad(entry); // warm the names for the list
+                MediaPlayerContext.get().getTitleCache().warm(entry); // warm the names for the list
             }
             if (renameIfDefault && !result.title().isBlank() && target.name().equals(defaultName)) {
                 target.setName(result.title());
@@ -479,21 +497,56 @@ public final class PlaylistScreen extends Screen implements DragTarget {
      * being turned into a filtered copy of the list.</p>
      */
     private List<Integer> shownEntries() {
-        List<Integer> shown = new ArrayList<>();
         if (selected == null) {
-            return shown;
+            return List.of();
         }
-        List<String> urls = selected.urls();
+        MediaTitleCache titles = MediaPlayerContext.get().getTitleCache();
         String needle = query.strip().toLowerCase(Locale.ROOT);
+        int generation = titles.generation();
+        if (shownCache != null && shownFor == selected && shownQuery.equals(needle)
+                && shownSize == selected.size() && shownGeneration == generation) {
+            return shownCache;
+        }
+        List<Integer> shown = new ArrayList<>();
+        List<String> urls = selected.urls();
         for (int i = 0; i < urls.size(); i++) {
             String url = urls.get(i);
+            // peekTitle, not getOrLoad: the names are warmed once per selection by
+            // warmTitles, and a filter that started a lookup of its own would start one
+            // per entry per frame — which is what took the client's native threads with
+            // it on a large playlist. A name that arrives late moves the cache's
+            // generation, and the filter above runs again.
             if (needle.isEmpty()
-                    || MediaPlayerContext.get().getTitleCache().getOrLoad(url).toLowerCase(Locale.ROOT).contains(needle)
+                    || titles.peekTitle(url).toLowerCase(Locale.ROOT).contains(needle)
                     || url.toLowerCase(Locale.ROOT).contains(needle)) {
                 shown.add(i);
             }
         }
+        shownCache = shown;
+        shownFor = selected;
+        shownQuery = needle;
+        shownSize = selected.size();
+        shownGeneration = generation;
         return shown;
+    }
+
+    /**
+     * Asks for the name of everything in the selected playlist, so the search box has
+     * something to match on and the rows below the fold are already named by the time
+     * they are scrolled to.
+     *
+     * <p>Called when the selection changes, not per frame: the title cache runs a bounded
+     * number of lookups at a time, so this hands it a queue to work through rather than
+     * a request per entry all at once.</p>
+     */
+    private void warmTitles() {
+        if (selected == null) {
+            return;
+        }
+        MediaTitleCache titles = MediaPlayerContext.get().getTitleCache();
+        for (String url : selected.urls()) {
+            titles.warm(url);
+        }
     }
 
     /** Whether the list on screen is the whole playlist, in order — see {@link DragTarget}. */

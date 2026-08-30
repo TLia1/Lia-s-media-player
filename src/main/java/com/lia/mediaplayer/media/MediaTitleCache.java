@@ -21,6 +21,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -49,7 +50,14 @@ import java.util.concurrent.CompletionException;
  * tested on its own.</p>
  */
 public final class MediaTitleCache {
-    private static final int MAX_ENTRIES = 128;
+    /**
+     * How many titles to keep. Sized for a playlist rather than for a chat backlog: the
+     * playlist and history screens want a name for every row so their search box can
+     * match on it, and a cap smaller than the list being searched evicts the very titles
+     * that list keeps asking for — a lookup restarted per entry for as long as the
+     * screen is open, and a name that never settles.
+     */
+    private static final int MAX_ENTRIES = 1024;
     /**
      * Hard cap on the stored title length so a pathological title can't bloat memory.
      */
@@ -58,8 +66,26 @@ public final class MediaTitleCache {
      * Cap on the oEmbed reply we are willing to buffer.
      */
     private static final int MAX_OEMBED_BYTES = 64 * 1024;
+    /**
+     * How many lookups may be in flight at once; everything else waits in
+     * {@link #pending}.
+     *
+     * <p>Bulk callers are normal here — selecting a playlist asks for a name per entry in
+     * one go — and {@link Util#ioPool()} is an unbounded cached pool, so an unqueued burst
+     * is one thread and one TLS handshake <em>per entry</em>. A few hundred of those is
+     * what a client runs out of native threads on ({@code pthread_create failed
+     * (EAGAIN)}), which is a crash rather than a slow screen, so the burst is spread out
+     * here instead of at each call site.</p>
+     */
+    private static final int MAX_IN_FLIGHT = 6;
 
     private final MediaCache<Entry> cache = new MediaCache<>(() -> MAX_ENTRIES, null);
+    /** URLs whose entry is {@link State#QUEUED}, in the order they were asked for. */
+    private final ArrayDeque<String> pending = new ArrayDeque<>();
+    private int inFlight;
+    /** Guards {@link #pump} against a load that completes synchronously inside it. */
+    private boolean pumping;
+    private int generation;
 
     /**
      * Returns the best title known for a URL, starting a one-off background load the
@@ -68,19 +94,40 @@ public final class MediaTitleCache {
      * the resolved video title once available.
      */
     public String getOrLoad(String url) {
+        return load(url, true);
+    }
+
+    /**
+     * Asks for a title without wanting it now: the same lookup {@link #getOrLoad} starts,
+     * queued <em>behind</em> everything asked for on its own.
+     *
+     * <p>What a caller warming a whole list uses. The distinction only matters because
+     * the queue is bounded: a playlist of five hundred handed over at once would
+     * otherwise sit in front of the one title somebody is actually looking at — the track
+     * that just started playing — and leave it unnamed until the list had drained.</p>
+     */
+    public void warm(String url) {
+        load(url, false);
+    }
+
+    private String load(String url, boolean urgent) {
         Entry entry = cache.computeIfAbsent(url, MediaTitleCache::newEntry);
         if (entry.state == State.IDLE) {
             // An addon that registered a MediaMetadataProvider for its own links is asked
             // first: without that, a custom source shows a raw URL in every place the mod
             // would otherwise show a name, because the strategies below are the only ones
             // this class knows and neither of them applies to somebody else's service.
-            MediaMetadataProvider provider = providerFor(url);
-            if (provider != null) {
-                startProviderLoad(url, entry, provider);
-            } else if (YouTubeSource.isYouTube(url)) {
-                // Direct files already have their final title (the file name); only
-                // YouTube links need a network round-trip.
-                startLoading(url, entry);
+            entry.provider = providerFor(url);
+            // Direct files already have their final title (the file name); only a
+            // provider's links and YouTube links need a network round-trip.
+            if (entry.provider != null || YouTubeSource.isYouTube(url)) {
+                entry.state = State.QUEUED;
+                if (urgent) {
+                    pending.addFirst(url);
+                } else {
+                    pending.addLast(url);
+                }
+                pump();
             } else {
                 entry.state = State.LOADED;
             }
@@ -116,7 +163,6 @@ public final class MediaTitleCache {
      * fails simply leaves the fallback label in place.
      */
     private void startProviderLoad(String url, Entry entry, MediaMetadataProvider provider) {
-        entry.state = State.LOADING;
         CompletableFuture<MediaMetadata> future;
         try {
             future = provider.fetch(url);
@@ -124,10 +170,12 @@ public final class MediaTitleCache {
             LiasMediaPlayer.LOGGER.error("Metadata provider {} threw on fetch({})",
                     provider.getClass().getName(), url, e);
             entry.state = State.FAILED;
+            loadFinished();
             return;
         }
         if (future == null) {
             entry.state = State.FAILED;
+            loadFinished();
             return;
         }
         future.whenCompleteAsync((metadata, error) -> {
@@ -146,7 +194,31 @@ public final class MediaTitleCache {
      */
     public boolean isLoading(String url) {
         Entry entry = cache.get(url);
-        return entry != null && entry.state == State.LOADING;
+        return entry != null && (entry.state == State.LOADING || entry.state == State.QUEUED);
+    }
+
+    /**
+     * The best name known for {@code url} right now — the resolved title, or the label
+     * {@link #getOrLoad} would start from — <b>without</b> starting anything.
+     *
+     * <p>What a filter over a whole list uses. {@link #getOrLoad} is the wrong call
+     * there: a list is filtered on every frame it is drawn, and a filter that inserts is
+     * a filter that can evict, which past {@link #MAX_ENTRIES} turns each frame into a
+     * fresh round of lookups. A screen warms the names it wants once and peeks
+     * afterwards, redoing its filter when {@link #generation()} moves.</p>
+     */
+    public String peekTitle(String url) {
+        Entry entry = cache.get(url);
+        return entry == null ? fallbackLabel(url) : entry.title;
+    }
+
+    /**
+     * A counter bumped whenever a title stops being a placeholder (or everything is
+     * dropped). A screen that caches something derived from titles — a filtered list —
+     * recomputes it when this changes, and otherwise leaves it alone.
+     */
+    public int generation() {
+        return generation;
     }
 
     /**
@@ -174,14 +246,59 @@ public final class MediaTitleCache {
 
     public void clear() {
         cache.clear();
+        pending.clear();
+        generation++;
+        // inFlight is deliberately left alone: the loads already running still complete,
+        // find their entry gone and free their slot on the way out.
     }
 
     private static Entry newEntry(String url) {
         return new Entry(fallbackLabel(url));
     }
 
+    /**
+     * Starts as many queued lookups as {@link #MAX_IN_FLIGHT} still allows.
+     *
+     * <p>Re-entrant on purpose: a provider handing back an already-complete future
+     * publishes on the main thread, which — asked from the main thread — runs the
+     * completion right here, inside the loop. The guard lets that one free its slot and
+     * return; the loop it is nested in picks the work up.</p>
+     */
+    private void pump() {
+        if (pumping) {
+            return;
+        }
+        pumping = true;
+        try {
+            while (inFlight < MAX_IN_FLIGHT) {
+                String url = pending.poll();
+                if (url == null) {
+                    return;
+                }
+                Entry entry = cache.get(url);
+                if (entry == null || entry.state != State.QUEUED) {
+                    continue; // evicted, or already settled, while it waited its turn
+                }
+                inFlight++;
+                entry.state = State.LOADING;
+                if (entry.provider != null) {
+                    startProviderLoad(url, entry, entry.provider);
+                } else {
+                    startLoading(url, entry);
+                }
+            }
+        } finally {
+            pumping = false;
+        }
+    }
+
+    /** One load has settled, whichever way: free its slot and let the next one go. */
+    private void loadFinished() {
+        inFlight--;
+        pump();
+    }
+
     private void startLoading(String url, Entry entry) {
-        entry.state = State.LOADING;
         CompletableFuture
                 .supplyAsync(() -> fetchYouTubeTitle(url), Util.ioPool())
                 .whenCompleteAsync((title, error) -> onComplete(url, entry, title, error, -1L),
@@ -234,6 +351,7 @@ public final class MediaTitleCache {
     // ------------------------------------------------------------------
 
     private void onComplete(String url, Entry entry, String title, Throwable error, long durationMicros) {
+        loadFinished();
         // The entry may have been evicted while the load was in flight.
         if (cache.get(url) != entry) {
             return;
@@ -247,6 +365,7 @@ public final class MediaTitleCache {
         }
         entry.title = title;
         entry.state = State.LOADED;
+        generation++;
         // The moment an addon's "now playing" export or rich-presence line has something
         // real to say. Posted here rather than at each call site because this is the one
         // place a title stops being a placeholder.
@@ -291,7 +410,7 @@ public final class MediaTitleCache {
         return s.length() <= MAX_TITLE_LEN ? s : s.substring(0, MAX_TITLE_LEN);
     }
 
-    enum State {IDLE, LOADING, LOADED, FAILED}
+    enum State {IDLE, QUEUED, LOADING, LOADED, FAILED}
 
     /**
      * A single cached title and its load state.
@@ -299,6 +418,9 @@ public final class MediaTitleCache {
     private static final class Entry {
         State state = State.IDLE;
         String title;
+        /** The addon provider that claimed this URL, resolved once when it was queued. */
+        @Nullable
+        MediaMetadataProvider provider;
 
         Entry(String initial) {
             this.title = initial;
