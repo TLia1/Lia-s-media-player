@@ -34,13 +34,13 @@ other players see, and it is **not required by anyone else** on the server.
 ## At a glance
 
 - **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Version:** <!-- mod_version -->
-  `2.0.0`<!-- /mod_version -->
+  `2.0.1`<!-- /mod_version -->
 - **Loaders:** NeoForge and Fabric — every supported Minecraft version is built for both
 - **Primary target:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions) for the full list
 - **Side:** client-only (`Dist.CLIENT` / `"environment": "client"`)
 - **API mod id:** `liasmediaplayerapi` — ships in the same JAR (a second mod entry on NeoForge,
-  a `provides` id on Fabric), currently API <!-- api_version -->`3.1.0`<!-- /api_version -->. The
+  a `provides` id on Fabric), currently API <!-- api_version -->`3.4.0`<!-- /api_version -->. The
   API is licensed under the **MIT License**; other mods can freely depend on it to register
   custom media sources, control playback, and receive events. The same addon code works on both
   loaders.
@@ -230,7 +230,7 @@ guide.
 
 Version numbers and mod properties in `README.md`, `TECHNICAL-DETAILS.md`, `API-DOCUMENTATION.md` and
 `FEATURES.md` are managed by invisible HTML markers (e.g.
-`<!-- mod_version -->2.0.0<!-- /mod_version -->`). **Never edit these values by
+`<!-- mod_version -->2.0.1<!-- /mod_version -->`). **Never edit these values by
 hand** — update `stonecutter.properties.toml` and run:
 
 ```

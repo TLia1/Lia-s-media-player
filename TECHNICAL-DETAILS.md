@@ -16,7 +16,7 @@ in order, shuffled or looping, and a set of **configurable keybinds** drives the
 audio player.
 
 - **Mod id:** <!-- mod_id -->`liasmediaplayer`<!-- /mod_id --> · **Group:** <!-- mod_group_id -->
-  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`2.0.0`<!-- /mod_version -->
+  `com.lia.mediaplayer`<!-- /mod_group_id --> · **Version:** <!-- mod_version -->`2.0.1`<!-- /mod_version -->
 - **Primary target:** NeoForge <!-- neo_version -->`21.1.230`<!-- /neo_version --> for Minecraft <!-- minecraft_version -->
   `1.21.1`<!-- /minecraft_version --> — see [Supported versions](#supported-versions)
 - **Side:** **client-only** (`Dist.CLIENT` / `"environment": "client"`) — it has no

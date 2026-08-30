@@ -16,13 +16,13 @@ mod.name = "Lia's Media Player"
 # The group ID for the mod, matching the base package used for the mod sources.
 mod.group = "com.lia.mediaplayer"
 # The mod version. See https://semver.org/
-mod.version = "2.0.0"
+mod.version = "2.0.1"
 # Version of the public API shipped as a second [[mods]] entry in the same jar
 # (NeoForge) / provided id (Fabric). It went to 2.0.0 when the API stopped extending
 # NeoForge's event bus types so that the same addon code compiles on both loaders.
 # It must track ApiVersion.asString(): this is the number an addon's versionRange
 # pins against, so leaving it behind makes a correct dependency fail to resolve.
-mod.api_version = "3.1.0"
+mod.api_version = "3.4.0"
 # The license of the mod. Review your options at https://choosealicense.com/.
 mod.license = "All Rights Reserved"
 # The loader version range can only use the major version of FML as bounds.
