@@ -80,7 +80,7 @@ final class Tooltips {
         g.renderTooltip(mc.font,
                 List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
                 mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
-        *///?} else {
+        *///?} elif <26.3 {
         /*// 26.1 dropped the immediate renderTooltip overloads entirely, but kept the
         // same escape hatch under a new name: setTooltipForNextFrame only stores a
         // closure that Screen.extractRenderStateWithTooltipAndSubtitles later runs
@@ -89,6 +89,12 @@ final class Tooltips {
         g.tooltip(mc.font,
                 List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
                 mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null);
+        *///?} else {
+        /*// 26.3 added a trailing boolean to `tooltip`; `false` is what every plain
+        // setTooltipForNextFrame overload passes, so the tooltip looks the same.
+        g.tooltip(mc.font,
+                List.of(ClientTooltipComponent.create(text.getVisualOrderText())),
+                mouseX, mouseY, DefaultTooltipPositioner.INSTANCE, null, false);
         *///?}
         GuiLayer.pop(g);
     }

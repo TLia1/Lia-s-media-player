@@ -4,7 +4,10 @@ import com.lia.mediaplayer.MediaPlayerContext;
 import com.lia.mediaplayer.api.MediaKind;
 import com.lia.mediaplayer.source.ShareLink;
 import com.lia.mediaplayer.source.Urls;
+//? if <26.3 {
 import net.minecraft.Util;
+//?} else
+/*import com.mojang.blaze3d.Blaze3D;*/
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -71,7 +74,17 @@ final class WindowLinkActions {
         // open), which happily launches whatever protocol is registered for it. The URL
         // originates from a chat component, so only ever pass on a real http(s) link.
         if (Urls.isHttp(url)) {
+            //? if <26.3 {
             Util.getPlatform().openUri(url);
+            //?} else {
+            /*try {
+                // 26.3 moved this onto Blaze3D, which takes a URI: a chat link that is
+                // not a valid one is simply not opened rather than crashing the client.
+                Blaze3D.openUri(java.net.URI.create(url));
+            } catch (IllegalArgumentException ignored) {
+                // not a well-formed URI
+            }
+            *///?}
         }
     }
 

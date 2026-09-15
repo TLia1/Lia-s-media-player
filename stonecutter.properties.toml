@@ -127,6 +127,18 @@ deps.minecraft_range = "[26.2,)"
 deps.neoforge = "26.2.0.64"
 deps.parchment = ""
 deps.java = 25
-deps.minecraft_range_fabric = ">=26.2"
+deps.minecraft_range_fabric = "~26.2"
 deps.fabric_api = "0.158.0+26.2"
 deps.modmenu = "20.0.1"
+
+# Fabric only: NeoForge has not published a 26.3 build yet. `deps.neoforge` is left
+# empty so the docs table can say so; there is no 26.3-neoforge subproject to read it.
+["26.3"]
+deps.minecraft = "26.3"
+deps.minecraft_range = "[26.3,)"
+deps.neoforge = ""
+deps.parchment = ""
+deps.java = 25
+deps.minecraft_range_fabric = ">=26.3"
+deps.fabric_api = "0.160.5+26.3"
+deps.modmenu = "21.0.0-beta.1"

@@ -12,6 +12,7 @@ import com.lia.mediaplayer.playlist.PlaylistStore;
 import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -814,7 +815,7 @@ public final class PlaylistScreen extends Screen implements DragTarget {
     *///?}
 
     private boolean onClick(double mouseX, double mouseY, int button) {
-        if (button != 0) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) {
             return false;
         }
 

@@ -12,6 +12,7 @@ import com.lia.mediaplayer.api.window.WindowAction;
 import com.lia.mediaplayer.api.window.WindowChromeOptions;
 import com.lia.mediaplayer.media.AudioGain;
 import com.lia.mediaplayer.media.MediaTitleCache;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -1043,7 +1044,7 @@ abstract class MediaWindow {
     }
 
     private ClickResult routeClick(double mouseX, double mouseY, int button, boolean chromeWasShown) {
-        if (button != 0 || !visible) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT || !visible) {
             return ClickResult.NONE;
         }
         if (chromeWasShown) {

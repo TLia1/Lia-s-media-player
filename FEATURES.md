@@ -1,6 +1,6 @@
 # Lia's Media player
 
-**For Minecraft 1.21.1 - 26.2 · NeoForge & Fabric · Client-side only**
+**For Minecraft 1.21.1 - 26.3 · NeoForge & Fabric (26.3: Fabric only) · Client-side only**
 
 *(On Fabric you also need [Fabric API](https://modrinth.com/mod/fabric-api).)*
 

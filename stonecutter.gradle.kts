@@ -145,7 +145,7 @@ tasks.register("updateDocs") {
         ) { v ->
             val primary = if (v == docsVersion) " *(primary)*" else ""
             "| `${versionedFor(v, "deps", "minecraft")}`$primary" +
-                " | `${versionedFor(v, "deps", "neoforge")}`" +
+                " | ${versionedFor(v, "deps", "neoforge").let { if (it.isEmpty()) "—" else "`$it`" }}" +
                 " | `${versionedFor(v, "deps", "fabric_api")}`" +
                 " | ${versionedFor(v, "deps", "java")} |"
         }

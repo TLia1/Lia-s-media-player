@@ -40,10 +40,12 @@ jobs:
             echo "::error::Could not parse the build matrix from settings.gradle.kts"
             exit 1
           fi
-          # Every Minecraft version is built for both loaders; an odd count means a
-          # match() line was parsed only in part.
-          if [ $((count % 2)) -ne 0 ]; then
-            echo "::error::Parsed $count targets from settings.gradle.kts, expected an even number (one per loader)"
+          # Cross-check against a count that does not come from the parse above: one
+          # target per quoted loader name on the match() lines. A match() line
+          # parsed only in part shows up as a mismatch.
+          expected=$(grep -E '^[[:space:]]*match\(' settings.gradle.kts | grep -oE '"(neoforge|fabric)"' | wc -l)
+          if [ "$count" -ne "$expected" ]; then
+            echo "::error::Parsed $count targets from settings.gradle.kts, expected $expected (one per loader)"
             exit 1
           fi
           echo "targets=$targets" >> "$GITHUB_OUTPUT"

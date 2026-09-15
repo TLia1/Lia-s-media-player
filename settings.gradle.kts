@@ -44,6 +44,8 @@ stonecutter {
         match("1.21.11", "neoforge", "fabric")
         match("26.1.2", "neoforge", "fabric")
         match("26.2", "neoforge", "fabric")
+        // Fabric only until NeoForge publishes a 26.3 build.
+        match("26.3", "fabric")
 
         vcsVersion = "1.21.1-neoforge"
     }

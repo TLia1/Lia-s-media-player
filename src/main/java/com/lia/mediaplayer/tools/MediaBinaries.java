@@ -269,8 +269,23 @@ public final class MediaBinaries {
     /**
      * Shows one of the mod's toasts. The version guards for reaching the toast queue
      * live here and nowhere else.
+     *
+     * <p>The toast is only queued once the mod's language file is loaded. SystemToast
+     * splits its text into lines when it is <em>built</em>, which resolves the translation
+     * right then: built before the first resource load finishes, it shows the raw key for
+     * its whole lifetime. On 26.3 the startup install routinely beats that load. The wait
+     * is on a thread of its own so it never holds up {@link #whenReady()}.</p>
      */
     private static void toast(String translationKey) {
+        Thread thread = new Thread(() -> {
+            awaitTranslations(translationKey);
+            showToast(translationKey);
+        }, "liasmediaplayer-toast");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static void showToast(String translationKey) {
         net.minecraft.client.Minecraft.getInstance().execute(() -> {
             net.minecraft.client.gui.components.toasts.SystemToast.add(
                     // ToastComponent became ToastManager in 1.21.4, and 26.2
@@ -288,6 +303,27 @@ public final class MediaBinaries {
                     net.minecraft.network.chat.Component.translatable(translationKey)
             );
         });
+    }
+
+    /** How long a toast waits for the language to load before showing anyway. */
+    private static final long TRANSLATION_WAIT_MILLIS = 120_000L;
+
+    /**
+     * Blocks the calling background thread until {@code key} resolves, or until
+     * {@link #TRANSLATION_WAIT_MILLIS} has passed — a missing translation should cost a
+     * raw key on screen, never a toast that silently never appears.
+     */
+    private static void awaitTranslations(String key) {
+        long deadline = System.currentTimeMillis() + TRANSLATION_WAIT_MILLIS;
+        while (!net.minecraft.locale.Language.getInstance().has(key)
+                && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     // ---- Keeping yt-dlp current ---------------------------------------------

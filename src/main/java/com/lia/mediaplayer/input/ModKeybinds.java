@@ -65,7 +65,10 @@ public final class ModKeybinds {
 
     private static KeyMapping unbound(String id) {
         return new KeyMapping("key.liasmediaplayer." + id,
+                //? if <26.3 {
                 InputConstants.Type.KEYSYM, InputConstants.UNKNOWN.getValue(), CATEGORY);
+                //?} else
+                /*InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), CATEGORY);*/
     }
 
     /** The mod's own bindings, in the order they should appear in the controls screen. */

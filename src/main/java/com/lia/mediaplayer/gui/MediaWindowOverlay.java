@@ -13,6 +13,7 @@ import com.lia.mediaplayer.audio.AudioPlayer;
 import com.lia.mediaplayer.source.Urls;
 import com.lia.mediaplayer.source.YouTubePlaylistSource;
 import com.lia.mediaplayer.video.VideoPlayer;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -511,11 +512,11 @@ public final class MediaWindowOverlay {
         MediaPlayerContext ctx = getContext();
         if (ctx == null) return false;
 
-        if (button == 0 && MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH)) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && MediaWindow.inRect(mouseX, mouseY, plBtnX, plBtnY, plBtnW, plBtnH)) {
             Screens.open(new PlaylistScreen());
             return true;
         }
-        if (button == 0 && revealVisible
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && revealVisible
                 && MediaWindow.inRect(mouseX, mouseY, revealX, revealY, revealW, revealH)) {
             ctx.getVideoManager().revealAll();
             ctx.getAudioManager().revealAll();
@@ -539,7 +540,7 @@ public final class MediaWindowOverlay {
                 return true;
             }
         }
-        if (button != 0) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) {
             return false;
         }
         String url = hoveredUrl(mouseX, mouseY);

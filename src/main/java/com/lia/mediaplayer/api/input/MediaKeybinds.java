@@ -113,12 +113,17 @@ public final class MediaKeybinds {
     }
 
     /**
-     * GLFW numbers the printable ASCII keys by their character, so a letter or a digit
-     * is exactly what a user typing into the chat field would produce.
+     * A letter or a digit is exactly what a user typing into the chat field would produce.
+     *
+     * <p>Letters are contiguous from {@code A} to {@code Z} in both GLFW and the SDL
+     * scancodes 26.3 switched to, but digits are not ordered the same way: GLFW runs
+     * {@code 0..9}, SDL runs {@code 1..9} then {@code 0}. {@code 1..9} plus {@code 0}
+     * holds for both.</p>
      */
     private static boolean isBareTypingKey(int glfwKey) {
         return (glfwKey >= InputConstants.KEY_A && glfwKey <= InputConstants.KEY_Z)
-                || (glfwKey >= InputConstants.KEY_0 && glfwKey <= InputConstants.KEY_9);
+                || (glfwKey >= InputConstants.KEY_1 && glfwKey <= InputConstants.KEY_9)
+                || glfwKey == InputConstants.KEY_0;
     }
 
     // ------------------------------------------------------------------

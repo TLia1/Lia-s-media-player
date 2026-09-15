@@ -7,6 +7,7 @@ import com.lia.mediaplayer.history.HistoryStore;
 import com.lia.mediaplayer.media.MediaTitleCache;
 import com.lia.mediaplayer.playlist.Playlist;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -408,7 +409,7 @@ public final class HistoryScreen extends Screen {
     *///?}
 
     private boolean onClick(double mouseX, double mouseY, int button) {
-        if (button != 0) {
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) {
             return false;
         }
 
